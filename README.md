@@ -161,10 +161,11 @@ In the example above, we have a custom collection with name of `purchase`, then 
 
 `NB`: Data type sent should match data type set when creating the collection. For instance, We are sending a field `timestamp` which has a data type of `number`, Sending data with a type of `string` instead of `number` will make this custom collection not get tracked
 
+There are other examples in the `samples` directory.
+
 # Tracking Consents
 
 Save user consents and apply them to data flow. Make sure you have created consents purposes in your organization's settings
-
 
 
 ### Supported Regulation Types - GDPR & CCPA;
