@@ -1,11 +1,11 @@
 {
   "name": "@intempt/sdk",
-  "version": "0.0.12",
+  "version": "0.0.14",
   "scripts": {
     "clean": "rm -vrf dist src/generated/*/",
     "generate-sources": "npx openapi-generator-cli generate",
-    "compile": "rm -rf dist && tsc",
-    "test": "jest"
+    "compile": "rm -rf dist && tsc && copyfiles --error --up 1 src/batcher.js dist/",
+    "test": "jest --coverage --detectOpenHandles"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,9 +15,10 @@
     "url": "git+https://github.com/intempt/sdk-node.git"
   },
   "devDependencies": {
-    "typescript": "^4.0",
-    "@openapitools/openapi-generator-cli": "^2.5.2",
     "@jest/globals": "^29.4.3",
-    "ts-jest": "^29.0.5"
+    "@openapitools/openapi-generator-cli": "^2.5.2",
+    "copyfiles": "^2.4.1",
+    "ts-jest": "^29.0.5",
+    "typescript": "^4.0"
   }
 }

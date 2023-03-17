@@ -14,7 +14,7 @@
         "typeMappings":{"integer+int64": "string"}
       },
       "metric": {
-        "inputSpec": "https://help.intempt.com/openapi/63edf620b65618002689fd53",
+        "inputSpec": "https://help.intempt.com/openapi/641422d5c9dcd100574b81ad",
         "generatorName": "typescript-fetch",
         "config": "typescript-fetch-config.yaml",
         "output": "#{cwd}/src/generated/metric",
