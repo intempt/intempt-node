@@ -26,7 +26,6 @@ models/ExperimentSchedule.ts
 models/ExperimentStatus.ts
 models/ExperimentType.ts
 models/ExperimentVariantTemplate.ts
-models/JsonNode.ts
 models/Source.ts
 models/SourceApiKey.ts
 models/SourceCollection.ts

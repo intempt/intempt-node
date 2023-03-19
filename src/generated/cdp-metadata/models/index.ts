@@ -22,7 +22,6 @@ export * from './ExperimentSchedule';
 export * from './ExperimentStatus';
 export * from './ExperimentType';
 export * from './ExperimentVariantTemplate';
-export * from './JsonNode';
 export * from './Source';
 export * from './SourceApiKey';
 export * from './SourceCollection';
