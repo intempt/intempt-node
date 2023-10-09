@@ -1,6 +1,6 @@
 {
-  "name": "intempt-nodejs-sdk",
-  "version": "0.0.27",
+  "name": "@intempt/sdk",
+  "version": "0.0.15",
   "scripts": {
     "clean": "rm -vrf dist src/generated/*/",
     "generate-sources": "npx openapi-generator-cli generate",
@@ -12,7 +12,7 @@
   "sideEffects": false,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/intempt/intempt-nodejs-sdk"
+    "url": "git+https://github.com/intempt/sdk-node.git"
   },
   "devDependencies": {
     "@jest/globals": "^29.4.3",
@@ -20,8 +20,5 @@
     "copyfiles": "^2.4.1",
     "ts-jest": "^29.0.5",
     "typescript": "^5.0"
-  },
-  "dependencies": {
-    "pino": "^8.15.7"
   }
 }
