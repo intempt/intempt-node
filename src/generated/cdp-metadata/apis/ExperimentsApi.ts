@@ -46,7 +46,7 @@ import {
     VariantToJSON,
 } from '../models';
 // @ts-ignore
-import logger from 'bs-logger'
+const logger = require('pino')()
 
 export interface ChooseVariantRequest {
     orgName: string;
