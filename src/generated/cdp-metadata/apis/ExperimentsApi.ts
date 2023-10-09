@@ -45,6 +45,7 @@ import {
     VariantFromJSON,
     VariantToJSON,
 } from '../models';
+const logger = require('pino')()
 
 export interface ChooseVariantRequest {
     orgName: string;
@@ -180,6 +181,9 @@ export class ExperimentsApi extends runtime.BaseAPI {
 
         console.debug("chooseVariantRaw - path - ", `/v1/{orgName}/projects/{projectName}/experiments/{experimentId}/choose`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"experimentId"}}`, encodeURIComponent(String(requestParameters.experimentId))))
         console.debug("chooseVariantRaw - body - ", ChooseVariantToJSON(requestParameters.chooseVariant))
+
+        logger.debug("chooseVariantRaw - path - ", `/v1/{orgName}/projects/{projectName}/experiments/{experimentId}/choose`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"experimentId"}}`, encodeURIComponent(String(requestParameters.experimentId))))
+        logger.debug("chooseVariantRaw - body - ", ChooseVariantToJSON(requestParameters.chooseVariant))
 
         return new runtime.TextApiResponse(response) as any;
     }
@@ -729,9 +733,11 @@ export class ExperimentsApi extends runtime.BaseAPI {
             }
         }
 
-        console.log("URL - ", `/v1/{orgName}/projects/{projectName}/experiments/{experimentId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"experimentId"}}`, encodeURIComponent(String(requestParameters.experimentId))))
-        console.log("BODY - ", UpdateExperimentToJSON(requestParameters.updateExperiment))
+        console.debug("URL - ", `/v1/{orgName}/projects/{projectName}/experiments/{experimentId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"experimentId"}}`, encodeURIComponent(String(requestParameters.experimentId))))
+        console.debug("BODY - ", UpdateExperimentToJSON(requestParameters.updateExperiment))
 
+        logger.debug("URL - ", `/v1/{orgName}/projects/{projectName}/experiments/{experimentId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"experimentId"}}`, encodeURIComponent(String(requestParameters.experimentId))))
+        logger.debug("BODY - ", UpdateExperimentToJSON(requestParameters.updateExperiment))
 
         const response = await this.request({
             path: `/v1/{orgName}/projects/{projectName}/experiments/{experimentId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"experimentId"}}`, encodeURIComponent(String(requestParameters.experimentId))),
