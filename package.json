@@ -1,6 +1,6 @@
 {
   "name": "@intempt/sdk",
-  "version": "0.0.16",
+  "version": "0.0.15",
   "scripts": {
     "clean": "rm -vrf dist src/generated/*/",
     "generate-sources": "npx openapi-generator-cli generate",
