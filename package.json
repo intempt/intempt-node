@@ -12,7 +12,7 @@
   "sideEffects": false,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/intempt/sdk-node.git"
+    "url": "git+https://github.com/intempt/intempt-nodejs-sdk"
   },
   "devDependencies": {
     "@jest/globals": "^29.4.3",
