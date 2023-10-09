@@ -1,5 +1,5 @@
 {
-  "name": "@intempt/sdk",
+  "name": "intempt-nodejs-sdk",
   "version": "0.0.16",
   "scripts": {
     "clean": "rm -vrf dist src/generated/*/",
