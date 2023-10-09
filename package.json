@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@jest/globals": "^29.4.3",
-    "@openapitools/openapi-generator-cli": "^2.5.2",
+    "@openapitools/openapi-generator-cli": "^2.7.0",
     "copyfiles": "^2.4.1",
     "ts-jest": "^29.0.5",
     "typescript": "^5.0"
