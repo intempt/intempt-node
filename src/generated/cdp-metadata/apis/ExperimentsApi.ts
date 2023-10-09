@@ -177,6 +177,9 @@ export class ExperimentsApi extends runtime.BaseAPI {
             body: ChooseVariantToJSON(requestParameters.chooseVariant),
         }, initOverrides);
 
+        console.debug("chooseVariantRaw - path - ", `/v1/{orgName}/projects/{projectName}/experiments/{experimentId}/choose`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"experimentId"}}`, encodeURIComponent(String(requestParameters.experimentId))))
+        console.debug("chooseVariantRaw - body - ", ChooseVariantToJSON(requestParameters.chooseVariant))
+
         return new runtime.TextApiResponse(response) as any;
     }
 
