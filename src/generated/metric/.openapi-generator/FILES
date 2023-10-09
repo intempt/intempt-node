@@ -1,4 +1,3 @@
-.openapi-generator-ignore
 apis/CatalogsApi.ts
 apis/EventsApi.ts
 apis/GrowthBoardsApi.ts

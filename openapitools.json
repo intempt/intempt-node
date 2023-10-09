@@ -6,7 +6,7 @@
     "useDocker": false,
     "generators": {
       "cdp-metadata": {
-        "inputSpec": "https://help.intempt.com/openapi/63c19844a61a190f5b825aeb",
+        "inputSpec": "https://help.intempt.com/openapi/644fbc6242036e0021ec8120",
         "generatorName": "typescript-fetch",
         "config": "typescript-fetch-config.yaml",
         "output": "#{cwd}/src/generated/cdp-metadata",
@@ -14,7 +14,7 @@
         "typeMappings":{"integer+int64": "string"}
       },
       "metric": {
-        "inputSpec": "https://help.intempt.com/openapi/641422d5c9dcd100574b81ad",
+        "inputSpec": "https://help.intempt.com/openapi/647f9902d6b677000c172be8",
         "generatorName": "typescript-fetch",
         "config": "typescript-fetch-config.yaml",
         "output": "#{cwd}/src/generated/metric",
