@@ -1,6 +1,6 @@
 {
   "name": "intempt-nodejs-sdk",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "scripts": {
     "clean": "rm -vrf dist src/generated/*/",
     "generate-sources": "npx openapi-generator-cli generate",
