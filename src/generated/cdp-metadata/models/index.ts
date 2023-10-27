@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export * from './ChooseVariant';
+export * from './ChooseExperience';
 export * from './Consent';
 export * from './ConsentCollection';
 export * from './ConsentCollectionEmbedded';
