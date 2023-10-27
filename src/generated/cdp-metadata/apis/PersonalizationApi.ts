@@ -24,7 +24,7 @@ import type {
     // ExperimentVariantTemplate,
     // UpdateExperiment,
     // Variant,
-} from '../models';
+} from '../models/ChooseExperience';
 import {
     // ChooseVariantFromJSON,
     ChooseVariantToJSON,
