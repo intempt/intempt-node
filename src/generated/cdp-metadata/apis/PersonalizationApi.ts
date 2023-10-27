@@ -44,7 +44,7 @@ import {
     // UpdateExperimentToJSON,
     // VariantFromJSON,
     // VariantToJSON,
-} from '../models';
+} from '../models/ChooseExperience';
 const logger = require('pino')()
 
 export interface ChooseExperienceRequest {
