@@ -16,34 +16,34 @@
 import * as runtime from '../runtime';
 import type {
     ChooseExperience,
-    CreateExperiment,
-    CreateExperimentVariantTemplate,
-    CreateVariant,
-    Experiment,
-    ExperimentAnalytics,
-    ExperimentVariantTemplate,
-    UpdateExperiment,
-    Variant,
+    // CreateExperiment,
+    // CreateExperimentVariantTemplate,
+    // CreateVariant,
+    // Experiment,
+    // ExperimentAnalytics,
+    // ExperimentVariantTemplate,
+    // UpdateExperiment,
+    // Variant,
 } from '../models';
 import {
-    ChooseVariantFromJSON,
+    // ChooseVariantFromJSON,
     ChooseVariantToJSON,
-    CreateExperimentFromJSON,
-    CreateExperimentToJSON,
-    CreateExperimentVariantTemplateFromJSON,
-    CreateExperimentVariantTemplateToJSON,
-    CreateVariantFromJSON,
-    CreateVariantToJSON,
-    ExperimentFromJSON,
-    ExperimentToJSON,
-    ExperimentAnalyticsFromJSON,
-    ExperimentAnalyticsToJSON,
-    ExperimentVariantTemplateFromJSON,
-    ExperimentVariantTemplateToJSON,
-    UpdateExperimentFromJSON,
-    UpdateExperimentToJSON,
-    VariantFromJSON,
-    VariantToJSON,
+    // CreateExperimentFromJSON,
+    // CreateExperimentToJSON,
+    // CreateExperimentVariantTemplateFromJSON,
+    // CreateExperimentVariantTemplateToJSON,
+    // CreateVariantFromJSON,
+    // CreateVariantToJSON,
+    // ExperimentFromJSON,
+    // ExperimentToJSON,
+    // ExperimentAnalyticsFromJSON,
+    // ExperimentAnalyticsToJSON,
+    // ExperimentVariantTemplateFromJSON,
+    // ExperimentVariantTemplateToJSON,
+    // UpdateExperimentFromJSON,
+    // UpdateExperimentToJSON,
+    // VariantFromJSON,
+    // VariantToJSON,
 } from '../models';
 const logger = require('pino')()
 
@@ -54,74 +54,74 @@ export interface ChooseExperienceRequest {
     chooseExperience: ChooseExperience;
 }
 
-export interface CreateExperimentRequest {
-    orgName: string;
-    projectName: string;
-    createExperiment: CreateExperiment;
-}
+// export interface CreateExperimentRequest {
+//     orgName: string;
+//     projectName: string;
+//     createExperiment: CreateExperiment;
+// }
 
-export interface CreateExperimentVariantTemplateRequest {
-    orgName: string;
-    projectName: string;
-    createExperimentVariantTemplate: CreateExperimentVariantTemplate;
-}
+// export interface CreateExperimentVariantTemplateRequest {
+//     orgName: string;
+//     projectName: string;
+//     createExperimentVariantTemplate: CreateExperimentVariantTemplate;
+// }
 
-export interface CreateVariantRequest {
-    orgName: string;
-    projectName: string;
-    campaignId: string;
-    createVariant: CreateVariant;
-}
+// export interface CreateVariantRequest {
+//     orgName: string;
+//     projectName: string;
+//     campaignId: string;
+//     createVariant: CreateVariant;
+// }
 
-export interface DeleteExperimentRequest {
-    orgName: string;
-    projectName: string;
-    campaignId: string;
-}
+// export interface DeleteExperimentRequest {
+//     orgName: string;
+//     projectName: string;
+//     campaignId: string;
+// }
 
-export interface DeleteVariantRequest {
-    orgName: string;
-    projectName: string;
-    campaignId: string;
-    variantId: string;
-}
+// export interface DeleteVariantRequest {
+//     orgName: string;
+//     projectName: string;
+//     campaignId: string;
+//     variantId: string;
+// }
 
-export interface FetchExperimentRequest {
-    orgName: string;
-    projectName: string;
-    campaignId: string;
-}
+// export interface FetchExperimentRequest {
+//     orgName: string;
+//     projectName: string;
+//     campaignId: string;
+// }
 
-export interface FetchExperimentAnalyticsRequest {
-    orgName: string;
-    projectName: string;
-    campaignId: string;
-}
+// export interface FetchExperimentAnalyticsRequest {
+//     orgName: string;
+//     projectName: string;
+//     campaignId: string;
+// }
 
-export interface FetchExperimentVariantTemplatesRequest {
-    orgName: string;
-    projectName: string;
-}
+// export interface FetchExperimentVariantTemplatesRequest {
+//     orgName: string;
+//     projectName: string;
+// }
 
-export interface FetchExperimentsRequest {
-    orgName: string;
-    projectName: string;
-}
+// export interface FetchExperimentsRequest {
+//     orgName: string;
+//     projectName: string;
+// }
 
-export interface UpdateExperimentRequest {
-    orgName: string;
-    projectName: string;
-    campaignId: string;
-    updateExperiment: UpdateExperiment;
-}
+// export interface UpdateExperimentRequest {
+//     orgName: string;
+//     projectName: string;
+//     campaignId: string;
+//     updateExperiment: UpdateExperiment;
+// }
 
-export interface UpdateVariantRequest {
-    orgName: string;
-    projectName: string;
-    campaignId: string;
-    variantId: string;
-    createVariant: CreateVariant;
-}
+// export interface UpdateVariantRequest {
+//     orgName: string;
+//     projectName: string;
+//     campaignId: string;
+//     variantId: string;
+//     createVariant: CreateVariant;
+// }
 
 
 
@@ -129,7 +129,7 @@ export interface UpdateVariantRequest {
 /**
  *
  */
-export class ExperimentsApi extends runtime.BaseAPI {
+export class PersonalizationApi extends runtime.BaseAPI {
 
     /**
      * chooseExperience
@@ -203,628 +203,628 @@ export class ExperimentsApi extends runtime.BaseAPI {
     /**
      * createExperiment
      */
-    async createExperimentRaw(requestParameters: CreateExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Experiment>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling createExperiment.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling createExperiment.');
-        }
-
-        if (requestParameters.createExperiment === null || requestParameters.createExperiment === undefined) {
-            throw new runtime.RequiredError('createExperiment','Required parameter requestParameters.createExperiment was null or undefined when calling createExperiment.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters['Content-Type'] = 'application/json';
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiments`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))),
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-            body: CreateExperimentToJSON(requestParameters.createExperiment),
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => ExperimentFromJSON(jsonValue));
-    }
+    // async createExperimentRaw(requestParameters: CreateExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Experiment>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling createExperiment.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling createExperiment.');
+    //     }
+    //
+    //     if (requestParameters.createExperiment === null || requestParameters.createExperiment === undefined) {
+    //         throw new runtime.RequiredError('createExperiment','Required parameter requestParameters.createExperiment was null or undefined when calling createExperiment.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     headerParameters['Content-Type'] = 'application/json';
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiments`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))),
+    //         method: 'POST',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //         body: CreateExperimentToJSON(requestParameters.createExperiment),
+    //     }, initOverrides);
+    //
+    //     return new runtime.JSONApiResponse(response, (jsonValue) => ExperimentFromJSON(jsonValue));
+    // }
 
     /**
      * createExperiment
      */
-    async createExperiment(requestParameters: CreateExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Experiment> {
-        const response = await this.createExperimentRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
+    // async createExperiment(requestParameters: CreateExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Experiment> {
+    //     const response = await this.createExperimentRaw(requestParameters, initOverrides);
+    //     return await response.value();
+    // }
 
     /**
      * createExperimentVariantTemplate
      */
-    async createExperimentVariantTemplateRaw(requestParameters: CreateExperimentVariantTemplateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling createExperimentVariantTemplate.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling createExperimentVariantTemplate.');
-        }
-
-        if (requestParameters.createExperimentVariantTemplate === null || requestParameters.createExperimentVariantTemplate === undefined) {
-            throw new runtime.RequiredError('createExperimentVariantTemplate','Required parameter requestParameters.createExperimentVariantTemplate was null or undefined when calling createExperimentVariantTemplate.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters['Content-Type'] = 'application/json';
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiment-variant-templates`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))),
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-            body: CreateExperimentVariantTemplateToJSON(requestParameters.createExperimentVariantTemplate),
-        }, initOverrides);
-
-        return new runtime.VoidApiResponse(response);
-    }
+    // async createExperimentVariantTemplateRaw(requestParameters: CreateExperimentVariantTemplateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling createExperimentVariantTemplate.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling createExperimentVariantTemplate.');
+    //     }
+    //
+    //     if (requestParameters.createExperimentVariantTemplate === null || requestParameters.createExperimentVariantTemplate === undefined) {
+    //         throw new runtime.RequiredError('createExperimentVariantTemplate','Required parameter requestParameters.createExperimentVariantTemplate was null or undefined when calling createExperimentVariantTemplate.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     headerParameters['Content-Type'] = 'application/json';
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiment-variant-templates`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))),
+    //         method: 'POST',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //         body: CreateExperimentVariantTemplateToJSON(requestParameters.createExperimentVariantTemplate),
+    //     }, initOverrides);
+    //
+    //     return new runtime.VoidApiResponse(response);
+    // }
 
     /**
      * createExperimentVariantTemplate
      */
-    async createExperimentVariantTemplate(requestParameters: CreateExperimentVariantTemplateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
-        await this.createExperimentVariantTemplateRaw(requestParameters, initOverrides);
-    }
+    // async createExperimentVariantTemplate(requestParameters: CreateExperimentVariantTemplateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
+    //     await this.createExperimentVariantTemplateRaw(requestParameters, initOverrides);
+    // }
 
     /**
      * createVariant
      */
-    async createVariantRaw(requestParameters: CreateVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Variant>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling createVariant.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling createVariant.');
-        }
-
-        if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
-            throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling createVariant.');
-        }
-
-        if (requestParameters.createVariant === null || requestParameters.createVariant === undefined) {
-            throw new runtime.RequiredError('createVariant','Required parameter requestParameters.createVariant was null or undefined when calling createVariant.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters['Content-Type'] = 'application/json';
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}/variants`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))),
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-            body: CreateVariantToJSON(requestParameters.createVariant),
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => VariantFromJSON(jsonValue));
-    }
+    // async createVariantRaw(requestParameters: CreateVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Variant>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling createVariant.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling createVariant.');
+    //     }
+    //
+    //     if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
+    //         throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling createVariant.');
+    //     }
+    //
+    //     if (requestParameters.createVariant === null || requestParameters.createVariant === undefined) {
+    //         throw new runtime.RequiredError('createVariant','Required parameter requestParameters.createVariant was null or undefined when calling createVariant.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     headerParameters['Content-Type'] = 'application/json';
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}/variants`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))),
+    //         method: 'POST',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //         body: CreateVariantToJSON(requestParameters.createVariant),
+    //     }, initOverrides);
+    //
+    //     return new runtime.JSONApiResponse(response, (jsonValue) => VariantFromJSON(jsonValue));
+    // }
 
     /**
      * createVariant
      */
-    async createVariant(requestParameters: CreateVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Variant> {
-        const response = await this.createVariantRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
+    // async createVariant(requestParameters: CreateVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Variant> {
+    //     const response = await this.createVariantRaw(requestParameters, initOverrides);
+    //     return await response.value();
+    // }
 
     /**
      * delete the Experiment
      */
-    async deleteExperimentRaw(requestParameters: DeleteExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Experiment>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling deleteExperiment.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling deleteExperiment.');
-        }
-
-        if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
-            throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling deleteExperiment.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))),
-            method: 'DELETE',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => ExperimentFromJSON(jsonValue));
-    }
+    // async deleteExperimentRaw(requestParameters: DeleteExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Experiment>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling deleteExperiment.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling deleteExperiment.');
+    //     }
+    //
+    //     if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
+    //         throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling deleteExperiment.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))),
+    //         method: 'DELETE',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //     }, initOverrides);
+    //
+    //     return new runtime.JSONApiResponse(response, (jsonValue) => ExperimentFromJSON(jsonValue));
+    // }
 
     /**
      * delete the Experiment
      */
-    async deleteExperiment(requestParameters: DeleteExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Experiment> {
-        const response = await this.deleteExperimentRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
+    // async deleteExperiment(requestParameters: DeleteExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Experiment> {
+    //     const response = await this.deleteExperimentRaw(requestParameters, initOverrides);
+    //     return await response.value();
+    // }
 
     /**
      * delete the varian
      */
-    async deleteVariantRaw(requestParameters: DeleteVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Variant>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling deleteVariant.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling deleteVariant.');
-        }
-
-        if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
-            throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling deleteVariant.');
-        }
-
-        if (requestParameters.variantId === null || requestParameters.variantId === undefined) {
-            throw new runtime.RequiredError('variantId','Required parameter requestParameters.variantId was null or undefined when calling deleteVariant.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}/variants/{variantId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))).replace(`{${"variantId"}}`, encodeURIComponent(String(requestParameters.variantId))),
-            method: 'DELETE',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => VariantFromJSON(jsonValue));
-    }
+    // async deleteVariantRaw(requestParameters: DeleteVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Variant>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling deleteVariant.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling deleteVariant.');
+    //     }
+    //
+    //     if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
+    //         throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling deleteVariant.');
+    //     }
+    //
+    //     if (requestParameters.variantId === null || requestParameters.variantId === undefined) {
+    //         throw new runtime.RequiredError('variantId','Required parameter requestParameters.variantId was null or undefined when calling deleteVariant.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}/variants/{variantId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))).replace(`{${"variantId"}}`, encodeURIComponent(String(requestParameters.variantId))),
+    //         method: 'DELETE',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //     }, initOverrides);
+    //
+    //     return new runtime.JSONApiResponse(response, (jsonValue) => VariantFromJSON(jsonValue));
+    // }
 
     /**
      * delete the varian
      */
-    async deleteVariant(requestParameters: DeleteVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Variant> {
-        const response = await this.deleteVariantRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
+    // async deleteVariant(requestParameters: DeleteVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Variant> {
+    //     const response = await this.deleteVariantRaw(requestParameters, initOverrides);
+    //     return await response.value();
+    // }
 
     /**
      * fetchExperiment
      */
-    async fetchExperimentRaw(requestParameters: FetchExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Experiment>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling fetchExperiment.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling fetchExperiment.');
-        }
-
-        if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
-            throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling fetchExperiment.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))),
-            method: 'GET',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => ExperimentFromJSON(jsonValue));
-    }
+    // async fetchExperimentRaw(requestParameters: FetchExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Experiment>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling fetchExperiment.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling fetchExperiment.');
+    //     }
+    //
+    //     if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
+    //         throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling fetchExperiment.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))),
+    //         method: 'GET',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //     }, initOverrides);
+    //
+    //     return new runtime.JSONApiResponse(response, (jsonValue) => ExperimentFromJSON(jsonValue));
+    // }
 
     /**
      * fetchExperiment
      */
-    async fetchExperiment(requestParameters: FetchExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Experiment> {
-        const response = await this.fetchExperimentRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
+    // async fetchExperiment(requestParameters: FetchExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Experiment> {
+    //     const response = await this.fetchExperimentRaw(requestParameters, initOverrides);
+    //     return await response.value();
+    // }
 
     /**
      * calculate the nalatics of the experiments
      */
-    async fetchExperimentAnalyticsRaw(requestParameters: FetchExperimentAnalyticsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ExperimentAnalytics>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling fetchExperimentAnalytics.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling fetchExperimentAnalytics.');
-        }
-
-        if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
-            throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling fetchExperimentAnalytics.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}/analytics`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))),
-            method: 'GET',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => ExperimentAnalyticsFromJSON(jsonValue));
-    }
+    // async fetchExperimentAnalyticsRaw(requestParameters: FetchExperimentAnalyticsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ExperimentAnalytics>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling fetchExperimentAnalytics.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling fetchExperimentAnalytics.');
+    //     }
+    //
+    //     if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
+    //         throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling fetchExperimentAnalytics.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}/analytics`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))),
+    //         method: 'GET',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //     }, initOverrides);
+    //
+    //     return new runtime.JSONApiResponse(response, (jsonValue) => ExperimentAnalyticsFromJSON(jsonValue));
+    // }
 
     /**
      * calculate the nalatics of the experiments
      */
-    async fetchExperimentAnalytics(requestParameters: FetchExperimentAnalyticsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ExperimentAnalytics> {
-        const response = await this.fetchExperimentAnalyticsRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
+    // async fetchExperimentAnalytics(requestParameters: FetchExperimentAnalyticsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ExperimentAnalytics> {
+    //     const response = await this.fetchExperimentAnalyticsRaw(requestParameters, initOverrides);
+    //     return await response.value();
+    // }
 
     /**
      * fetch all ExperimentVariantTemplates of the project
      */
-    async fetchExperimentVariantTemplatesRaw(requestParameters: FetchExperimentVariantTemplatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<ExperimentVariantTemplate>>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling fetchExperimentVariantTemplates.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling fetchExperimentVariantTemplates.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiment-variant-templates`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))),
-            method: 'GET',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ExperimentVariantTemplateFromJSON));
-    }
+    // async fetchExperimentVariantTemplatesRaw(requestParameters: FetchExperimentVariantTemplatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<ExperimentVariantTemplate>>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling fetchExperimentVariantTemplates.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling fetchExperimentVariantTemplates.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiment-variant-templates`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))),
+    //         method: 'GET',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //     }, initOverrides);
+    //
+    //     return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ExperimentVariantTemplateFromJSON));
+    // }
 
     /**
      * fetch all ExperimentVariantTemplates of the project
      */
-    async fetchExperimentVariantTemplates(requestParameters: FetchExperimentVariantTemplatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ExperimentVariantTemplate>> {
-        const response = await this.fetchExperimentVariantTemplatesRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
+    // async fetchExperimentVariantTemplates(requestParameters: FetchExperimentVariantTemplatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ExperimentVariantTemplate>> {
+    //     const response = await this.fetchExperimentVariantTemplatesRaw(requestParameters, initOverrides);
+    //     return await response.value();
+    // }
 
     /**
      * fetch all Experiments of the project
      */
-    async fetchExperimentsRaw(requestParameters: FetchExperimentsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<Experiment>>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling fetchExperiments.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling fetchExperiments.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiments`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))),
-            method: 'GET',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ExperimentFromJSON));
-    }
+    // async fetchExperimentsRaw(requestParameters: FetchExperimentsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<Experiment>>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling fetchExperiments.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling fetchExperiments.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiments`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))),
+    //         method: 'GET',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //     }, initOverrides);
+    //
+    //     return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ExperimentFromJSON));
+    // }
 
     /**
      * fetch all Experiments of the project
      */
-    async fetchExperiments(requestParameters: FetchExperimentsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<Experiment>> {
-        const response = await this.fetchExperimentsRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
+    // async fetchExperiments(requestParameters: FetchExperimentsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<Experiment>> {
+    //     const response = await this.fetchExperimentsRaw(requestParameters, initOverrides);
+    //     return await response.value();
+    // }
 
     /**
      * update the Experiment
      */
-    async updateExperimentRaw(requestParameters: UpdateExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Experiment>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling updateExperiment.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling updateExperiment.');
-        }
-
-        if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
-            throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling updateExperiment.');
-        }
-
-        if (requestParameters.updateExperiment === null || requestParameters.updateExperiment === undefined) {
-            throw new runtime.RequiredError('updateExperiment','Required parameter requestParameters.updateExperiment was null or undefined when calling updateExperiment.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters['Content-Type'] = 'application/json';
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-
-        console.debug("URL - ", `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))))
-        console.debug("BODY - ", UpdateExperimentToJSON(requestParameters.updateExperiment))
-
-        logger.debug("URL - ", `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))))
-        logger.debug("BODY - ", UpdateExperimentToJSON(requestParameters.updateExperiment))
-
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))),
-            method: 'PUT',
-            headers: headerParameters,
-            query: queryParameters,
-            body: UpdateExperimentToJSON(requestParameters.updateExperiment),
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => ExperimentFromJSON(jsonValue));
-    }
+    // async updateExperimentRaw(requestParameters: UpdateExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Experiment>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling updateExperiment.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling updateExperiment.');
+    //     }
+    //
+    //     if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
+    //         throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling updateExperiment.');
+    //     }
+    //
+    //     if (requestParameters.updateExperiment === null || requestParameters.updateExperiment === undefined) {
+    //         throw new runtime.RequiredError('updateExperiment','Required parameter requestParameters.updateExperiment was null or undefined when calling updateExperiment.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     headerParameters['Content-Type'] = 'application/json';
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //
+    //     console.debug("URL - ", `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))))
+    //     console.debug("BODY - ", UpdateExperimentToJSON(requestParameters.updateExperiment))
+    //
+    //     logger.debug("URL - ", `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))))
+    //     logger.debug("BODY - ", UpdateExperimentToJSON(requestParameters.updateExperiment))
+    //
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))),
+    //         method: 'PUT',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //         body: UpdateExperimentToJSON(requestParameters.updateExperiment),
+    //     }, initOverrides);
+    //
+    //     return new runtime.JSONApiResponse(response, (jsonValue) => ExperimentFromJSON(jsonValue));
+    // }
 
     /**
      * update the Experiment
      */
-    async updateExperiment(requestParameters: UpdateExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Experiment> {
-        const response = await this.updateExperimentRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
+    // async updateExperiment(requestParameters: UpdateExperimentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Experiment> {
+    //     const response = await this.updateExperimentRaw(requestParameters, initOverrides);
+    //     return await response.value();
+    // }
 
     /**
      * updateVariant
      */
-    async updateVariantRaw(requestParameters: UpdateVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Variant>> {
-        if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling updateVariant.');
-        }
-
-        if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling updateVariant.');
-        }
-
-        if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
-            throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling updateVariant.');
-        }
-
-        if (requestParameters.variantId === null || requestParameters.variantId === undefined) {
-            throw new runtime.RequiredError('variantId','Required parameter requestParameters.variantId was null or undefined when calling updateVariant.');
-        }
-
-        if (requestParameters.createVariant === null || requestParameters.createVariant === undefined) {
-            throw new runtime.RequiredError('createVariant','Required parameter requestParameters.createVariant was null or undefined when calling updateVariant.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters['Content-Type'] = 'application/json';
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}/variants/{variantId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))).replace(`{${"variantId"}}`, encodeURIComponent(String(requestParameters.variantId))),
-            method: 'PUT',
-            headers: headerParameters,
-            query: queryParameters,
-            body: CreateVariantToJSON(requestParameters.createVariant),
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => VariantFromJSON(jsonValue));
-    }
+    // async updateVariantRaw(requestParameters: UpdateVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Variant>> {
+    //     if (requestParameters.orgName === null || requestParameters.orgName === undefined) {
+    //         throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling updateVariant.');
+    //     }
+    //
+    //     if (requestParameters.projectName === null || requestParameters.projectName === undefined) {
+    //         throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling updateVariant.');
+    //     }
+    //
+    //     if (requestParameters.campaignId === null || requestParameters.campaignId === undefined) {
+    //         throw new runtime.RequiredError('campaignId','Required parameter requestParameters.campaignId was null or undefined when calling updateVariant.');
+    //     }
+    //
+    //     if (requestParameters.variantId === null || requestParameters.variantId === undefined) {
+    //         throw new runtime.RequiredError('variantId','Required parameter requestParameters.variantId was null or undefined when calling updateVariant.');
+    //     }
+    //
+    //     if (requestParameters.createVariant === null || requestParameters.createVariant === undefined) {
+    //         throw new runtime.RequiredError('createVariant','Required parameter requestParameters.createVariant was null or undefined when calling updateVariant.');
+    //     }
+    //
+    //     const queryParameters: any = {};
+    //
+    //     const headerParameters: runtime.HTTPHeaders = {};
+    //
+    //     headerParameters['Content-Type'] = 'application/json';
+    //
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         // oauth required
+    //         headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
+    //     }
+    //
+    //     if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
+    //         headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
+    //     }
+    //     if (this.configuration && this.configuration.accessToken) {
+    //         const token = this.configuration.accessToken;
+    //         const tokenString = await token("bearerAuth", []);
+    //
+    //         if (tokenString) {
+    //             headerParameters["Authorization"] = `Bearer ${tokenString}`;
+    //         }
+    //     }
+    //     const response = await this.request({
+    //         path: `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}/variants/{variantId}`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))).replace(`{${"variantId"}}`, encodeURIComponent(String(requestParameters.variantId))),
+    //         method: 'PUT',
+    //         headers: headerParameters,
+    //         query: queryParameters,
+    //         body: CreateVariantToJSON(requestParameters.createVariant),
+    //     }, initOverrides);
+    //
+    //     return new runtime.JSONApiResponse(response, (jsonValue) => VariantFromJSON(jsonValue));
+    // }
 
     /**
      * updateVariant
      */
-    async updateVariant(requestParameters: UpdateVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Variant> {
-        const response = await this.updateVariantRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
+    // async updateVariant(requestParameters: UpdateVariantRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Variant> {
+    //     const response = await this.updateVariantRaw(requestParameters, initOverrides);
+    //     return await response.value();
+    // }
 
 }
