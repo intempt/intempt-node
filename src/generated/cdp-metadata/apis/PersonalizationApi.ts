@@ -15,7 +15,7 @@
 
 import * as runtime from '../runtime';
 import type {
-    ChooseExperience,
+    ChooseExperience1,
     // CreateExperiment,
     // CreateExperimentVariantTemplate,
     // CreateVariant,
@@ -27,7 +27,7 @@ import type {
 } from '../models/ChooseExperience';
 import {
     // ChooseVariantFromJSON,
-    ChooseVariantToJSON,
+    ChooseVariantToJSON1,
     // CreateExperimentFromJSON,
     // CreateExperimentToJSON,
     // CreateExperimentVariantTemplateFromJSON,
@@ -51,7 +51,7 @@ export interface ChooseExperienceRequest {
     orgName: string;
     projectName: string;
     campaignId: string;
-    chooseExperience: ChooseExperience;
+    chooseExperience: ChooseExperience1;
 }
 
 // export interface CreateExperimentRequest {
@@ -179,15 +179,15 @@ export class PersonalizationApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
-            body: ChooseVariantToJSON(requestParameters.chooseExperience),
+            body: ChooseVariantToJSON1(requestParameters.chooseExperience),
         }, initOverrides);
 
 
         console.debug("chooseExperienceRaw - path - ", `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}/choose`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))))
-        console.debug("chooseExperienceRaw - body - ", ChooseVariantToJSON(requestParameters.chooseExperience))
+        console.debug("chooseExperienceRaw - body - ", ChooseVariantToJSON1(requestParameters.chooseExperience))
 
         logger.debug("chooseExperienceRaw - path - ", `/v1/{orgName}/projects/{projectName}/experiments/{campaignId}/choose`.replace(`{${"orgName"}}`, encodeURIComponent(String(requestParameters.orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(requestParameters.projectName))).replace(`{${"campaignId"}}`, encodeURIComponent(String(requestParameters.campaignId))))
-        logger.debug("chooseExperienceRaw - body - ", ChooseVariantToJSON(requestParameters.chooseExperience))
+        logger.debug("chooseExperienceRaw - body - ", ChooseVariantToJSON1(requestParameters.chooseExperience))
 
         return new runtime.TextApiResponse(response) as any;
     }

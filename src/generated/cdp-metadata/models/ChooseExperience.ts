@@ -33,6 +33,21 @@ export interface ChooseExperience {
     sessionId?: string;
 }
 
+export interface ChooseExperience1 {
+    /**
+     * simple user identifier. It can be username, phonenumber, email, ... Has to be unique in the project. Required for show item only once
+     * @type {string}
+     * @memberof ChooseExperience
+     */
+    userId: string;
+    /**
+     * unique identifier to your system. Required for show item only once per session
+     * @type {string}
+     * @memberof ChooseExperience
+     */
+    url?: string;
+}
+
 /**
  * Check if a given object implements the ChooseExperience interface.
  */
@@ -72,3 +87,16 @@ export function ChooseVariantToJSON(value?: ChooseExperience | null): any {
     };
 }
 
+export function ChooseVariantToJSON1(value?: ChooseExperience1 | null): any {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value === null) {
+        return null;
+    }
+    return {
+
+        'userId': value.userId,
+        'url': value.url// value.sessionId,
+    };
+}
