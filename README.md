@@ -1,6 +1,6 @@
 # Intempt - Node SDK
 
-[Intempt](https://intempt.com/?utm_campaign=sdk&utm_medium=docs&utm_source=github) is a Customer Data Platform built on Open Data Stack for the needs of SAAS and eCommerce companies focusing to grow their customer LTV.
+[Intempt](https://intempt.com/?utm_campaign=sdk&utm_medium=docs&utm_source=github) is a GrowthOS built for the needs of SAAS and eCommerce companies focusing to grow their customer LTV.
 This is a library to facilitate tracking of anonymous and logged-in user traffic on your Node.js server.
 
 ## Contents:
@@ -71,9 +71,9 @@ interface ConfigurationParameters {
 ```
 
 
-The most importan is the Authorization. Our library provide two way.
+First, Authorization. Our library provide two ways:
 
-A Simple bearer token (jwt) from login. This method higly denending the `exp` (expiration), whitch can be from couple of minuts to days. This is not fit for a long running api. 
+A Simple bearer token (jwt) from login. This method higly dependent the `exp` (expiration), which can be from couple of minutes to days. This is not fit for a long running api. 
 
 ```typescript
 const configuration = new IntemptSdk.Configuration({
@@ -81,7 +81,7 @@ const configuration = new IntemptSdk.Configuration({
 });
 ```
 
-Every Source come with a key.
+Every Source comes with a key.
 
 ```
 d9371778-b7ab-4d1c-8929-d3ee58e216d3.081ad6c9-dee9-4e64-9384-4cf0ca41c079
