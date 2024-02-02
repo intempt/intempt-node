@@ -32,13 +32,13 @@ To update to the latest version, run
 How to import the whole sdk:
 
 ```javascript
-    const IntemptSdk = require('@intempt/sdk');
+    const IntemptSDK = require('@intempt/sdk');
 ```
 
 Or
 
 ```typescript
-    import * as IntemptSdk from '@intempt/sdk'
+    import * as IntemptSDK from '@intempt/sdk'
 ```
 
 ### Modules
@@ -76,7 +76,7 @@ First, Authorization. Our library provide two ways:
 A Simple bearer token (jwt) from login. This method higly dependent the `exp` (expiration), which can be from couple of minutes to days. This is not fit for a long running api. 
 
 ```typescript
-const configuration = new IntemptSdk.Configuration({
+const configuration = new IntemptSDK.Configuration({
     accessToken: 'eyJhbG....'
 });
 ```
@@ -88,7 +88,7 @@ d9371778-b7ab-4d1c-8929-d3ee58e216d3.081ad6c9-dee9-4e64-9384-4cf0ca41c079
 ```
 
 ```typescript
-const configuration = new IntemptSdk.Configuration({
+const configuration = new IntemptSDK.Configuration({
     username:'d9371778-b7ab-4d1c-8929-d3ee58e216d3',
     password:'081ad6c9-dee9-4e64-9384-4cf0ca41c079'
 })
@@ -99,7 +99,7 @@ const configuration = new IntemptSdk.Configuration({
 With the set up configuration, our api is avaliable. This example show how to list the sources.
 
 ```typescript
-const sourcesApi = new IntemptSdk.CDPMetadata.SourcesApi(configuration);
+const sourcesApi = new IntemptSDK.CDPMetadata.SourcesApi(configuration);
 
 await sourcesApi.fetchSources({orgName: orgName, projectName: projectName});
 ```
@@ -206,11 +206,11 @@ Every method you call does not result in an HTTP request, but is queued in memor
 
 
 ```typescript
-const eventRecorder = IntemptSdk.EventRecorder.WithEventBatcher(
+const eventRecorder = IntemptSDK.EventRecorder.WithEventBatcher(
     orgName,
     projectName,
     sourceId,
-    new IntemptSdk.PushSource.SourcesApi(configuration),
+    new IntemptSDK.PushSource.SourcesApi(configuration),
     { maximum:100, interval: 10 });
 ```
 
