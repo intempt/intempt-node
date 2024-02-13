@@ -218,62 +218,33 @@ const eventRecorder = IntemptSDK.EventRecorder.WithEventBatcher(
 Below is a detailed list of functions our SDK makes available to be used in your server.
 
 
-# Experiments Variant Choose
+# Optimization Choose
 
-Select experiments variants using NodeJS SDK library.
+Select experiments variants and personalization experiences using NodeJS SDK library.
 
-1. Create experiments api object to choose variants
+1. Create optimization http client object for choosing
 
 ```typescript
-const experimentsApi = new IntemptSdk.CDPMetadata.ExperimentsApi(configuration);
+const optimizationClient = new IntemptSdk.OptimizationClient(configuration);
 ```
 
 2. Build request parameters (sessionId - optional parameter, userIdentifier - value of user identifier, email usually)
 
 ```typescript
   const requestParameters = {
-    orgName: "organization-name",
-    projectName: "project-name",
-    experimentId: "unique-experiment-id",
-    chooseVariant: {
-      userIdentifier: "user-identifier-value",
-      sessionId: "current-session-id"
-    }
-  };
+    identification: {
+        userId: "user-identifier-value"
+    },
+    sessionId: "current-session-id",
+    url: "page-url",
+    device: "all"
+};
 ```
 
 3. Call choose variant request
 
 ```typescript
-  const variant = experimentsApi.chooseVariant(requestParameters)
+  const rows = optimizationClient.chooseRows("organization-name", "project-name", requestParameters)
 ```
 
-# Personalization Campaign Experience Choose
 
-Select campaign experience using NodeJS SDK library.
-
-1. Create campaign api object to choose experiences
-
-```typescript
-const personalizationApi = new IntemptSdk.CDPMetadata.PersonalizationApi(configuration);
-```
-
-2. Build request parameters (url - optional parameter, userId - value of user identifier, email usually)
-
-```typescript
-  const requestParameters = {
-    orgName: "organization-name",
-    projectName: "project-name",
-    campaignId: "unique-campaign-id",
-    chooseExperience: {
-      userId: "user-identifier-value",
-      url: "target-url-to-match"
-    }
-  };
-```
-
-3. Call choose experience request
-
-```typescript
-  const experience = personalizationApi.chooseExperience(requestParameters)
-```
