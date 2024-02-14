@@ -4,7 +4,7 @@ import type {
 } from '../models/OptimizationChoose'
 
 export class OptimizationClient extends runtime.BaseAPI {
-    async chooseRows(orgName: string, projectName: string, requestBody: OptimizationChoose, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<any>> {
+    async chooseRowsJSON(orgName: string, projectName: string, requestBody: OptimizationChoose, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<any>> {
         if (orgName === null || orgName === undefined) {
             throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling chooseExperience.');
         }
@@ -54,8 +54,8 @@ export class OptimizationClient extends runtime.BaseAPI {
         return new runtime.TextApiResponse(response) as any;
     }
 
-    async chooseRowsJSON(orgName: string, projectName: string, requestBody: OptimizationChoose, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<any> {
-        const response = await this.chooseRows(orgName, projectName, requestBody, initOverrides);
+    async chooseRows(orgName: string, projectName: string, requestBody: OptimizationChoose, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<any> {
+        const response = await this.chooseRowsJSON(orgName, projectName, requestBody, initOverrides);
         const value = await response.value();
         return JSON.parse(value).choices
     }
