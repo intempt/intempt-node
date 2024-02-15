@@ -41,7 +41,7 @@ export class OptimizationClient extends runtime.BaseAPI {
         }
         //https://api.intempt.com/v1/test-roman-3/projects/test-intempt-data/personalization/campaigns/1073/experience-choose
         const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/optimization/choose-web`.replace(`{${"orgName"}}`, encodeURIComponent(String(orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(projectName))),
+            path: `/v1/{orgName}/projects/{projectName}/optimization/choose-api`.replace(`{${"orgName"}}`, encodeURIComponent(String(orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(projectName))),
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
