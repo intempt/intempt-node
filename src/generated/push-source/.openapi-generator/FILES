@@ -1,7 +1,0 @@
-.openapi-generator-ignore
-apis/SourcesApi.ts
-apis/index.ts
-index.ts
-models/DayOfWeek.ts
-models/index.ts
-runtime.ts
