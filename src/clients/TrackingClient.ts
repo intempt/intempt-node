@@ -2,42 +2,81 @@ import {HttpClient} from "./HttpClient";
 import { randomUUID } from 'crypto';
 
 export class TrackingClient extends HttpClient {
-    constructor(orgName: string, projectName: string, apiKey: string, sourceId: number) {
+    tracks: object[];
+    timeoutId: any;
+    time?: number;
+    maxSize?: number;
+
+
+    constructor(orgName: string, projectName: string, apiKey: string, sourceId: number, time?: number, maxSize?: number) {
         let featurePath: string = `sources/${sourceId}/track`
         super(orgName, projectName, apiKey, featurePath)
+        this.tracks = []
+        this.time = time
+        this.maxSize = maxSize
     }
 
     async record(name: string, profileId: string, userId?: string, accountId?: string, data?: object,
                  userAttributes?: object, accountAttributes?: object, anotherUserId?: string): Promise<void> {
         let eventId = randomUUID()
         let timestamp = Date.now()
-        let requestBody: object = this.body(eventId, timestamp, name, profileId, userId, accountId,
-            data, userAttributes, accountAttributes, anotherUserId)
+        this.tracks.push(this.single(eventId, timestamp, name, profileId, userId, accountId,
+            data, userAttributes, accountAttributes, anotherUserId))
 
+        if (this.maxSize === undefined && this.time === undefined) {
+            console.log("send single")
+            return await this.recordTracks()
+        }
+
+        if (this.time !== undefined && this.timeoutId === undefined) {
+            this.timeoutId = setTimeout(() => {
+                this.recordTracks()
+                this.tearDown()
+                console.log("send timer")
+            }, this.time);
+        }
+
+        if (this.maxSize !== undefined && this.tracks.length === this.maxSize) {
+            await this.recordTracks()
+            clearTimeout(this.timeoutId)
+            this.tearDown()
+            console.log("send size")
+        }
+    }
+
+    async recordTracks(): Promise<void> {
+        let requestBody: object = this.body(this.tracks)
         await this.send(requestBody)
     }
 
-    body(eventId: string, timestamp: number, name: string, profileId?: string, userId?: string, accountId?: string,
-         data?: object, userAttributes?: object, accountAttributes?: object, anotherUserId?: string): object {
+    body(a: object[]) {
         return {
-            'track': [
+            'track': a
+        }
+    }
+
+    single(eventId: string, timestamp: number, name: string, profileId?: string, userId?: string, accountId?: string,
+           data?: object, userAttributes?: object, accountAttributes?: object, anotherUserId?: string): object {
+        return {
+            'name': name,
+            'payload': [
                 {
-                    'name': name,
-                    "payload": [
-                        {
-                            'eventId': eventId,
-                            'timestamp': timestamp,
-                            'profileId': profileId,
-                            'userId': userId,
-                            'accountId': accountId,
-                            'data': data,
-                            'userAttributes': userAttributes,
-                            'accountAttributes': accountAttributes,
-                            'anotherUserId': anotherUserId
-                        }
-                    ]
+                    'eventId': eventId,
+                    'timestamp': timestamp,
+                    'profileId': profileId,
+                    'userId': userId,
+                    'accountId': accountId,
+                    'data': data,
+                    'userAttributes': userAttributes,
+                    'accountAttributes': accountAttributes,
+                    'anotherUserId': anotherUserId
                 }
             ]
         }
+    }
+
+    tearDown() {
+        this.tracks = []
+        this.timeoutId = undefined
     }
 }

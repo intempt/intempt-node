@@ -7,10 +7,10 @@ export class SDK {
     consentsClient: ConsentsClient;
     optimizationClient: OptimizationClient;
 
-    constructor(orgName: string, projectName: string, apiKey: string, sourceId: number) {
+    constructor(orgName: string, projectName: string, apiKey: string, sourceId: number, time?: number, maxSize?: number) {
         if (!(orgName && projectName && apiKey && sourceId > 0)) throw new Error("Incorrect configuration parameters")
 
-        this.trackingClient = new TrackingClient(orgName, projectName, apiKey, sourceId)
+        this.trackingClient = new TrackingClient(orgName, projectName, apiKey, sourceId, time, maxSize)
         this.consentsClient = new ConsentsClient(orgName, projectName, apiKey, sourceId)
         this.optimizationClient = new OptimizationClient(orgName, projectName, apiKey, sourceId)
     }
