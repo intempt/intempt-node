@@ -24,7 +24,6 @@ export class TrackingClient extends HttpClient {
             data, userAttributes, accountAttributes, anotherUserId))
 
         if (this.maxSize === undefined && this.time === undefined) {
-            console.log("send single")
             return await this.recordTracks()
         }
 
@@ -32,7 +31,6 @@ export class TrackingClient extends HttpClient {
             this.timeoutId = setTimeout(() => {
                 this.recordTracks()
                 this.tearDown()
-                console.log("send timer")
             }, this.time);
         }
 
@@ -40,7 +38,6 @@ export class TrackingClient extends HttpClient {
             await this.recordTracks()
             clearTimeout(this.timeoutId)
             this.tearDown()
-            console.log("send size")
         }
     }
 
