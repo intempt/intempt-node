@@ -7,8 +7,8 @@ export class SDK {
     consentsClient: ConsentsClient;
     optimizationClient: OptimizationClient;
 
-    constructor(orgName: string, projectName: string, apiKey: string, sourceId: number, time?: number, maxSize?: number) {
-        if (!(orgName && projectName && apiKey && sourceId > 0)) throw new Error("Incorrect configuration parameters")
+    constructor(orgName: string, projectName: string, apiKey: string, sourceId: string, time?: number, maxSize?: number) {
+        if (!(orgName && projectName && apiKey && sourceId)) throw new Error("Incorrect configuration parameters")
 
         this.trackingClient = new TrackingClient(orgName, projectName, apiKey, sourceId, time, maxSize)
         this.consentsClient = new ConsentsClient(orgName, projectName, apiKey, sourceId)
@@ -16,7 +16,7 @@ export class SDK {
     }
 
     async identify(profileId: string, userId: string, eventTitle?: string, userAttributes?: object) {
-        if (eventTitle && userId && profileId) {
+        if (eventTitle && this.verifyEventTitle(eventTitle) && userId && profileId) {
             await this.trackingClient.record(eventTitle, profileId, userId, undefined, undefined, userAttributes)
         } else if (userId && profileId) {
             await this.trackingClient.record('Identify', profileId, userId, undefined, undefined, userAttributes)
@@ -26,7 +26,7 @@ export class SDK {
     }
 
     async group(profileId: string, accountId: string, eventTitle?: string, accountAttributes?: object) {
-        if (eventTitle && accountId && profileId) {
+        if (eventTitle && this.verifyEventTitle(eventTitle) && accountId && profileId) {
             await this.trackingClient.record(eventTitle, profileId, undefined,accountId, undefined, undefined, accountAttributes)
         } else if (accountId && profileId) {
             await this.trackingClient.record('Identify', profileId, undefined, accountId, undefined, undefined, accountAttributes)
@@ -36,7 +36,7 @@ export class SDK {
     }
 
     async track(profileId: string, eventTitle: string, data: object) {
-        if (eventTitle && profileId) {
+        if (eventTitle && this.verifyEventTitle(eventTitle) && profileId) {
             await this.trackingClient.record(eventTitle, profileId, undefined, undefined, data)
         } else {
             console.warn('track request params are incorrect')
@@ -45,7 +45,7 @@ export class SDK {
 
     async record(profileId: string, eventTitle: string, userId?: string, accountId?: string, data?: object,
            userAttributes?: object, accountAttributes?: object) {
-        if (eventTitle && profileId) {
+        if (eventTitle && this.verifyEventTitle(eventTitle) && profileId) {
             await this.trackingClient.record(eventTitle, profileId, userId, accountId, data, userAttributes, accountAttributes)
         } else {
             console.warn('record request params are incorrect')
@@ -70,7 +70,7 @@ export class SDK {
 
     async consent(profileId: string, action: string, category: string, consentsExpirationTime?: string,
                   email?: string, message?: string) {
-        if (profileId && (action === 'accept' || action == 'reject') && category) {
+        if (profileId && (action === 'accept' || action === 'reject') && category) {
             await this.consentsClient.record(action, profileId, category, consentsExpirationTime, email, message)
         } else {
             console.warn('consent request params are incorrect')
@@ -107,5 +107,17 @@ export class SDK {
         } else {
             console.warn('choose experiments by names params are incorrect')
         }
+    }
+
+    async optIn() {
+        this.trackingClient.doNotTrack = false
+    }
+
+    async optOut() {
+        this.trackingClient.doNotTrack = true
+    }
+
+    verifyEventTitle(eventTitle?: string): boolean {
+        return eventTitle !== 'Identify'
     }
 }

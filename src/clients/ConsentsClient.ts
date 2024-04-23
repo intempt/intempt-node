@@ -1,9 +1,9 @@
 import {HttpClient} from "./HttpClient";
 
 export class ConsentsClient extends HttpClient {
-    sourceId: number;
+    sourceId: string;
 
-    constructor(orgName: string, projectName: string, apiKey: string, sourceId: number) {
+    constructor(orgName: string, projectName: string, apiKey: string, sourceId: string) {
         let featurePath: string = `consents/data`
         super(orgName, projectName, apiKey, featurePath)
         this.sourceId = sourceId
