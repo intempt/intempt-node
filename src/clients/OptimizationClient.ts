@@ -1,62 +1,30 @@
-import * as runtime from '../runtime';
-import type {
-    OptimizationChoose
-} from '../models/OptimizationChoose'
+import {HttpClient} from "./HttpClient";
 
-export class OptimizationClient extends runtime.BaseAPI {
-    async chooseRowsJSON(orgName: string, projectName: string, requestBody: OptimizationChoose, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<any>> {
-        if (orgName === null || orgName === undefined) {
-            throw new runtime.RequiredError('orgName','Required parameter requestParameters.orgName was null or undefined when calling chooseExperience.');
-        }
+export class OptimizationClient extends HttpClient {
+    sourceId: string;
 
-        if (projectName === null || projectName === undefined) {
-            throw new runtime.RequiredError('projectName','Required parameter requestParameters.projectName was null or undefined when calling chooseExperience.');
-        }
-
-        if (requestBody === null || requestBody === undefined) {
-            throw new runtime.RequiredError('chooseExperience','Required parameter requestParameters.chooseExperience was null or undefined when calling chooseExperience.');
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters['Content-Type'] = 'application/json';
-
-        if (this.configuration && this.configuration.accessToken) {
-            // oauth required
-            headerParameters["Authorization"] = await this.configuration.accessToken("auth0", []);
-        }
-
-        if (this.configuration && (this.configuration.username !== undefined || this.configuration.password !== undefined)) {
-            headerParameters["Authorization"] = "Basic " + btoa(this.configuration.username + ":" + this.configuration.password);
-        }
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("bearerAuth", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-        //https://api.intempt.com/v1/test-roman-3/projects/test-intempt-data/personalization/campaigns/1073/experience-choose
-        const response = await this.request({
-            path: `/v1/{orgName}/projects/{projectName}/optimization/choose-api`.replace(`{${"orgName"}}`, encodeURIComponent(String(orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(projectName))),
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-            body: requestBody,
-        }, initOverrides);
-
-        console.debug("chooseExperienceRaw - path - ", `/v1/{orgName}/projects/{projectName}/optimization/choose-web`.replace(`{${"orgName"}}`, encodeURIComponent(String(orgName))).replace(`{${"projectName"}}`, encodeURIComponent(String(projectName))))
-        console.debug("chooseExperienceRaw - body - ", requestBody)
-
-        return new runtime.TextApiResponse(response) as any;
+    constructor(orgName: string, projectName: string, apiKey: string, sourceId: string) {
+        let featurePath: string = `optimization/choose-api`
+        super(orgName, projectName, apiKey, featurePath)
+        this.sourceId = sourceId
     }
 
-    async chooseRows(orgName: string, projectName: string, requestBody: OptimizationChoose, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<any> {
-        const response = await this.chooseRowsJSON(orgName, projectName, requestBody, initOverrides);
-        const value = await response.value();
-        return JSON.parse(value).choices
+    async choose(profileId: string, optimizationType?: string, groups?: string[], names?: string[]): Promise<any> {
+        let requestBody: object = this.body(profileId, optimizationType, groups, names)
+        let response = await this.send(requestBody)
+        return response.data.choices
+    }
+
+    body(profileId: string, optimizationType?: string, groups?: string[], names?: string[]): object {
+        return {
+            'identification': {
+                'profileId': profileId,
+                'sourceId': this.sourceId
+            },
+            'groups': groups,
+            'names': names,
+            'optimizationType': optimizationType,
+            'device': "all"
+        }
     }
 }

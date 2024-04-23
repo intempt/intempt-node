@@ -1,11 +1,8 @@
 {
-  "name": "intempt-nodejs-sdk",
-  "version": "0.2.0",
+  "name": "intempt",
+  "version": "0.3.1",
   "scripts": {
-    "clean": "rm -vrf dist src/generated/*/",
-    "generate-sources": "npx openapi-generator-cli generate",
-    "compile": "rm -rf dist && tsc && copyfiles --error --up 1 src/batcher.js dist/",
-    "test": "jest --coverage --detectOpenHandles"
+    "compile": "rm -rf dist && tsc && copyfiles --error --up 1 src/index.ts dist/"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,6 +19,6 @@
     "typescript": "^5.0"
   },
   "dependencies": {
-    "pino": "^8.15.7"
+    "axios": "^1.6.7"
   }
 }
