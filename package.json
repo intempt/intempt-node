@@ -1,6 +1,6 @@
 {
   "name": "intempt",
-  "version": "0.3.1",
+  "version": "1.0.0",
   "scripts": {
     "compile": "rm -rf dist && tsc && copyfiles --error --up 1 src/index.ts dist/"
   },

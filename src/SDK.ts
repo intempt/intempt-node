@@ -19,7 +19,7 @@ export class SDK {
         if (eventTitle && this.verifyEventTitle(eventTitle) && userId && profileId) {
             await this.trackingClient.record(eventTitle, profileId, userId, undefined, undefined, userAttributes)
         } else if (userId && profileId) {
-            await this.trackingClient.record('Identify', profileId, userId, undefined, undefined, userAttributes)
+            await this.trackingClient.record('Identify', profileId, userId, undefined, undefined, undefined)
         } else {
             console.warn('identify request params are incorrect')
         }
@@ -27,9 +27,9 @@ export class SDK {
 
     async group(profileId: string, accountId: string, eventTitle?: string, accountAttributes?: object) {
         if (eventTitle && this.verifyEventTitle(eventTitle) && accountId && profileId) {
-            await this.trackingClient.record(eventTitle, profileId, undefined,accountId, undefined, undefined, accountAttributes)
+            await this.trackingClient.record(eventTitle, profileId, undefined, accountId, undefined, undefined, accountAttributes)
         } else if (accountId && profileId) {
-            await this.trackingClient.record('Identify', profileId, undefined, accountId, undefined, undefined, accountAttributes)
+            await this.trackingClient.record('Identify', profileId, undefined, accountId, undefined, undefined, undefined)
         } else {
             console.warn('group request params are incorrect')
         }
