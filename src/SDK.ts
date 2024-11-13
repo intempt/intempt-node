@@ -77,6 +77,26 @@ export class SDK {
         }
     }
 
+    async productAdd(profileId: string, productId:String, quantity:number){
+        await this.trackingClient.productTrack('Product Add', profileId, [
+            {productId: productId, quantity: quantity}
+        ])
+    }
+
+    async productOrdered(profileId: string, products:{productId:String, quantity:number}[]){
+        if (products) {
+            await this.trackingClient.productTrack('Product Ordered', profileId, products)
+        } else {
+            console.warn('product ordered request params are incorrect')
+        }
+    }
+
+    async productView(profileId: string, productId:String){
+        await this.trackingClient.productTrack('Product View', profileId, [
+            {productId: productId}
+        ])
+    }
+
     async choosePersonalizationsByGroups(profileId: string, groups?: string[]): Promise<any> {
         if (profileId) {
             return await this.optimizationClient.choose(profileId, 'personalization', groups)
@@ -116,6 +136,8 @@ export class SDK {
     async optOut() {
         this.trackingClient.doNotTrack = true
     }
+
+
 
     verifyEventTitle(eventTitle?: string): boolean {
         return eventTitle !== 'Identify'
