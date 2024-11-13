@@ -83,7 +83,7 @@ export class SDK {
         }
 
         try{
-            await this.trackingClient.productTrack('Product Add', profileId, [
+            await this.trackingClient.productTrack('Added to cart', profileId, [
                 {productId: productId, quantity: quantity}
             ])
         }
@@ -96,7 +96,7 @@ export class SDK {
     async productOrdered(profileId: string, products:{productId:String, quantity:number}[]){
         if (profileId && products && products.length > 0 && products.every(product => product.productId && product.quantity)) {
             try{
-                await this.trackingClient.productTrack('Product Ordered', profileId, products)
+                await this.trackingClient.productTrack('Product ordered', profileId, products)
             }
             catch(e:any){
                 console.warn(`product request error: ${e.message}`)
@@ -114,7 +114,7 @@ export class SDK {
             return { error: true }
         }
         try{
-            await this.trackingClient.productTrack('Product View', profileId, [
+            await this.trackingClient.productTrack('Product view', profileId, [
                 {productId: productId}
             ])
         }
