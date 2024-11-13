@@ -4,7 +4,11 @@ export class HttpClient {
     axios;
 
     constructor(orgName: string, projectName: string, apiKey: string, featurePath: string) {
-        this.url = `https://api.intempt.com/v1/${orgName}/projects/${projectName}/${featurePath}?apiKey=${apiKey}`
+        const baseUrl = process.env.NODE_ENV === 'test'
+            ? 'https://api.staging.intempt.com'
+            : 'https://api.intempt.com' ;
+
+        this.url = `${baseUrl}/v1/${orgName}/projects/${projectName}/${featurePath}?apiKey=${apiKey}`
         this.axios = require('axios').default
     }
 
@@ -13,6 +17,7 @@ export class HttpClient {
             return await this.axios.post(this.url, requestBody)
         } catch (error) {
             console.error(error)
+            throw new Error('Failed to send request')
         }
     }
 }

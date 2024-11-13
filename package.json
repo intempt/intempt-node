@@ -1,8 +1,9 @@
 {
   "name": "intempt",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "scripts": {
-    "compile": "rm -rf dist && tsc && copyfiles --error --up 1 src/index.ts dist/"
+    "compile": "rm -rf dist && tsc && copyfiles --error --up 1 src/index.ts dist/",
+    "test": "cross-env NODE_ENV=test jest"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,10 +16,11 @@
     "@jest/globals": "^29.4.3",
     "@openapitools/openapi-generator-cli": "^2.5.2",
     "copyfiles": "^2.4.1",
+    "cross-env": "^7.0.3",
     "ts-jest": "^29.0.5",
     "typescript": "^5.0"
   },
   "dependencies": {
-    "axios": "^1.6.7"
+    "axios": "^1.7.7"
   }
 }

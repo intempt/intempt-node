@@ -77,10 +77,9 @@ export class SDK {
         }
     }
 
-    async productAdd(profileId: string, productId:String, quantity:number){
-        if(!productId || !quantity && quantity <= 0 || !!profileId){
-            console.warn('product add request params are incorrect')
-            return
+    async productAdd(profileId: string, productId:string, quantity:number){
+        if(!productId || !quantity || quantity <= 0 || !profileId){
+            return { error: true }
         }
 
         try{
@@ -90,7 +89,7 @@ export class SDK {
         }
         catch (e:any){
             console.warn(`product request error: ${e.message}`)
-            return
+            return { error: true }
         }
     }
 
@@ -101,17 +100,18 @@ export class SDK {
             }
             catch(e:any){
                 console.warn(`product request error: ${e.message}`)
-                return
+                return { error: true }
             }
         } else {
             console.warn('product ordered request params are incorrect')
+            return { error: true }
         }
     }
 
     async productView(profileId: string, productId:String){
         if(!profileId || !productId){
             console.warn('product view request params are incorrect')
-            return
+            return { error: true }
         }
         try{
             await this.trackingClient.productTrack('Product View', profileId, [
@@ -120,7 +120,7 @@ export class SDK {
         }
         catch(e:any){
             console.warn(`product request error: ${e.message}`)
-            return
+            return { error: true }
         }
 
     }
