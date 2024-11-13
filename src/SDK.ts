@@ -77,6 +77,54 @@ export class SDK {
         }
     }
 
+    async productAdd(profileId: string, productId:String, quantity:number){
+        if(!productId || !quantity && quantity <= 0 || !!profileId){
+            console.warn('product add request params are incorrect')
+            return
+        }
+
+        try{
+            await this.trackingClient.productTrack('Product Add', profileId, [
+                {productId: productId, quantity: quantity}
+            ])
+        }
+        catch (e:any){
+            console.warn(`product request error: ${e.message}`)
+            return
+        }
+    }
+
+    async productOrdered(profileId: string, products:{productId:String, quantity:number}[]){
+        if (profileId && products && products.length > 0 && products.every(product => product.productId && product.quantity)) {
+            try{
+                await this.trackingClient.productTrack('Product Ordered', profileId, products)
+            }
+            catch(e:any){
+                console.warn(`product request error: ${e.message}`)
+                return
+            }
+        } else {
+            console.warn('product ordered request params are incorrect')
+        }
+    }
+
+    async productView(profileId: string, productId:String){
+        if(!profileId || !productId){
+            console.warn('product view request params are incorrect')
+            return
+        }
+        try{
+            await this.trackingClient.productTrack('Product View', profileId, [
+                {productId: productId}
+            ])
+        }
+        catch(e:any){
+            console.warn(`product request error: ${e.message}`)
+            return
+        }
+
+    }
+
     async choosePersonalizationsByGroups(profileId: string, groups?: string[]): Promise<any> {
         if (profileId) {
             return await this.optimizationClient.choose(profileId, 'personalization', groups)
@@ -116,6 +164,8 @@ export class SDK {
     async optOut() {
         this.trackingClient.doNotTrack = true
     }
+
+
 
     verifyEventTitle(eventTitle?: string): boolean {
         return eventTitle !== 'Identify'

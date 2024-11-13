@@ -18,15 +18,26 @@ export class TrackingClient extends HttpClient {
         this.doNotTrack = false
     }
 
-    async record(name: string, profileId: string, userId?: string, accountId?: string, data?: object,
-                 userAttributes?: object, accountAttributes?: object, anotherUserId?: string): Promise<void> {
-        if (this.doNotTrack) return
+    async productTrack(name: string, profileId: string, products:{productId:String, quantity?:number}[]){
+        if (this.doNotTrack) return;
+        const eventId = randomUUID();
+        const timestamp = Date.now();
+        const payload = {
+            name: name,
+            payload : products.map(product => ({
+                eventId: eventId,
+                timestamp: timestamp,
+                profileId: profileId,
+                data: product
+            }))
+        }
 
-        let eventId = randomUUID()
-        let timestamp = Date.now()
-        this.tracks.push(this.single(eventId, timestamp, name, profileId, userId, accountId,
-            data, userAttributes, accountAttributes, anotherUserId))
+        this.tracks.push(payload)
 
+        await this.invokeRecordTracks()
+    }
+
+    async invokeRecordTracks(){
         if (this.maxSize === undefined && this.time === undefined) {
             return await this.recordTracks()
         }
@@ -45,6 +56,20 @@ export class TrackingClient extends HttpClient {
         }
     }
 
+    async record(name: string, profileId: string, userId?: string, accountId?: string, data?: object,
+                 userAttributes?: object, accountAttributes?: object, anotherUserId?: string): Promise<void> {
+        if (this.doNotTrack) return
+
+        let eventId = randomUUID()
+        let timestamp = Date.now()
+
+        this.tracks.push(
+            this.single(eventId, timestamp, name, profileId, userId, accountId, data, userAttributes, accountAttributes, anotherUserId)
+        )
+
+        await this.invokeRecordTracks()
+    }
+
     async recordTracks(): Promise<void> {
         let requestBody: object = this.body(this.tracks)
         await this.send(requestBody)
@@ -55,6 +80,8 @@ export class TrackingClient extends HttpClient {
             'track': a
         }
     }
+
+    productPayload(eventId: string, timestamp: number, name: string, profileId: string,){}
 
     single(eventId: string, timestamp: number, name: string, profileId?: string, userId?: string, accountId?: string,
            data?: object, userAttributes?: object, accountAttributes?: object, anotherUserId?: string): object {
