@@ -1,11 +1,13 @@
 import {TrackingClient} from "./clients/TrackingClient";
 import {ConsentsClient} from "./clients/ConsentsClient";
 import {OptimizationClient} from "./clients/OptimizationClient";
+import {RecommendationClient} from "./clients/RecommendationClient";
 
 export class SDK {
     trackingClient: TrackingClient;
     consentsClient: ConsentsClient;
     optimizationClient: OptimizationClient;
+    recommendationClient: RecommendationClient;
 
     constructor(orgName: string, projectName: string, apiKey: string, sourceId: string, time?: number, maxSize?: number) {
         if (!(orgName && projectName && apiKey && sourceId)) throw new Error("Incorrect configuration parameters")
@@ -13,6 +15,7 @@ export class SDK {
         this.trackingClient = new TrackingClient(orgName, projectName, apiKey, sourceId, time, maxSize)
         this.consentsClient = new ConsentsClient(orgName, projectName, apiKey, sourceId)
         this.optimizationClient = new OptimizationClient(orgName, projectName, apiKey, sourceId)
+        this.recommendationClient = new RecommendationClient(orgName, projectName, apiKey, sourceId)
     }
 
     async identify(profileId: string, userId: string, eventTitle?: string, userAttributes?: object) {
@@ -108,13 +111,13 @@ export class SDK {
         }
     }
 
-    async productView(profileId: string, productId:String){
+    async productView(profileId: string, productId:string){
         if(!profileId || !productId){
             console.warn('product view request params are incorrect')
             return { error: true }
         }
         try{
-            await this.trackingClient.productTrack('Product view', profileId, [
+            await this.trackingClient.productTrack('Product viewed', profileId, [
                 {productId: productId}
             ])
         }
@@ -122,6 +125,25 @@ export class SDK {
             console.warn(`product request error: ${e.message}`)
             return { error: true }
         }
+
+    }
+
+    async recommendation(profileId: string,id:string,quantity:number,fields:string[], productId?:string ){
+        try{
+            return this.recommendationClient.recommendations(
+                profileId,
+                id,
+                quantity,
+                fields,
+                productId
+            )
+        }
+        catch(e:any){
+            console.warn(`recommendation request error: ${e.message}`)
+            return { error: true }
+        }
+
+
 
     }
 

@@ -54,6 +54,19 @@ describe('Intempt SDK Method Tests', () => {
 
         expect(intempt.trackingClient.doNotTrack).toBe(true);
     });
+
+    it('should return recommendations', async () => {
+        const id = '848';
+        const quantity= 5;
+        const fields = ["id", "price", "title"]
+
+        const res = await intempt.recommendation(
+            randomUUID(),
+            id,quantity,fields
+        )
+
+        expect(!!res?.error).toBe(false);
+    });
 })
 
 
