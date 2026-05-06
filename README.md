@@ -193,6 +193,10 @@ const intempt = new IntemptSDK('my-org', 'my-project', 'api-key', 'source-id', 1
 - Node.js 14+
 - TypeScript support included (ships with type declarations)
 
+## Documentation
+
+Full documentation: [docs.intempt.com](https://docs.intempt.com)
+
 ## License
 
-[MIT](LICENSE)
+MIT — see [LICENSE](LICENSE) for details.
