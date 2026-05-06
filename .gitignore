@@ -105,3 +105,12 @@ dist
 
 .npmrc
 src/generated
+
+# IDE config
+.idea/
+
+# Internal config
+sonar-project.properties
+
+# Lock file (library)
+package-lock.json
