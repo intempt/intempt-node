@@ -1,26 +1,53 @@
 {
   "name": "intempt",
-  "version": "1.0.1",
-  "scripts": {
-    "compile": "rm -rf dist && tsc && copyfiles --error --up 1 src/index.ts dist/",
-    "test": "cross-env NODE_ENV=test jest"
-  },
+  "version": "2.0.0",
+  "description": "Server-side Node.js client for the Intempt platform: data in, decisions out.",
+  "keywords": [
+    "intempt",
+    "cdp",
+    "analytics",
+    "personalization",
+    "recommendations"
+  ],
+  "homepage": "https://github.com/intempt/intempt-node#readme",
+  "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "CHANGELOG.md"
+  ],
   "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/intempt/intempt-node.git"
   },
-  "devDependencies": {
-    "@jest/globals": "^29.4.3",
-    "@openapitools/openapi-generator-cli": "^2.5.2",
-    "copyfiles": "^2.4.1",
-    "cross-env": "^7.0.3",
-    "ts-jest": "^29.0.5",
-    "typescript": "^5.0"
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "axios": "^1.7.7"
+    "https-proxy-agent": "7.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@vitest/coverage-v8": "^2.1.9",
+    "nock": "^14.0.10",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.9"
   }
 }

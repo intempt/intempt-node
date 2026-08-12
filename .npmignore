@@ -1,9 +1,0 @@
-dist/
-node_modules
-.npmrc
-.env
-.idea
-.env.sample
-.github
-test
-samples

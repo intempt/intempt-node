@@ -1,0 +1,73 @@
+Intempt Node.js SDK
+Copyright (c) 2024 Intempt
+Licensed under the MIT License (see LICENSE).
+
+------------------------------------------------------------------------------
+Third-party code
+------------------------------------------------------------------------------
+
+This product contains code derived from mixpanel-node:
+
+    https://github.com/mixpanel/mixpanel-node
+    Copyright (c) 2012 Carl Sverre
+    Released under the MIT License.
+
+Both projects are MIT licensed. The original copyright notice is retained
+below and in the header of each file containing derived code.
+
+Copied substantially verbatim
+-----------------------------
+  src/utils.ts
+    assertLogger()      from lib/utils.js  assert_logger
+    ensureTimestamp()   from lib/utils.js  ensure_timestamp
+    chunk()             from lib/mixpanel-node.js  chunk
+
+Adapted (structure and behaviour inherited, rewritten in TypeScript and
+promise-native form)
+--------------------------------------------------------------------------
+  src/config.ts
+    DEFAULT_CONFIG / resolveConfig / mergeConfig
+                        from lib/mixpanel-node.js  DEFAULT_CONFIG, set_config
+  src/credentials.ts
+    ApiKeyCredentials   from lib/credentials.js  ServiceAccountCredentials
+  src/transport.ts
+    keep-alive and proxy agent setup, and the response-classification shape,
+                        from lib/mixpanel-node.js  send_request
+  src/stamp.ts
+    library name and version stamping
+                        from lib/mixpanel-node.js  send_event_request
+  src/batcher.ts
+    the batch-size ceiling and 413 halving behaviour
+                        from lib/mixpanel-node.js  send_batch_requests
+
+Not derived from mixpanel-node
+-----------------------------
+  The HTTP transport itself. Mixpanel encodes its payload as base64 in a query
+  string or an x-www-form-urlencoded body; Intempt takes a JSON POST body with
+  an Authorization: Basic header. The wire format, endpoints, payload envelope,
+  retry policy and every public method signature are Intempt's own.
+
+------------------------------------------------------------------------------
+MIT License (mixpanel-node)
+------------------------------------------------------------------------------
+
+Copyright (c) 2012 Carl Sverre
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

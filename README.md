@@ -1,202 +1,275 @@
 # Intempt Node.js SDK
 
-Server-side Node.js client for the [Intempt](https://intempt.com) analytics platform.
+Server-side client for [Intempt](https://intempt.com). Data in, decisions out.
 
-## Installation
+- **In** — events, identity, consent, commerce
+- **Out** — experiences, personalizations, recommendations
+
+Console and configuration operations are deliberately not here. Those live in
+the [Intempt CLI and MCP server](https://github.com/intempt/cli).
 
 ```bash
 npm install intempt
 ```
 
-## Quick Start
+Requires Node 18 or newer.
 
-```typescript
-import { SDK as IntemptSDK } from 'intempt';
+## Quick start
 
-const intempt = new IntemptSDK('my-org', 'my-project', 'api-key', 'source-id');
+```ts
+import { Intempt } from 'intempt';
 
-// Track a custom event
-await intempt.track('prof_123', 'purchase', { amount: 99.99, currency: 'USD' });
+const intempt = Intempt.init({
+  org: 'my-org',
+  project: 'my-project',
+  apiKey: process.env.INTEMPT_API_KEY!, // "<prefix>.<secret>"
+  sourceId: '684508596718616576',
+});
 
-// Identify a user
-await intempt.identify('prof_123', 'john@example.com', null, { name: 'John', plan: 'pro' });
+await intempt.track('purchase', {
+  userId: 'user@example.com',
+  properties: { total: 99.99, currency: 'USD' },
+});
+
+const variants = await intempt.decide.experiences({
+  userId: 'user@example.com',
+  type: 'experiment',
+});
 ```
 
-## Constructor
+By default each call sends one request and the promise resolves when the server
+responds. Nothing is buffered, so there is nothing to lose on exit — which makes
+this safe in Lambda and other short-lived processes.
 
-```typescript
-new IntemptSDK(orgName, projectName, apiKey, sourceId, time?, maxSize?)
+## Configuration
+
+```ts
+Intempt.init({
+  org: 'my-org',                 // required
+  project: 'my-project',         // required
+  apiKey: 'prefix.secret',       // required, public API key
+  sourceId: '6845...',           // optional, see below
+
+  host: 'api.intempt.com',       // 'host' or 'host:port'
+  protocol: 'https',
+  path: '',                      // prefix before /v1, for a gateway
+  timeout: 10_000,
+  keepAlive: true,
+
+  logger: console,               // needs trace/debug/info/warn/error
+  debug: false,
+
+  batch: false,                  // see Batching
+  maxRequestEvents: 50,          // hard ceiling on events per request
+  stampLibVersion: false,        // see Library identity
+});
 ```
 
-| Parameter     | Type     | Required | Description                                      |
-|---------------|----------|----------|--------------------------------------------------|
-| `orgName`     | `string` | Yes      | Your Intempt organization name                   |
-| `projectName` | `string` | Yes      | Your Intempt project name                        |
-| `apiKey`      | `string` | Yes      | API key from your Intempt source                 |
-| `sourceId`    | `string` | Yes      | Source identifier                                |
-| `time`        | `number` | No       | Flush interval in milliseconds                   |
-| `maxSize`     | `number` | No       | Maximum events to buffer before flushing         |
+`sourceId` selects the ingestion source. With it, events go to
+`/sources/{sourceId}/track`; without it, to `/track`. It is also required by the
+API for consent records that identify a person by `profileId`.
 
-## Methods
+Call `setConfig()` to change any of these on a live client, except `org`,
+`project`, `apiKey`, `sourceId` and `batch`.
 
-### Event Tracking
+### Identifiers
 
-#### `track(profileId, eventTitle, data)`
+Every call takes at least one of `userId`, `profileId` or `accountId`. You do
+not need a `profileId`: the API accepts `userId` on its own and links it to a
+profile for you. Consent also accepts `masterId`.
 
-Track a custom event.
+## Sending data
 
-```typescript
-await intempt.track('prof_123', 'purchase', { amount: 99.99, currency: 'USD' });
-```
+```ts
+await intempt.track('purchase', {
+  userId: 'u1',
+  properties: { total: 99.99 },
+  timestamp: new Date(),        // optional; Date or epoch ms
+});
 
-#### `identify(profileId, userId, eventTitle?, userAttributes?)`
-
-Identify a user across sources.
-
-```typescript
-await intempt.identify('prof_123', 'john@example.com', null, { name: 'John', plan: 'pro' });
-```
-
-#### `group(profileId, accountId, eventTitle?, accountAttributes?)`
-
-Associate a profile with an account.
-
-```typescript
-await intempt.group('prof_123', 'acme-corp', null, { industry: 'SaaS', plan: 'enterprise' });
-```
-
-#### `record(profileId, eventTitle, userId?, accountId?, data?, userAttributes?, accountAttributes?)`
-
-Send a fully specified event with all optional fields.
-
-```typescript
-await intempt.record('prof_123', 'signup', 'john@example.com', 'acme-corp', { source: 'landing-page' });
-```
-
-#### `alias(profileId, userId, anotherUserId)`
-
-Link two user identifiers to the same profile.
-
-```typescript
-await intempt.alias('prof_123', 'john@example.com', 'john.doe@newdomain.com');
-```
-
-### Consent Management (GDPR/CCPA)
-
-#### `consent(profileId, action, category, expirationTime?, email?, message?)`
-
-Record consent for a specific category.
-
-```typescript
-await intempt.consent('prof_123', 'accept', 'advertising', '2025-12-31');
-```
-
-#### `consents(profileId, action, expirationTime?, email?, message?)`
-
-Record a blanket consent decision (accept or reject all).
-
-```typescript
-await intempt.consents('prof_123', 'accept');
-```
-
-### Product Events
-
-#### `productAdd(profileId, productId, quantity)`
-
-Track a product added to cart.
-
-```typescript
-await intempt.productAdd('prof_123', 'sku-001', 2);
-```
-
-#### `productView(profileId, productId)`
-
-Track a product page view.
-
-```typescript
-await intempt.productView('prof_123', 'sku-001');
-```
-
-#### `productOrdered(profileId, products)`
-
-Track a completed order.
-
-```typescript
-await intempt.productOrdered('prof_123', [
-  { productId: 'sku-001', quantity: 2 },
-  { productId: 'sku-002', quantity: 1 },
+await intempt.trackBatch([
+  { event: 'page_view', userId: 'u1', properties: { path: '/pricing' } },
+  { event: 'signup', userId: 'u2' },
 ]);
+
+await intempt.identify({ userId: 'u1', traits: { plan: 'pro' } });
+await intempt.group({ userId: 'u1', accountId: 'acme', attributes: { tier: 'enterprise' } });
+await intempt.alias({ userId: 'u1', previousUserId: 'anon-abc' });
 ```
 
-### Recommendations
+`trackBatch` chunks at `maxRequestEvents`, so a 500-event array becomes ten
+requests rather than one oversized one.
 
-#### `recommendation(profileId, id, quantity, fields, productId?)`
+`alias` declares two identities as the same person and lets the platform resolve
+them. The destructive `/users/merge` endpoint is not exposed here: it has no
+inverse and takes internal numeric IDs this SDK cannot resolve.
 
-Fetch product recommendations.
+### Commerce
 
-```typescript
-const recs = await intempt.recommendation('prof_123', 'rec-model-1', 5, ['name', 'price']);
+```ts
+await intempt.ecommerce.productViewed({ userId: 'u1', productId: 'sku-1' });
+await intempt.ecommerce.addedToCart({ userId: 'u1', productId: 'sku-1', quantity: 2 });
+await intempt.ecommerce.ordered({
+  userId: 'u1',
+  products: [{ productId: 'sku-1', quantity: 2 }],
+});
 ```
 
-### Experiments and Personalizations
+These wrap `track` with the reserved event names the platform recognises.
 
-#### `chooseExperimentsByGroups(profileId, groups?)`
+### Consent
 
-Select experiment variants by group.
-
-```typescript
-const variants = await intempt.chooseExperimentsByGroups('prof_123', ['pricing-test']);
+```ts
+await intempt.consent.grant({ userId: 'u1', category: 'marketing' });
+await intempt.consent.revoke({ userId: 'u1', category: 'marketing', reason: 'user request' });
 ```
 
-#### `chooseExperimentsByNames(profileId, names?)`
+`validUntil` defaults to `'unlimited'`. Timestamps are converted to the epoch
+seconds the API expects.
 
-Select experiment variants by name.
+## Reading decisions
 
-```typescript
-const variants = await intempt.chooseExperimentsByNames('prof_123', ['header-color-test']);
+```ts
+const variants = await intempt.decide.experiences({
+  userId: 'u1',
+  type: 'experiment',       // or 'personalization'
+  names: ['checkout-test'], // or groups: ['homepage']
+});
+
+const feed = await intempt.decide.recommend({
+  userId: 'u1',
+  feedId: '848',
+  limit: 5,
+  fields: ['id', 'title', 'price'],
+});
 ```
 
-#### `choosePersonalizationsByGroups(profileId, groups?)`
+## Privacy
 
-Select personalizations by group.
+```ts
+intempt.optOut();          // suppresses every write: events, commerce, consent
+intempt.isOptedIn();       // false
+intempt.optIn();
+```
 
-#### `choosePersonalizationsByNames(profileId, names?)`
-
-Select personalizations by name.
-
-### Privacy Controls
-
-#### `optIn()`
-
-Resume event tracking after a previous opt-out.
-
-#### `optOut()`
-
-Stop all event tracking. Events are silently discarded until `optIn()` is called.
+`optOut()` covers all outbound writes. Read-side `decide` calls still work: they
+send an identifier you already hold and return a decision without storing
+anything, so a user who opted out of collection still gets a working experience.
 
 ## Batching
 
-Events are queued in memory and flushed to Intempt in batches. Flush behavior depends on the constructor parameters:
+Off by default. Turn it on for a long-lived, high-volume process:
 
-- **No `time` or `maxSize`**: events are sent immediately (no batching).
-- **`time`**: events flush after the specified interval (milliseconds).
-- **`maxSize`**: events flush when the buffer reaches the specified size.
-- **Both**: events flush on whichever condition is met first.
+```ts
+const intempt = Intempt.init({
+  org, project, apiKey, sourceId,
+  batch: {
+    size: 50,          // buffered events that trigger a flush
+    flushMs: 5_000,    // idle time before a flush
+    maxQueue: 10_000,  // ceiling; beyond it events are dropped and logged
+    flushOnExit: true, // flush on process 'beforeExit'
+  },
+});
 
-```typescript
-// Flush every 10 seconds or every 100 events, whichever comes first
-const intempt = new IntemptSDK('my-org', 'my-project', 'api-key', 'source-id', 10000, 100);
+await intempt.track('page_view', { userId: 'u1' }); // resolves once buffered
+
+await intempt.flush();  // drain now
+await intempt.close();  // drain, then release timers and sockets
+intempt.buffered;       // events still queued
 ```
 
-## Requirements
+`flush()` and `close()` are safe to call when batching is off; they do nothing.
 
-- Node.js 14+
-- TypeScript support included (ships with type declarations)
+Retry policy:
 
-## Documentation
+| Response | Behaviour |
+|---|---|
+| 413, batch > 1 | halve the batch size, retry |
+| 413, batch = 1 | drop the event, log it |
+| 429 | honour `Retry-After`, else exponential backoff |
+| 5xx, 408, timeout | exponential backoff, capped at 10 minutes |
+| other 4xx | drop the batch, log the status and body |
+| 5 consecutive failures | stop batching and say how many events are stranded |
 
-Full documentation: [docs.intempt.com](https://docs.intempt.com)
+The buffer is in memory. A hard crash loses it. Crash durability needs disk with
+fsync and boot-time recovery, which is a different design.
+
+## Errors
+
+Every method returns a promise that rejects on failure. Nothing is swallowed.
+
+```ts
+import { IntemptApiError } from 'intempt';
+
+try {
+  await intempt.track('purchase', { userId: 'u1' });
+} catch (error) {
+  if (error instanceof IntemptApiError) {
+    error.status;       // 429, 500, undefined on a transport failure
+    error.body;         // response body
+    error.retryAfterMs; // parsed Retry-After
+    error.retryable;    // 408, 429, 5xx, transport errors and timeouts
+  }
+}
+```
+
+## Library identity
+
+Every request carries `X-Intempt-Lib: intempt-node/<version>`, so a bad batch
+can be traced to an SDK version. Set `stampLibVersion: true` to also add
+`$lib` and `$libVersion` to each event payload — off by default, because a new
+payload field can affect a downstream event schema.
+
+## Migrating from 1.x
+
+`new SDK(...)` still works, forwards to the new client, and warns once. It will
+be removed in 3.0.0.
+
+```ts
+const sdk = new SDK(org, project, apiKey, sourceId);
+const client = sdk.v2; // the 2.x client, for incremental migration
+```
+
+Breaking changes to expect:
+
+| 1.x | 2.x |
+|---|---|
+| `?apiKey=` query parameter | `Authorization: Basic` header |
+| invalid input warns and resolves | rejects |
+| product helpers return `{ error: true }` | reject |
+| `trackingClient` and friends | removed |
+| `NODE_ENV=test` targets staging | `host` is configuration |
+| `optOut()` gates tracking only | gates every write |
+| consent timestamp in milliseconds | seconds, as the API expects |
+| `profileId` required | any one identifier |
+| `choosePersonalizationsByGroups` and 3 more | `decide.experiences({ type })` |
+| `recommendation(...)` | `decide.recommend({ ... })` |
+| unbounded resend, no flush | buffering is opt-in, with `flush`/`close` |
+
+## Not in this SDK
+
+| Capability | Where it lives |
+|---|---|
+| Journeys, experiences, dashboards, segments, deals, brand | CLI and MCP server |
+| Tags and owner assignment | CLI and MCP server |
+| Profile and account creation | CLI and MCP server |
+| Identity merge | not exposed; use `alias()` |
+| Content and design generation | blocked: those endpoints require a bearer JWT with a `person_id` claim, and no API-key path exists |
+
+## Development
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run test:coverage
+npm run build
+```
+
+Tests never touch the network; `nock` intercepts everything and unmocked
+requests fail.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](./LICENSE), and [NOTICE](./NOTICE) for the mixpanel-node
+code this SDK derives from.
