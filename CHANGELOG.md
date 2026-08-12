@@ -72,6 +72,9 @@ data in, decisions out: no admin or console operations.
 - `X-Intempt-Lib: intempt-node/<version>` on every request. Nothing is added to
   the event payload: a new payload field could affect a downstream event schema,
   and a header cannot.
+- Dev dependencies carry no known vulnerabilities: `vitest` and
+  `@vitest/coverage-v8` moved to 3.x, clearing six advisories in the vite chain.
+  The published package has no runtime dependency beyond `https-proxy-agent`.
 - Every internal is a true `#private` field, so no part of the object graph
   reaches the transport, the credential, or a namespace's dependencies.
 - `maxConcurrentRequests` (default 1) to overlap the chunks of one
@@ -119,7 +122,7 @@ data in, decisions out: no admin or console operations.
 - Whitespace-only identifiers are rejected. `userId: '   '` is truthy in
   JavaScript and would have keyed a profile on a blank string.
 - `IntemptApiError` with `status`, `body`, `retryAfterMs` and `retryable`.
-- 248 tests with an 80% coverage gate, in five layers: `nock` unit tests, a
+- 264 tests with an 80% coverage gate, in five layers: `nock` unit tests, a
   real-socket integration suite on loopback, a consumer-install check that packs
   the tarball and runs a sample app against it, an adversarial suite written to
   break the SDK rather than confirm it, and an opt-in contract test against a real
