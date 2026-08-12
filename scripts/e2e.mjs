@@ -34,8 +34,14 @@ const intempt = Intempt.init({
   timeout: 20_000,
 });
 
-const userId = `sdk-e2e-${Date.now()}`;
-const accountId = `sdk-e2e-acct-${Date.now()}`;
+// Prefer a stable, pre-existing test profile. Minting `sdk-e2e-<epoch>` on every
+// run leaves a trail of junk profiles in the project and makes results
+// impossible to eyeball in the console. A fixed user also exercises the
+// masterId paths, which a brand-new profile cannot.
+const userId = process.env.INTEMPT_E2E_USER_ID ?? `sdk-e2e-${Date.now()}`;
+const accountId = process.env.INTEMPT_E2E_ACCOUNT_ID ?? `sdk-e2e-acct-${Date.now()}`;
+const masterId = process.env.INTEMPT_E2E_MASTER_ID;
+const ephemeral = !process.env.INTEMPT_E2E_USER_ID;
 const results = [];
 
 async function step(name, fn) {
@@ -63,7 +69,12 @@ async function step(name, fn) {
 console.log(`Intempt SDK contract test against ${intempt.config.host}`);
 // Org, project and source id are intentionally not printed: on a public
 // repository the Actions log is world-readable.
-console.log(`  user=${userId}\n`);
+console.log(
+  `  user=${userId}${ephemeral ? ' (ephemeral — set INTEMPT_E2E_USER_ID for a stable profile)' : ' (stable)'}`,
+);
+console.log(
+  `  masterId=${masterId ? 'set' : 'not set — masterId paths will be skipped'}\n`,
+);
 
 // A 401/403 here means the Basic auth header is not accepted, which is the single
 // most important thing this test exists to prove.
@@ -110,6 +121,15 @@ await step('consent.grant (proves epoch-seconds timestamps)', () =>
 await step('consent.revoke', () =>
   intempt.consent.revoke({ userId, category: 'sdk-e2e' }),
 );
+if (masterId) {
+  // Only reachable with a real masterId, and it is the only consent path that
+  // does not need a source. Also the identity field the feeds API actually reads.
+  await step('consent.grant by masterId', () =>
+    intempt.consent.grant({ masterId, category: 'sdk-e2e-master' }),
+  );
+} else {
+  console.log('  SKIP  consent.grant by masterId (INTEMPT_E2E_MASTER_ID not set)');
+}
 // Exercises sourceId serialisation. A real source id is 19 digits, past
 // Number.MAX_SAFE_INTEGER, so a Number() coercion anywhere in this path would
 // address a different source or be rejected outright.
