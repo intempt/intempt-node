@@ -1,5 +1,27 @@
 import type { ExperiencesOptions, RecommendOptions, ResolvedConfig } from './types';
 import { assertIdentifier, compact } from './utils';
+
+/**
+ * The API validates experience names and groups against this pattern
+ * (ExperienceApiChooseRequest). Checking it here turns a server 400 into a
+ * message that names the offending value.
+ */
+const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+function assertNames(values: string[] | undefined, field: string): void {
+  if (values === undefined) return;
+  if (!Array.isArray(values)) {
+    throw new TypeError(`experiences: ${field} must be an array of strings`);
+  }
+  for (const value of values) {
+    if (typeof value !== 'string' || !NAME_PATTERN.test(value)) {
+      throw new TypeError(
+        `experiences: ${field} entry ${JSON.stringify(value)} is invalid; ` +
+          'the API allows only letters, digits, underscore and hyphen',
+      );
+    }
+  }
+}
 import type { Transport } from './transport';
 
 export interface DecideDeps {
@@ -31,9 +53,10 @@ export class Decide {
       throw new TypeError("experiences: type must be 'experiment' or 'personalization'");
     }
     assertIdentifier(options, 'experiences');
-    if (options.groups && options.names) {
-      throw new TypeError('experiences: pass groups or names, not both');
-    }
+    // Both are optional and may be combined: the API marks only `identification`
+    // as required, and accepts names and groups together. Verified live.
+    assertNames(options.names, 'names');
+    assertNames(options.groups, 'groups');
 
     const { sourceId } = this.#deps.config();
     const body = compact({

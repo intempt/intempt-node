@@ -86,15 +86,49 @@ describe('decide.experiences', () => {
     ).rejects.toThrow(/must be 'experiment' or 'personalization'/);
   });
 
-  it('rejects groups and names together, which the API cannot honour', async () => {
+  it('accepts names and groups together, and either alone, and neither', async () => {
+    // Both are optional: ExperienceApiChooseRequest marks only `identification`
+    // as @NotNull. Verified live that all four combinations return 200.
+    const bodies = captureChoose(4);
+    const c = client();
+    await c.decide.experiences({ userId: 'u1', type: 'experiment' });
+    await c.decide.experiences({ userId: 'u1', type: 'experiment', names: ['n_1'] });
+    await c.decide.experiences({ userId: 'u1', type: 'experiment', groups: ['g-1'] });
+    await c.decide.experiences({
+      userId: 'u1',
+      type: 'experiment',
+      names: ['n_1'],
+      groups: ['g-1'],
+    });
+
+    expect(bodies[0]).not.toHaveProperty('names');
+    expect(bodies[0]).not.toHaveProperty('groups');
+    expect(bodies[1]!.names).toEqual(['n_1']);
+    expect(bodies[2]!.groups).toEqual(['g-1']);
+    expect(bodies[3]!.names).toEqual(['n_1']);
+    expect(bodies[3]!.groups).toEqual(['g-1']);
+  });
+
+  it.each([
+    ['a space', 'my test'],
+    ['a dot', 'my.test'],
+    ['a slash', 'a/b'],
+  ])('rejects a name containing %s before the API does', async (_label, name) => {
+    // The API answers 400 {"errors":[{"message":"must match \"^[a-zA-Z0-9_-]*$\""}]}
+    // which does not say which value was wrong. Ours does.
+    await expect(
+      client().decide.experiences({ userId: 'u1', type: 'experiment', names: [name] }),
+    ).rejects.toThrow(/is invalid; the API allows only letters, digits/);
+  });
+
+  it('applies the same pattern to groups', async () => {
     await expect(
       client().decide.experiences({
         userId: 'u1',
         type: 'experiment',
-        groups: ['g'],
-        names: ['n'],
+        groups: ['bad group'],
       }),
-    ).rejects.toThrow(/groups or names, not both/);
+    ).rejects.toThrow(/groups entry "bad group" is invalid/);
   });
 
   it('requires an identifier', async () => {

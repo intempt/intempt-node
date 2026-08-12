@@ -237,7 +237,9 @@ if (FEED_ID) {
       userId,
       feedId: FEED_ID,
       limit: 3,
-      fields: ['id'],
+      fields: (process.env.INTEMPT_E2E_FEED_FIELDS ?? 'id')
+        .split(',')
+        .map((f) => f.trim()),
     });
     return JSON.stringify(feed).slice(0, 110);
   });

@@ -222,16 +222,25 @@ seconds the API expects.
 const variants = await intempt.decide.experiences({
   userId: 'u1',
   type: 'experiment', // or 'personalization'
-  names: ['checkout-test'], // or groups: ['homepage']
+  names: ['checkout_test'], // optional
+  groups: ['homepage'], // optional, and may be combined with names
 });
 
 const feed = await intempt.decide.recommend({
   userId: 'u1',
   feedId: '848',
   limit: 5,
-  fields: ['id', 'title', 'price'],
+  fields: ['id', 'title', 'price'], // product attribute names from your catalog
 });
 ```
+
+`names` and `groups` are both optional and can be combined; the API requires
+only the identifier. Each entry must match `^[a-zA-Z0-9_-]+$`, so no spaces or
+dots. The SDK checks that before sending, which turns a bare API 400 into a
+message naming the offending value.
+
+`fields` are **product attribute names from your catalog schema**, not arbitrary
+keys. Ask for what you intend to read.
 
 ## Privacy
 
