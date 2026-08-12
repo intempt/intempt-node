@@ -171,7 +171,7 @@ describe('batcher: retry table', () => {
   });
 
   it('retries a 429 and honours Retry-After', async () => {
-    const widths = counter(2, [429, 200], { 'Retry-After': '0' });
+    const widths = counter(2, [429, 200], { 'Retry-After': '1' });
     const { c, logger } = batched({
       batch: { size: 1, flushMs: 10_000, maxQueue: 10, flushOnExit: false },
     });
@@ -182,7 +182,7 @@ describe('batcher: retry table', () => {
     expect(widths).toEqual([1, 1]);
     expect(c.buffered).toBe(0);
     expect(
-      logger.calls.warn.some((args) => String(args[0]).includes('retrying in 0ms')),
+      logger.calls.warn.some((args) => /retrying in \d+ms/.test(String(args[0]))),
     ).toBe(true);
     await c.close();
   });
@@ -201,7 +201,8 @@ describe('batcher: retry table', () => {
       .map((args) => /retrying in (\d+)ms/.exec(String(args[0]))?.[1])
       .filter((v): v is string => v !== undefined)
       .map(Number);
-    expect(delays).toEqual([2, 4]);
+    // Floored at MIN_RETRY_INTERVAL_MS so a tiny flushMs cannot become a hot loop.
+    expect(delays).toEqual([100, 100]);
     await c.close();
   });
 

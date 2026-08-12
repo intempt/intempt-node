@@ -71,6 +71,18 @@ export function assertIdentifier(ids: LegacyIdentifiers, method: string): void {
 }
 
 /**
+ * Rejects a value that is absent or only whitespace. A blank identifier is
+ * truthy in JavaScript and would key a profile, account or consent record on a
+ * run of spaces.
+ */
+export function assertNonBlank(value: unknown, method: string, field: string): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new TypeError(`${method}: ${field} must be a non-empty string`);
+  }
+  return value;
+}
+
+/**
  * Wraps a logger so a broken one cannot take down a request.
  *
  * The logger is caller-supplied. If its `debug` throws, and the SDK calls it on

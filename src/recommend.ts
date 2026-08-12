@@ -41,7 +41,10 @@ export class Recommend {
       throw new TypeError('recommend: limit must be a positive integer');
     }
 
-    const { userId, accountId } = options;
+    // Truthiness, not nullish: `userId: ''` with a valid accountId must not win
+    // and post {"id":"","type":"account"}, which the server cannot resolve.
+    const userId = options.userId?.trim() ? options.userId : undefined;
+    const accountId = options.accountId?.trim() ? options.accountId : undefined;
     if (!userId && !accountId) {
       throw new TypeError('recommend: one of userId or accountId is required');
     }

@@ -133,10 +133,25 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
 export function mergeConfig(
   current: ResolvedConfig,
   patch: Partial<
-    Omit<IntemptConfig, 'org' | 'project' | 'apiKey' | 'sourceId' | 'batch'>
+    Omit<
+      IntemptConfig,
+      'org' | 'project' | 'apiKey' | 'sourceId' | 'batch' | 'keepAlive' | 'agent'
+    >
   >,
 ): ResolvedConfig {
   const next: ResolvedConfig = { ...current };
+
+  // keepAlive and agent are read once, when Transport builds its agents. Silently
+  // accepting them left a caller believing they had disabled keep-alive to let a
+  // process exit, when nothing had changed.
+  for (const fixed of ['keepAlive', 'agent'] as const) {
+    if ((patch as Record<string, unknown>)[fixed] !== undefined) {
+      throw new TypeError(
+        `setConfig: "${fixed}" is fixed at construction because the HTTP agents are ` +
+          'built once. Pass it to Intempt.init instead.',
+      );
+    }
+  }
 
   if (patch.logger !== undefined) {
     assertLogger(patch.logger);
@@ -164,7 +179,6 @@ export function mergeConfig(
     }
     next.timeout = patch.timeout;
   }
-  if (patch.keepAlive !== undefined) next.keepAlive = patch.keepAlive;
   if (patch.debug !== undefined) next.debug = patch.debug;
 
   return next;

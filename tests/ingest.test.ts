@@ -192,7 +192,7 @@ describe('ingest: alias', () => {
 
   it('requires both identities', async () => {
     await expect(client().alias({ userId: 'u1', previousUserId: '' })).rejects.toThrow(
-      /userId and previousUserId are required/,
+      /previousUserId must be a non-empty string/,
     );
   });
 });
@@ -200,7 +200,7 @@ describe('ingest: alias', () => {
 describe('ingest: group', () => {
   it('requires accountId', async () => {
     await expect(client().group({ userId: 'u1' } as never)).rejects.toThrow(
-      /accountId is required/,
+      /accountId must be a non-empty string/,
     );
   });
 

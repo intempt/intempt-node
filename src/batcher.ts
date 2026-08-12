@@ -13,6 +13,8 @@ import type { Logger, ResolvedBatchOptions, WireEvent } from './types';
 import { IntemptApiError } from './transport';
 
 const MAX_RETRY_INTERVAL_MS = 10 * 60 * 1000;
+/** Floor for any retry, so a zero or past Retry-After cannot become a hot loop. */
+const MIN_RETRY_INTERVAL_MS = 100;
 const MAX_CONSECUTIVE_FAILURES = 5;
 
 export interface BatcherOptions {
@@ -112,7 +114,16 @@ export class Batcher {
 
       this.#queue.splice(0, batch.length);
       this.#consecutiveFailures = 0;
-      this.#batchSize = Math.min(this.#options.size, this.#maxRequestEvents);
+
+      // Only restore the full width after a full-width send succeeds. Resetting
+      // unconditionally undid the halving that a 413 had just applied, so the
+      // next request was oversized again and the batcher alternated 413/200
+      // forever — at double the request count, with the breaker never tripping
+      // because each success cleared the counter.
+      const full = Math.min(this.#options.size, this.#maxRequestEvents);
+      if (batch.length >= full) {
+        this.#batchSize = full;
+      }
     }
   }
 
@@ -140,6 +151,7 @@ export class Batcher {
         name: batch[0]?.name,
       });
       this.#queue.splice(0, 1);
+      this.#consecutiveFailures = 0;
       this.#batchSize = Math.min(this.#options.size, this.#maxRequestEvents);
       return 'requeue';
     }
@@ -151,6 +163,10 @@ export class Batcher {
         count: batch.length,
       });
       this.#queue.splice(0, batch.length);
+      // Dropping a malformed batch is not a transient failure, so it must not
+      // count toward the circuit breaker. Leaving the tally standing meant one
+      // 400 plus four earlier 500s stopped batching on the next transient blip.
+      this.#consecutiveFailures = 0;
       return 'requeue';
     }
 
@@ -165,9 +181,22 @@ export class Batcher {
       return 'stop';
     }
 
+    // A Retry-After of 0, or an HTTP-date already in the past, arrives here as 0.
+    // `??` treats that as a real instruction and retries immediately, burning
+    // every attempt in milliseconds and hammering the endpoint. Only honour a
+    // positive value, and never back off less than the flush interval.
+    const advised =
+      apiError?.retryAfterMs !== undefined && apiError.retryAfterMs > 0
+        ? apiError.retryAfterMs
+        : undefined;
     const backoff = Math.min(
       MAX_RETRY_INTERVAL_MS,
-      apiError?.retryAfterMs ?? this.#options.flushMs * 2 ** this.#consecutiveFailures,
+      Math.max(
+        // A small floor, not flushMs: flooring at the flush interval would
+        // override a server that legitimately asked for a short wait.
+        MIN_RETRY_INTERVAL_MS,
+        advised ?? this.#options.flushMs * 2 ** this.#consecutiveFailures,
+      ),
     );
     this.#logger.warn(`[intempt] send failed; retrying in ${backoff}ms`, error);
     await delay(backoff);

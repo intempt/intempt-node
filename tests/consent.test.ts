@@ -92,14 +92,16 @@ describe('consent: identifiers', () => {
   });
 
   it('requires userId', async () => {
-    await expect(client().consent.grant({})).rejects.toThrow(/userId is required/);
+    await expect(client().consent.grant({})).rejects.toThrow(
+      /userId must be a non-empty string/,
+    );
   });
 
   it('does not accept masterId — an internal id no caller can resolve', async () => {
     // Typed out of ConsentOptions; also rejected at runtime because it is not
     // an identifier assertIdentifier recognises.
     await expect(client().consent.grant({ masterId: '123' } as never)).rejects.toThrow(
-      /userId is required/,
+      /userId must be a non-empty string/,
     );
   });
 });

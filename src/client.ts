@@ -34,13 +34,24 @@ export class IntemptClient {
     this.#transport = new Transport(this.#resolved, new ApiKeyCredentials(config.apiKey));
 
     const configRef = (): ResolvedConfig => this.#resolved;
+    // Two distinct conditions, deliberately not folded together: opting out is a
+    // silent no-op by design, while using a closed client is a programming error
+    // and must be loud.
     const isOptedIn = (): boolean => this.#optedIn && !this.#closed;
+    const assertOpen = (): void => {
+      if (this.#closed) {
+        throw new Error(
+          'Intempt client is closed. Calls after close() are not sent; create a new client.',
+        );
+      }
+    };
 
     this.#ingest = new Ingest({
       transport: this.#transport,
       config: configRef,
       batcher: () => this.#batcher,
       isOptedIn,
+      assertOpen,
     });
 
     if (this.#resolved.batch !== false) {
@@ -56,6 +67,7 @@ export class IntemptClient {
       transport: this.#transport,
       config: configRef,
       isOptedIn,
+      assertOpen,
     });
     this.ecommerce = new Ecommerce(this.#ingest);
     this.#recommend = new Recommend({ transport: this.#transport, config: configRef });
@@ -130,9 +142,19 @@ export class IntemptClient {
     this.#transport.setConfig(this.#resolved);
   }
 
-  /** A frozen snapshot. Mutating it would not change the client. */
+  /**
+   * A frozen snapshot. Mutating it cannot change the client.
+   *
+   * `batch` is copied and frozen too: a shallow freeze shared the live options
+   * object with the batcher, so `client.config.batch.maxQueue = 0` silently made
+   * every subsequent event look queue-full.
+   */
   get config(): Readonly<ResolvedConfig> {
-    return Object.freeze({ ...this.#resolved });
+    const batch = this.#resolved.batch;
+    return Object.freeze({
+      ...this.#resolved,
+      batch: batch === false ? false : Object.freeze({ ...batch }),
+    });
   }
 
   // ---- lifecycle ----

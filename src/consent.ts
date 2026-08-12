@@ -17,6 +17,8 @@ export interface ConsentDeps {
   transport: Transport;
   config(): ResolvedConfig;
   isOptedIn(): boolean;
+  /** Throws if the client has been closed. */
+  assertOpen(): void;
 }
 
 export class Consent {
@@ -44,8 +46,10 @@ export class Consent {
       );
     }
     const { userId, profileId } = options;
-    if (!userId && !profileId) {
-      throw new TypeError('consent: userId is required');
+    const blank = (v: string | undefined): boolean =>
+      v === undefined || typeof v !== 'string' || v.trim() === '';
+    if (blank(userId) && blank(profileId)) {
+      throw new TypeError('consent: userId must be a non-empty string');
     }
 
     const { sourceId } = this.#deps.config();
@@ -57,6 +61,7 @@ export class Consent {
       );
     }
 
+    this.#deps.assertOpen();
     if (!this.#deps.isOptedIn()) {
       return;
     }

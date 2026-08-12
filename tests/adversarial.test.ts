@@ -155,10 +155,14 @@ describe('attack: batcher under abuse', () => {
     await c.close();
   });
 
-  it('refuses writes after close instead of buffering them forever', async () => {
+  it('throws on a write after close rather than swallowing it', async () => {
+    // Silently discarding was how 1.x lost events, and the README promises
+    // nothing is swallowed, so a closed client must be loud.
     const { c } = batched();
     await c.close();
-    await c.track('after-close', { userId: 'u1' });
+    await expect(c.track('after-close', { userId: 'u1' })).rejects.toThrow(
+      /client is closed/,
+    );
     expect(c.buffered).toBe(0);
     expect(nock.pendingMocks()).toEqual([]);
   });

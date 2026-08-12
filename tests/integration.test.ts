@@ -242,7 +242,9 @@ describe('over a real socket: failures', () => {
 
   it('retries a real 429 with Retry-After through the batcher', async () => {
     server.reset();
-    server.responses.push({ status: 429, body: '{}', headers: { 'Retry-After': '0' } });
+    // '1' rather than '0': a zero or past Retry-After is treated as absent now,
+    // because honouring it retried instantly and hammered the endpoint.
+    server.responses.push({ status: 429, body: '{}', headers: { 'Retry-After': '1' } });
     server.responses.push({ status: 200, body: '{}' });
 
     const c = realClient({

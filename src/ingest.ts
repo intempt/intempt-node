@@ -9,7 +9,13 @@ import type {
   WireEvent,
   WirePayloadItem,
 } from './types';
-import { assertIdentifier, chunk, compact, ensureTimestamp } from './utils';
+import {
+  assertIdentifier,
+  assertNonBlank,
+  chunk,
+  compact,
+  ensureTimestamp,
+} from './utils';
 import type { Transport } from './transport';
 import type { Batcher } from './batcher';
 
@@ -21,6 +27,8 @@ export interface IngestDeps {
   config(): ResolvedConfig;
   batcher(): Batcher | undefined;
   isOptedIn(): boolean;
+  /** Throws if the client has been closed. */
+  assertOpen(): void;
 }
 
 export class Ingest {
@@ -89,6 +97,10 @@ export class Ingest {
 
   /** Sends immediately, or buffers when batching is enabled. */
   async #submit(events: WireEvent[]): Promise<void> {
+    // A closed client throws; an opted-out client returns quietly. Silently
+    // discarding a write after close is how 1.x lost events without telling
+    // anyone, and the README promises nothing is swallowed.
+    this.#deps.assertOpen();
     if (!this.#deps.isOptedIn() || events.length === 0) {
       return;
     }
@@ -104,8 +116,22 @@ export class Ingest {
     await this.send(events);
   }
 
-  /** Posts one request. Used directly by the batcher. */
+  /**
+   * Posts one request. Also the batcher's send callback, which is why the opt-out
+   * gate is repeated here: the batcher calls this directly, bypassing `#submit`.
+   * Without it, events captured before `optOut()` were still transmitted by a
+   * later `flush()`, `close()` or the exit hook — a consent revocation between
+   * capture and flush would not have been honoured.
+   */
   async send(events: WireEvent[]): Promise<void> {
+    if (!this.#deps.isOptedIn()) {
+      this.#deps
+        .config()
+        .logger.warn(
+          `[intempt] opted out; discarding ${events.length} buffered event(s) rather than sending`,
+        );
+      return;
+    }
     await this.#deps.transport.post(this.#trackPath(), { track: events });
   }
 
@@ -191,9 +217,7 @@ export class Ingest {
   }
 
   async group(options: GroupOptions): Promise<void> {
-    if (!options?.accountId) {
-      throw new TypeError('group: accountId is required');
-    }
+    assertNonBlank(options?.accountId, 'group', 'accountId');
     assertIdentifier(options, 'group');
     const { attributes, event, ...ids } = options;
     await this.#submit([
@@ -210,9 +234,8 @@ export class Ingest {
    * `/users/merge` endpoint is deliberately not exposed here.
    */
   async alias(options: AliasOptions): Promise<void> {
-    if (!options?.userId || !options?.previousUserId) {
-      throw new TypeError('alias: userId and previousUserId are required');
-    }
+    assertNonBlank(options?.userId, 'alias', 'userId');
+    assertNonBlank(options?.previousUserId, 'alias', 'previousUserId');
     const { previousUserId, ...ids } = options;
     const event = this.#buildEvent(IDENTIFY_EVENT, ids);
     const item = event.payload[0];

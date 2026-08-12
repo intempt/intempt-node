@@ -224,5 +224,9 @@ export class Transport {
     // A caller-supplied agent is the caller's to destroy.
     this.#agents?.http.destroy();
     this.#agents?.https.destroy();
+    // Behind HTTPS_PROXY/HTTP_PROXY this is the agent every request actually
+    // used, so skipping it left live keep-alive sockets open and the process
+    // hanging — precisely what destroy() exists to prevent.
+    this.#proxyAgent?.destroy();
   }
 }

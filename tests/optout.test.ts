@@ -87,11 +87,13 @@ describe('optOut does not gate reads', () => {
 });
 
 describe('close', () => {
-  it('stops accepting writes once closed', async () => {
+  it('throws on a write once closed', async () => {
     const c = client();
     await c.close();
 
-    await c.track('purchase', { userId: 'u1' });
+    await expect(c.track('purchase', { userId: 'u1' })).rejects.toThrow(
+      /client is closed/,
+    );
     expect(nock.pendingMocks()).toEqual([]);
     expect(c.isOptedIn()).toBe(false);
   });

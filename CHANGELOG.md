@@ -80,6 +80,35 @@ data in, decisions out: no admin or console operations.
 - `agent` to supply your own `https.Agent` for mutual TLS, a private CA, or an
   explicit proxy policy. When set it is used verbatim, the SDK creates none of its
   own, and `close()` does not destroy it.
+- **`optOut()` now suppresses events already buffered.** The batcher called
+  `Ingest.send` directly, bypassing the gate `#submit` applies, so a `flush()`,
+  `close()` or exit hook still transmitted events captured before the opt-out. A
+  consent revocation between capture and flush was not honoured. The buffer is now
+  discarded with a warning.
+- **A closed client throws instead of silently discarding writes.** Matches the
+  promise that nothing is swallowed. Opting out remains a quiet no-op, which is
+  intended; using a closed client is a programming error.
+- **413 no longer oscillates.** The halved batch width was restored after the next
+  success, so the following request was oversized again and the batcher alternated
+  413/200 indefinitely at double the request count — with the breaker never
+  tripping, because each success cleared the failure tally. The width is now only
+  restored once a full-width send succeeds.
+- **A zero or past `Retry-After` no longer becomes a hot loop.** `0` is not
+  nullish, so it was honoured literally: five attempts inside 50ms, then a
+  stranded queue. Only a positive value is honoured, with a 100ms floor.
+- Dropping a non-retryable batch no longer counts toward the circuit breaker, so
+  one 400 after four transient 500s no longer stops batching on the next blip.
+- `recommend()` no longer lets `userId: ''` win over a valid `accountId` and post
+  `{"id":"","type":"account"}`, which is unresolvable.
+- Blank identifiers are rejected on `group`, `alias` and `consent`, not just
+  `track`. All three were truthiness checks that a run of spaces satisfied.
+- `destroy()` releases the proxy agent. Behind `HTTPS_PROXY` that is the agent
+  every request used, so `close()` was leaving live keep-alive sockets open.
+- The `config` snapshot is frozen through `batch`, which previously shared the
+  live options object with the batcher: `config.batch.maxQueue = 0` silently made
+  every later event look queue-full.
+- `setConfig({ keepAlive })` and `setConfig({ agent })` now throw instead of
+  silently doing nothing. Both are read once, when the agents are built.
 - **A request always settles.** A `close` guard rejects if a request ends without
   emitting either a response or an error, so a caller can never be left awaiting a
   promise that resolves nowhere. Real dead-socket cases — destroyed before the
@@ -90,7 +119,7 @@ data in, decisions out: no admin or console operations.
 - Whitespace-only identifiers are rejected. `userId: '   '` is truthy in
   JavaScript and would have keyed a profile on a blank string.
 - `IntemptApiError` with `status`, `body`, `retryAfterMs` and `retryable`.
-- 232 tests with an 80% coverage gate, in five layers: `nock` unit tests, a
+- 248 tests with an 80% coverage gate, in five layers: `nock` unit tests, a
   real-socket integration suite on loopback, a consumer-install check that packs
   the tarball and runs a sample app against it, an adversarial suite written to
   break the SDK rather than confirm it, and an opt-in contract test against a real
