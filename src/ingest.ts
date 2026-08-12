@@ -41,7 +41,8 @@ export class Ingest {
   #buildEvent(name: string, options: TrackOptions): WireEvent {
     const item: WirePayloadItem = compact({
       eventId: randomUUID(),
-      timestamp: options.timestamp === undefined ? Date.now() : ensureTimestamp(options.timestamp),
+      timestamp:
+        options.timestamp === undefined ? Date.now() : ensureTimestamp(options.timestamp),
       profileId: options.profileId,
       userId: options.userId,
       accountId: options.accountId,
@@ -139,8 +140,42 @@ export class Ingest {
       return;
     }
 
-    for (const group of chunk(wire, this.#deps.config().maxRequestEvents)) {
-      await this.send(group);
+    const { maxRequestEvents, maxConcurrentRequests } = this.#deps.config();
+    const groups = chunk(wire, maxRequestEvents);
+
+    if (maxConcurrentRequests <= 1) {
+      for (const group of groups) {
+        await this.send(group);
+      }
+      return;
+    }
+
+    // Bounded parallelism: workers pull from a shared cursor, so a slow request
+    // does not stall the others and no more than maxConcurrentRequests are ever
+    // in flight. Adapted from mixpanel-node's max_concurrent_requests, minus its
+    // wave-at-a-time barrier.
+    let cursor = 0;
+    const workers = Array.from(
+      { length: Math.min(maxConcurrentRequests, groups.length) },
+      async () => {
+        for (;;) {
+          const index = cursor;
+          cursor += 1;
+          const group = groups[index];
+          if (group === undefined) return;
+          await this.send(group);
+        }
+      },
+    );
+
+    // allSettled, then rethrow the first failure: a rejection must not leave
+    // sibling requests unawaited and surfacing as unhandled rejections.
+    const results = await Promise.allSettled(workers);
+    const failed = results.find(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+    if (failed) {
+      throw failed.reason;
     }
   }
 

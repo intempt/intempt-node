@@ -115,7 +115,9 @@ export class SDK {
       ...(userId ? { userId } : {}),
       ...(accountId ? { accountId } : {}),
       ...(data ? { properties: data as Record<string, unknown> } : {}),
-      ...(userAttributes ? { userAttributes: userAttributes as Record<string, unknown> } : {}),
+      ...(userAttributes
+        ? { userAttributes: userAttributes as Record<string, unknown> }
+        : {}),
       ...(accountAttributes
         ? { accountAttributes: accountAttributes as Record<string, unknown> }
         : {}),
@@ -133,7 +135,14 @@ export class SDK {
     email?: string,
     message?: string,
   ): Promise<void> {
-    await this.consent(profileId, action, undefined, consentsExpirationTime, email, message);
+    await this.consent(
+      profileId,
+      action,
+      undefined,
+      consentsExpirationTime,
+      email,
+      message,
+    );
   }
 
   async consent(
@@ -159,7 +168,11 @@ export class SDK {
       : this.#client.consent.revoke(options));
   }
 
-  async productAdd(profileId: string, productId: string, quantity: number): Promise<void> {
+  async productAdd(
+    profileId: string,
+    productId: string,
+    quantity: number,
+  ): Promise<void> {
     await this.#client.ecommerce.addedToCart({ profileId, productId, quantity });
   }
 
@@ -187,7 +200,10 @@ export class SDK {
     });
   }
 
-  choosePersonalizationsByGroups(profileId: string, groups?: string[]): Promise<unknown[]> {
+  choosePersonalizationsByGroups(
+    profileId: string,
+    groups?: string[],
+  ): Promise<unknown[]> {
     return this.#client.decide.experiences({
       profileId,
       type: 'personalization',

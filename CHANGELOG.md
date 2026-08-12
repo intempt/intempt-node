@@ -44,7 +44,7 @@ data in, decisions out: no admin or console operations.
   `decide` calls are intentionally unaffected.
 - **Consent timestamps were discarded by the server.** The API compares
   `timestamp * 1000` against millisecond bounds, so the field is epoch
-  *seconds*; the SDK sent milliseconds, so the server always substituted its
+  _seconds_; the SDK sent milliseconds, so the server always substituted its
   own receive time. Now sent in seconds, with client-side range validation.
 - **`profileId` was required where the API does not require it.** The server
   accepts any one of `userId`, `profileId` or `accountId` and copies `userId`
@@ -75,16 +75,30 @@ data in, decisions out: no admin or console operations.
   and a header cannot.
 - Every internal is a true `#private` field, so no part of the object graph
   reaches the transport, the credential, or a namespace's dependencies.
+- `maxConcurrentRequests` (default 1) to overlap the chunks of one
+  `trackBatch()` call. Bounded parallelism via a shared cursor; a failure rejects
+  only after every sibling request has settled.
+- `agent` to supply your own `https.Agent` for mutual TLS, a private CA, or an
+  explicit proxy policy. When set it is used verbatim, the SDK creates none of its
+  own, and `close()` does not destroy it.
 - `IntemptApiError` with `status`, `body`, `retryAfterMs` and `retryable`.
-- 176 tests, all offline via `nock`, with an 80% coverage gate.
-- CI on pull requests across Node 18, 20 and 22. Publishing moved to version
-  tags with npm provenance.
+- 199 tests, all offline via `nock`, with an 80% coverage gate.
+- CI on pull requests across Node 20, 22 and 24, gated on `prettier --check`,
+  `oxlint`, `tsc --noEmit`, coverage, build, and a tarball-contents check.
+- Publishing moved to version tags with npm provenance, and GitHub Release notes
+  are generated from the commit log by `.github/scripts/generate-changelog.sh`.
+- `.npmrc` sets `min-release-age=7`, so a freshly published (possibly
+  compromised) dependency version cannot enter `npm ci`, and `yes=false` so `npx`
+  cannot silently fetch packages.
+- GitHub Actions pinned by commit digest rather than a mutable tag.
+- `SECURITY.md` with a disclosure address and API-key handling guidance, plus
+  `CODEOWNERS`.
 
 ### Changed
 
 - `axios` replaced by `node:https` plus `https-proxy-agent`. One runtime
   dependency, matching mixpanel-node's approach.
-- Node 18 or newer is required.
+- Node 20 or newer is required. Node 18 reached end of life in April 2025.
 - Invalid arguments now reject. Previously most methods logged a warning and
   resolved, and the product helpers returned `{ error: true }`.
 - Commerce helpers moved to `ecommerce.*`. The wire format is unchanged,

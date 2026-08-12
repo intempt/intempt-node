@@ -57,7 +57,9 @@ export class Batcher {
   /** Buffers an event. Returns false when the event was dropped. */
   enqueue(event: WireEvent): boolean {
     if (this.#stopped) {
-      this.#logger.error('[intempt] batching is stopped; event dropped', { name: event.name });
+      this.#logger.error('[intempt] batching is stopped; event dropped', {
+        name: event.name,
+      });
       return false;
     }
     if (this.#queue.length >= this.#options.maxQueue) {
@@ -122,17 +124,16 @@ export class Batcher {
    * timeout          exponential backoff
    * other 4xx        drop the batch, surface the error
    */
-  async #handleFailure(
-    error: unknown,
-    batch: WireEvent[],
-  ): Promise<'requeue' | 'stop'> {
+  async #handleFailure(error: unknown, batch: WireEvent[]): Promise<'requeue' | 'stop'> {
     const apiError = error instanceof IntemptApiError ? error : undefined;
     const status = apiError?.status;
 
     if (status === 413) {
       if (batch.length > 1) {
         this.#batchSize = Math.max(1, Math.floor(batch.length / 2));
-        this.#logger.warn(`[intempt] 413 received; reducing batch size to ${this.#batchSize}`);
+        this.#logger.warn(
+          `[intempt] 413 received; reducing batch size to ${this.#batchSize}`,
+        );
         return 'requeue';
       }
       this.#logger.error('[intempt] single event too large; dropping', {

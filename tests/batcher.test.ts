@@ -8,7 +8,11 @@ interface WireBody {
 }
 
 /** Records the event-count of every request that reaches the interceptor. */
-function counter(times: number, status: number | number[] = 200, headers?: Record<string, string>) {
+function counter(
+  times: number,
+  status: number | number[] = 200,
+  headers?: Record<string, string>,
+) {
   const widths: number[] = [];
   const statuses = Array.isArray(status) ? [...status] : Array(times).fill(status);
   const scope = nock(ORIGIN)
@@ -122,7 +126,9 @@ describe('batcher: buffering', () => {
     await c.track('c', { userId: 'u1' }); // queue still holds a+b in flight
 
     expect(c.buffered).toBe(2);
-    expect(logger.calls.error.some((args) => String(args[0]).includes('queue full'))).toBe(true);
+    expect(
+      logger.calls.error.some((args) => String(args[0]).includes('queue full')),
+    ).toBe(true);
 
     await c.close();
   });
@@ -139,9 +145,9 @@ describe('batcher: retry table', () => {
     await c.flush();
 
     expect(widths).toEqual([4, 2, 2]);
-    expect(logger.calls.warn.some((args) => String(args[0]).includes('reducing batch size'))).toBe(
-      true,
-    );
+    expect(
+      logger.calls.warn.some((args) => String(args[0]).includes('reducing batch size')),
+    ).toBe(true);
     await c.close();
   });
 
@@ -157,7 +163,9 @@ describe('batcher: retry table', () => {
     expect(widths).toEqual([1]);
     expect(c.buffered).toBe(0);
     expect(
-      logger.calls.error.some((args) => String(args[0]).includes('single event too large')),
+      logger.calls.error.some((args) =>
+        String(args[0]).includes('single event too large'),
+      ),
     ).toBe(true);
     await c.close();
   });
@@ -173,9 +181,9 @@ describe('batcher: retry table', () => {
 
     expect(widths).toEqual([1, 1]);
     expect(c.buffered).toBe(0);
-    expect(logger.calls.warn.some((args) => String(args[0]).includes('retrying in 0ms'))).toBe(
-      true,
-    );
+    expect(
+      logger.calls.warn.some((args) => String(args[0]).includes('retrying in 0ms')),
+    ).toBe(true);
     await c.close();
   });
 

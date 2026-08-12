@@ -46,7 +46,13 @@ describe('the client exposes exactly the agreed surface', () => {
   });
 
   it('exposes no transport, credential, batcher or ingest', () => {
-    for (const leaked of ['transport', 'credentials', 'batcher', 'batcherInstance', 'ingest']) {
+    for (const leaked of [
+      'transport',
+      'credentials',
+      'batcher',
+      'batcherInstance',
+      'ingest',
+    ]) {
       expect(c, leaked).not.toHaveProperty(leaked);
       expect((c as unknown as Record<string, unknown>)[leaked], leaked).toBeUndefined();
     }
@@ -98,7 +104,11 @@ describe('namespaces expose no internals', () => {
   });
 
   it('ecommerce exposes only the three commerce calls and no ingest handle', () => {
-    expect(prototypeNames(c.ecommerce)).toEqual(['addedToCart', 'ordered', 'productViewed']);
+    expect(prototypeNames(c.ecommerce)).toEqual([
+      'addedToCart',
+      'ordered',
+      'productViewed',
+    ]);
     expect((c.ecommerce as unknown as Record<string, unknown>).ingest).toBeUndefined();
     expect(Object.keys(c.ecommerce)).toEqual([]);
   });

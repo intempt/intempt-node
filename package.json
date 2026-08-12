@@ -24,11 +24,12 @@
     "README.md",
     "LICENSE",
     "NOTICE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "SECURITY.md"
   ],
   "sideEffects": false,
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "repository": {
     "type": "git",
@@ -37,6 +38,9 @@
   "scripts": {
     "build": "rm -rf dist && tsc",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint .",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
@@ -47,6 +51,8 @@
     "@types/node": "^20.14.0",
     "@vitest/coverage-v8": "^2.1.9",
     "nock": "^14.0.10",
+    "oxlint": "^1.14.0",
+    "prettier": "^3.3.3",
     "typescript": "^5.5.4",
     "vitest": "^2.1.9"
   }

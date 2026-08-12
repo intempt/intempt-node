@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { assertIdentifier, assertLogger, chunk, compact, ensureTimestamp } from '../src/utils';
+import {
+  assertIdentifier,
+  assertLogger,
+  chunk,
+  compact,
+  ensureTimestamp,
+} from '../src/utils';
 
 describe('assertLogger', () => {
   it('accepts console', () => {

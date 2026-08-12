@@ -35,7 +35,10 @@ describe('ecommerce: reserved names', () => {
 
     await c.ecommerce.productViewed({ userId: 'u1', productId: 'p1' });
     await c.ecommerce.addedToCart({ userId: 'u1', productId: 'p1', quantity: 2 });
-    await c.ecommerce.ordered({ userId: 'u1', products: [{ productId: 'p1', quantity: 1 }] });
+    await c.ecommerce.ordered({
+      userId: 'u1',
+      products: [{ productId: 'p1', quantity: 1 }],
+    });
 
     expect(bodies.map((b) => b.track[0]!.name)).toEqual([
       'Product viewed',
@@ -138,9 +141,9 @@ describe('ecommerce: validation', () => {
   });
 
   it('requires an identifier', async () => {
-    await expect(
-      client().ecommerce.productViewed({ productId: 'p1' }),
-    ).rejects.toThrow(/one of userId/);
+    await expect(client().ecommerce.productViewed({ productId: 'p1' })).rejects.toThrow(
+      /one of userId/,
+    );
   });
 
   it('rejects instead of returning { error: true } like 1.x', async () => {

@@ -40,7 +40,9 @@ export class Ecommerce {
     }
     assertIdentifier(options, 'addedToCart');
     const { productId, quantity, ...ids } = options;
-    await this.#ingest.trackLines(COMMERCE_EVENTS.addedToCart, ids, [{ productId, quantity }]);
+    await this.#ingest.trackLines(COMMERCE_EVENTS.addedToCart, ids, [
+      { productId, quantity },
+    ]);
   }
 
   async ordered(options: Identifiers & { products: ProductLine[] }): Promise<void> {
@@ -55,7 +57,9 @@ export class Ecommerce {
         product.quantity !== undefined &&
         (!Number.isFinite(product.quantity) || product.quantity <= 0)
       ) {
-        throw new TypeError(`ordered: products[${index}].quantity must be a positive number`);
+        throw new TypeError(
+          `ordered: products[${index}].quantity must be a positive number`,
+        );
       }
     });
     assertIdentifier(options, 'ordered');

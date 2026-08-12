@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { Intempt } from '../src';
-import { API_KEY, HOST, ORG, ORIGIN, PROJECT, TRACK_PATH, client, nock, setupNock, testLogger } from './helpers';
+import {
+  API_KEY,
+  HOST,
+  ORG,
+  ORIGIN,
+  PROJECT,
+  TRACK_PATH,
+  client,
+  nock,
+  setupNock,
+  testLogger,
+} from './helpers';
 
 setupNock();
 
@@ -10,7 +21,9 @@ describe('config: required fields', () => {
   it.each(['org', 'project', 'apiKey'])('rejects a missing %s', (field) => {
     const config: Record<string, unknown> = { ...base };
     delete config[field];
-    expect(() => Intempt.init(config as never)).toThrow(new RegExp(`"${field}" is required`));
+    expect(() => Intempt.init(config as never)).toThrow(
+      new RegExp(`"${field}" is required`),
+    );
   });
 
   it.each(['', '   '])('rejects a blank required field (%j)', (value) => {
@@ -55,7 +68,9 @@ describe('config: defaults', () => {
 
   it('defaults the logger to console and validates a custom one', () => {
     expect(Intempt.init(base).config.logger).toBe(console);
-    expect(() => Intempt.init({ ...base, logger: {} as never })).toThrow(/missing "trace"/);
+    expect(() => Intempt.init({ ...base, logger: {} as never })).toThrow(
+      /missing "trace"/,
+    );
     expect(() => Intempt.init({ ...base, logger: 'nope' as never })).toThrow(
       /must be a valid Logger/,
     );
@@ -70,12 +85,18 @@ describe('config: validation', () => {
   });
 
   it.each([0, -1, Number.NaN])('rejects a timeout of %j', (timeout) => {
-    expect(() => Intempt.init({ ...base, timeout })).toThrow(/timeout must be a positive/);
+    expect(() => Intempt.init({ ...base, timeout })).toThrow(
+      /timeout must be a positive/,
+    );
   });
 
   it('rejects a non-integer maxRequestEvents', () => {
-    expect(() => Intempt.init({ ...base, maxRequestEvents: 0 })).toThrow(/maxRequestEvents/);
-    expect(() => Intempt.init({ ...base, maxRequestEvents: 1.5 })).toThrow(/maxRequestEvents/);
+    expect(() => Intempt.init({ ...base, maxRequestEvents: 0 })).toThrow(
+      /maxRequestEvents/,
+    );
+    expect(() => Intempt.init({ ...base, maxRequestEvents: 1.5 })).toThrow(
+      /maxRequestEvents/,
+    );
   });
 
   it('splits host:port and rejects a bad port', () => {
@@ -83,13 +104,17 @@ describe('config: validation', () => {
       host: 'localhost',
       port: 9000,
     });
-    expect(() => Intempt.init({ ...base, host: 'localhost:abc' })).toThrow(/invalid port/);
+    expect(() => Intempt.init({ ...base, host: 'localhost:abc' })).toThrow(
+      /invalid port/,
+    );
     expect(() => Intempt.init({ ...base, host: '' })).toThrow(/host must not be empty/);
   });
 
   it('validates batch options', () => {
     expect(() => Intempt.init({ ...base, batch: { size: 0 } })).toThrow(/batch.size/);
-    expect(() => Intempt.init({ ...base, batch: { flushMs: 0 } })).toThrow(/batch.flushMs/);
+    expect(() => Intempt.init({ ...base, batch: { flushMs: 0 } })).toThrow(
+      /batch.flushMs/,
+    );
     expect(() => Intempt.init({ ...base, batch: { size: 10, maxQueue: 5 } })).toThrow(
       /maxQueue must be at least/,
     );
@@ -110,9 +135,12 @@ describe('config: setConfig', () => {
     const c = client();
     const logger = testLogger();
 
-    c.setConfig({ timeout: 250, debug: true, logger });
+    // Generous timeout on purpose: this test proves the patch is applied and
+    // that debug logging routes to the new logger, not that 250ms is enough
+    // wall-clock for a mocked request under a loaded suite.
+    c.setConfig({ timeout: 30_000, debug: true, logger });
 
-    expect(c.config.timeout).toBe(250);
+    expect(c.config.timeout).toBe(30_000);
     expect(c.config.debug).toBe(true);
     expect(c.config.logger).toBe(logger);
 
@@ -141,7 +169,9 @@ describe('config: setConfig', () => {
   it('still validates on patch', () => {
     const c = client();
     expect(() => c.setConfig({ timeout: -1 })).toThrow(/timeout/);
-    expect(() => c.setConfig({ protocol: 'ftp' as never })).toThrow(/unsupported protocol/);
+    expect(() => c.setConfig({ protocol: 'ftp' as never })).toThrow(
+      /unsupported protocol/,
+    );
     expect(() => c.setConfig({ logger: {} as never })).toThrow(/missing/);
   });
 });
@@ -154,9 +184,7 @@ describe('config: path prefix', () => {
   });
 
   it('url-encodes org and project', async () => {
-    const scope = nock(ORIGIN)
-      .post('/v1/a%20co/projects/my%2Fproj/track')
-      .reply(200, '');
+    const scope = nock(ORIGIN).post('/v1/a%20co/projects/my%2Fproj/track').reply(200, '');
 
     await Intempt.init({
       org: 'a co',

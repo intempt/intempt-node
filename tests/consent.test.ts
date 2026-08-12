@@ -45,7 +45,10 @@ describe('consent: timestamp units', () => {
 
   it('rejects a timestamp the server would refuse as too low', async () => {
     await expect(
-      client().consent.grant({ userId: 'u1', timestamp: new Date('2009-12-31T00:00:00Z') }),
+      client().consent.grant({
+        userId: 'u1',
+        timestamp: new Date('2009-12-31T00:00:00Z'),
+      }),
     ).rejects.toThrow(/below the API threshold/);
   });
 });

@@ -138,7 +138,9 @@ describe('ingest: wire format', () => {
 
 describe('ingest: reserved names', () => {
   it('refuses to let track() impersonate Identify', async () => {
-    await expect(client().track('Identify', { userId: 'u1' })).rejects.toThrow(/reserved/);
+    await expect(client().track('Identify', { userId: 'u1' })).rejects.toThrow(
+      /reserved/,
+    );
   });
 
   it('uses Identify for identify, group and alias', async () => {
@@ -148,7 +150,11 @@ describe('ingest: reserved names', () => {
     await c.group({ userId: 'u1', accountId: 'a1' });
     await c.alias({ userId: 'u1', previousUserId: 'u0' });
 
-    expect(bodies.map((b) => b.track[0]!.name)).toEqual(['Identify', 'Identify', 'Identify']);
+    expect(bodies.map((b) => b.track[0]!.name)).toEqual([
+      'Identify',
+      'Identify',
+      'Identify',
+    ]);
   });
 
   it('allows an explicit event name on identify and group', async () => {
@@ -172,23 +178,29 @@ describe('ingest: alias', () => {
   });
 
   it('requires both identities', async () => {
-    await expect(
-      client().alias({ userId: 'u1', previousUserId: '' }),
-    ).rejects.toThrow(/userId and previousUserId are required/);
+    await expect(client().alias({ userId: 'u1', previousUserId: '' })).rejects.toThrow(
+      /userId and previousUserId are required/,
+    );
   });
 });
 
 describe('ingest: group', () => {
   it('requires accountId', async () => {
-    await expect(
-      client().group({ userId: 'u1' } as never),
-    ).rejects.toThrow(/accountId is required/);
+    await expect(client().group({ userId: 'u1' } as never)).rejects.toThrow(
+      /accountId is required/,
+    );
   });
 
   it('sends attributes as accountAttributes', async () => {
     const bodies = capture();
-    await client().group({ userId: 'u1', accountId: 'a1', attributes: { domain: 'acme.com' } });
-    expect(bodies[0]!.track[0]!.payload[0]!.accountAttributes).toEqual({ domain: 'acme.com' });
+    await client().group({
+      userId: 'u1',
+      accountId: 'a1',
+      attributes: { domain: 'acme.com' },
+    });
+    expect(bodies[0]!.track[0]!.payload[0]!.accountAttributes).toEqual({
+      domain: 'acme.com',
+    });
   });
 });
 

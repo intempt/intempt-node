@@ -24,7 +24,12 @@ export class IntemptApiError extends Error {
 
   constructor(
     message: string,
-    detail: { status?: number; body?: string; retryAfterMs?: number; cause?: unknown } = {},
+    detail: {
+      status?: number;
+      body?: string;
+      retryAfterMs?: number;
+      cause?: unknown;
+    } = {},
   ) {
     super(message);
     this.name = 'IntemptApiError';
@@ -67,12 +72,20 @@ function parseRetryAfter(value: string | undefined): number | undefined {
 export class Transport {
   #config: ResolvedConfig;
   readonly #credentials: ApiKeyCredentials;
-  readonly #agents: { http: http.Agent; https: https.Agent };
+  readonly #agents: { http: http.Agent; https: https.Agent } | null;
   readonly #proxyAgent: HttpsProxyAgent<string> | null;
 
   constructor(config: ResolvedConfig, credentials: ApiKeyCredentials) {
     this.#config = config;
     this.#credentials = credentials;
+
+    // A caller-supplied agent wins outright: if someone configured mTLS or a
+    // private CA, silently layering our own proxy agent over it would break it.
+    if (config.agent) {
+      this.#agents = null;
+      this.#proxyAgent = null;
+      return;
+    }
 
     const keepAlive = config.keepAlive;
     this.#agents = {
@@ -96,8 +109,9 @@ export class Transport {
 
   async post<T = unknown>(path: string, body: unknown): Promise<TransportResponse<T>> {
     const payload = Buffer.from(JSON.stringify(body), 'utf8');
-    const lib = this.#agents[this.#config.protocol];
     const requestLib = this.#config.protocol === 'https' ? https : http;
+    const agent =
+      this.#config.agent ?? this.#proxyAgent ?? this.#agents?.[this.#config.protocol];
 
     if (this.#config.debug) {
       this.#config.logger.debug('[intempt] POST', path, body);
@@ -107,7 +121,7 @@ export class Transport {
       host: this.#config.host,
       method: 'POST',
       path,
-      agent: this.#proxyAgent ?? lib,
+      ...(agent ? { agent } : {}),
       timeout: this.#config.timeout,
       headers: {
         'Content-Type': 'application/json',
@@ -156,7 +170,9 @@ export class Transport {
 
       request.on('timeout', () => {
         request.destroy(
-          new IntemptApiError(`Intempt API request timed out after ${this.#config.timeout}ms`),
+          new IntemptApiError(
+            `Intempt API request timed out after ${this.#config.timeout}ms`,
+          ),
         );
       });
 
@@ -166,7 +182,9 @@ export class Transport {
           return;
         }
         const message = error instanceof Error ? error.message : String(error);
-        reject(new IntemptApiError(`Intempt API request failed: ${message}`, { cause: error }));
+        reject(
+          new IntemptApiError(`Intempt API request failed: ${message}`, { cause: error }),
+        );
       });
 
       request.write(payload);
@@ -176,7 +194,8 @@ export class Transport {
 
   /** Releases keep-alive sockets so a process can exit promptly. */
   destroy(): void {
-    this.#agents.http.destroy();
-    this.#agents.https.destroy();
+    // A caller-supplied agent is the caller's to destroy.
+    this.#agents?.http.destroy();
+    this.#agents?.https.destroy();
   }
 }

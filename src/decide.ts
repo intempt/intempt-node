@@ -1,8 +1,4 @@
-import type {
-  ExperiencesOptions,
-  RecommendOptions,
-  ResolvedConfig,
-} from './types';
+import type { ExperiencesOptions, RecommendOptions, ResolvedConfig } from './types';
 import { assertIdentifier, compact } from './utils';
 import type { Transport } from './transport';
 
@@ -85,7 +81,9 @@ export class Decide {
     });
 
     const response = await this.#deps.transport.post(
-      this.#deps.transport.projectPath(`/feeds/${encodeURIComponent(options.feedId)}/data`),
+      this.#deps.transport.projectPath(
+        `/feeds/${encodeURIComponent(options.feedId)}/data`,
+      ),
       body,
     );
     return response.body;

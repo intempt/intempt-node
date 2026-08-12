@@ -6,17 +6,21 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node: ['18', '20', '22']
+        # Node 18 reached end of life in April 2025; 24 is the current LTS.
+        node: ['20', '22', '24']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -24,6 +28,10 @@ jobs:
       # No continue-on-error: a lockfile that cannot install is a failure,
       # not a warning.
       - run: npm ci
+
+      - run: npm run check-format
+
+      - run: npm run lint
 
       - run: npm run typecheck
 
@@ -38,7 +46,7 @@ jobs:
           npm pack --dry-run --json > pack.json
           node -e '
             const files = require("./pack.json")[0].files.map(f => f.path);
-            const allowed = /^(dist\/|README\.md$|LICENSE$|NOTICE$|CHANGELOG\.md$|package\.json$)/;
+            const allowed = /^(dist\/|README\.md$|LICENSE$|NOTICE$|CHANGELOG\.md$|SECURITY\.md$|package\.json$)/;
             const bad = files.filter(f => !allowed.test(f));
             if (bad.length) {
               console.error("Unexpected files in package tarball:\n  " + bad.join("\n  "));

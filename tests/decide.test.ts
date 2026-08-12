@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { CHOOSE_PATH, ORIGIN, SOURCE, client, feedPath, nock, setupNock } from './helpers';
+import {
+  CHOOSE_PATH,
+  ORIGIN,
+  SOURCE,
+  client,
+  feedPath,
+  nock,
+  setupNock,
+} from './helpers';
 
 setupNock();
 
@@ -25,14 +33,20 @@ describe('decide.experiences', () => {
     await c.decide.experiences({ userId: 'u1', type: 'experiment', names: ['test-1'] });
     await c.decide.experiences({ userId: 'u1', type: 'personalization', groups: ['g1'] });
 
-    expect(bodies.map((b) => b.optimizationType)).toEqual(['experiment', 'personalization']);
+    expect(bodies.map((b) => b.optimizationType)).toEqual([
+      'experiment',
+      'personalization',
+    ]);
     expect(bodies[0]!.names).toEqual(['test-1']);
     expect(bodies[1]!.groups).toEqual(['g1']);
   });
 
   it('returns the choices array from the response', async () => {
     captureChoose(1, { choices: [{ name: 'variant-b' }] });
-    const choices = await client().decide.experiences({ userId: 'u1', type: 'experiment' });
+    const choices = await client().decide.experiences({
+      userId: 'u1',
+      type: 'experiment',
+    });
     expect(choices).toEqual([{ name: 'variant-b' }]);
   });
 
@@ -57,7 +71,11 @@ describe('decide.experiences', () => {
 
   it('prefers an explicit profileId over userId', async () => {
     const bodies = captureChoose();
-    await client().decide.experiences({ userId: 'u1', profileId: 'p1', type: 'experiment' });
+    await client().decide.experiences({
+      userId: 'u1',
+      profileId: 'p1',
+      type: 'experiment',
+    });
     expect(bodies[0]!.identification.profileId).toBe('p1');
   });
 
@@ -79,9 +97,9 @@ describe('decide.experiences', () => {
   });
 
   it('requires an identifier', async () => {
-    await expect(
-      client().decide.experiences({ type: 'experiment' }),
-    ).rejects.toThrow(/one of userId/);
+    await expect(client().decide.experiences({ type: 'experiment' })).rejects.toThrow(
+      /one of userId/,
+    );
   });
 });
 
@@ -144,9 +162,21 @@ describe('decide.recommend', () => {
   });
 
   it.each([
-    ['a missing feedId', { userId: 'u1', limit: 1, fields: ['id'] }, /feedId is required/],
-    ['empty fields', { userId: 'u1', feedId: '1', limit: 1, fields: [] }, /non-empty array/],
-    ['a zero limit', { userId: 'u1', feedId: '1', limit: 0, fields: ['id'] }, /positive integer/],
+    [
+      'a missing feedId',
+      { userId: 'u1', limit: 1, fields: ['id'] },
+      /feedId is required/,
+    ],
+    [
+      'empty fields',
+      { userId: 'u1', feedId: '1', limit: 1, fields: [] },
+      /non-empty array/,
+    ],
+    [
+      'a zero limit',
+      { userId: 'u1', feedId: '1', limit: 0, fields: ['id'] },
+      /positive integer/,
+    ],
     [
       'a fractional limit',
       { userId: 'u1', feedId: '1', limit: 1.5, fields: ['id'] },

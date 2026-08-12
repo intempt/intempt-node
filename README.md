@@ -12,7 +12,7 @@ the [Intempt CLI and MCP server](https://github.com/intempt/cli).
 npm install intempt
 ```
 
-Requires Node 18 or newer.
+Requires Node 20 or newer.
 
 ## Quick start
 
@@ -45,22 +45,24 @@ this safe in Lambda and other short-lived processes.
 
 ```ts
 Intempt.init({
-  org: 'my-org',                 // required
-  project: 'my-project',         // required
-  apiKey: 'prefix.secret',       // required, public API key
-  sourceId: '6845...',           // optional, see below
+  org: 'my-org', // required
+  project: 'my-project', // required
+  apiKey: 'prefix.secret', // required, public API key
+  sourceId: '6845...', // optional, see below
 
-  host: 'api.intempt.com',       // 'host' or 'host:port'
+  host: 'api.intempt.com', // 'host' or 'host:port'
   protocol: 'https',
-  path: '',                      // prefix before /v1, for a gateway
+  path: '', // prefix before /v1, for a gateway
   timeout: 10_000,
   keepAlive: true,
 
-  logger: console,               // needs trace/debug/info/warn/error
+  logger: console, // needs trace/debug/info/warn/error
   debug: false,
 
-  batch: false,                  // see Batching
-  maxRequestEvents: 50,          // hard ceiling on events per request
+  batch: false, // see Batching
+  maxRequestEvents: 50, // hard ceiling on events per request
+  maxConcurrentRequests: 1, // in-flight requests per trackBatch call
+  agent: undefined, // your own https.Agent, for mTLS or a private CA
 });
 ```
 
@@ -83,7 +85,7 @@ profile for you. Consent also accepts `masterId`.
 await intempt.track('purchase', {
   userId: 'u1',
   properties: { total: 99.99 },
-  timestamp: new Date(),        // optional; Date or epoch ms
+  timestamp: new Date(), // optional; Date or epoch ms
 });
 
 await intempt.trackBatch([
@@ -92,12 +94,26 @@ await intempt.trackBatch([
 ]);
 
 await intempt.identify({ userId: 'u1', traits: { plan: 'pro' } });
-await intempt.group({ userId: 'u1', accountId: 'acme', attributes: { tier: 'enterprise' } });
+await intempt.group({
+  userId: 'u1',
+  accountId: 'acme',
+  attributes: { tier: 'enterprise' },
+});
 await intempt.alias({ userId: 'u1', previousUserId: 'anon-abc' });
 ```
 
 `trackBatch` chunks at `maxRequestEvents`, so a 500-event array becomes ten
-requests rather than one oversized one.
+requests rather than one oversized one. Those chunks go out one at a time by
+default; raise `maxConcurrentRequests` to overlap them:
+
+```ts
+Intempt.init({ ...config, maxConcurrentRequests: 4 });
+```
+
+Workers pull from a shared cursor, so a slow request never stalls the others and
+no more than `maxConcurrentRequests` are ever in flight. If any chunk fails, the
+call rejects with the first error only after every sibling request has settled, so
+a rejection can never leave an unhandled promise behind.
 
 `alias` declares two identities as the same person and lets the platform resolve
 them. The destructive `/users/merge` endpoint is not exposed here: it has no
@@ -120,7 +136,11 @@ These wrap `track` with the reserved event names the platform recognises.
 
 ```ts
 await intempt.consent.grant({ userId: 'u1', category: 'marketing' });
-await intempt.consent.revoke({ userId: 'u1', category: 'marketing', reason: 'user request' });
+await intempt.consent.revoke({
+  userId: 'u1',
+  category: 'marketing',
+  reason: 'user request',
+});
 ```
 
 `validUntil` defaults to `'unlimited'`. Timestamps are converted to the epoch
@@ -131,7 +151,7 @@ seconds the API expects.
 ```ts
 const variants = await intempt.decide.experiences({
   userId: 'u1',
-  type: 'experiment',       // or 'personalization'
+  type: 'experiment', // or 'personalization'
   names: ['checkout-test'], // or groups: ['homepage']
 });
 
@@ -146,8 +166,8 @@ const feed = await intempt.decide.recommend({
 ## Privacy
 
 ```ts
-intempt.optOut();          // suppresses every write: events, commerce, consent
-intempt.isOptedIn();       // false
+intempt.optOut(); // suppresses every write: events, commerce, consent
+intempt.isOptedIn(); // false
 intempt.optIn();
 ```
 
@@ -161,37 +181,67 @@ Off by default. Turn it on for a long-lived, high-volume process:
 
 ```ts
 const intempt = Intempt.init({
-  org, project, apiKey, sourceId,
+  org,
+  project,
+  apiKey,
+  sourceId,
   batch: {
-    size: 50,          // buffered events that trigger a flush
-    flushMs: 5_000,    // idle time before a flush
-    maxQueue: 10_000,  // ceiling; beyond it events are dropped and logged
+    size: 50, // buffered events that trigger a flush
+    flushMs: 5_000, // idle time before a flush
+    maxQueue: 10_000, // ceiling; beyond it events are dropped and logged
     flushOnExit: true, // flush on process 'beforeExit'
   },
 });
 
 await intempt.track('page_view', { userId: 'u1' }); // resolves once buffered
 
-await intempt.flush();  // drain now
-await intempt.close();  // drain, then release timers and sockets
-intempt.buffered;       // events still queued
+await intempt.flush(); // drain now
+await intempt.close(); // drain, then release timers and sockets
+intempt.buffered; // events still queued
 ```
 
 `flush()` and `close()` are safe to call when batching is off; they do nothing.
 
 Retry policy:
 
-| Response | Behaviour |
-|---|---|
-| 413, batch > 1 | halve the batch size, retry |
-| 413, batch = 1 | drop the event, log it |
-| 429 | honour `Retry-After`, else exponential backoff |
-| 5xx, 408, timeout | exponential backoff, capped at 10 minutes |
-| other 4xx | drop the batch, log the status and body |
+| Response               | Behaviour                                          |
+| ---------------------- | -------------------------------------------------- |
+| 413, batch > 1         | halve the batch size, retry                        |
+| 413, batch = 1         | drop the event, log it                             |
+| 429                    | honour `Retry-After`, else exponential backoff     |
+| 5xx, 408, timeout      | exponential backoff, capped at 10 minutes          |
+| other 4xx              | drop the batch, log the status and body            |
 | 5 consecutive failures | stop batching and say how many events are stranded |
 
 The buffer is in memory. A hard crash loses it. Crash durability needs disk with
 fsync and boot-time recovery, which is a different design.
+
+## TLS, proxies and private CAs
+
+Keep-alive agents are created for you, and `HTTPS_PROXY` / `HTTP_PROXY` are
+honoured. For anything beyond that — mutual TLS, a private certificate
+authority, a bespoke proxy policy — pass your own agent:
+
+```ts
+import https from 'node:https';
+
+Intempt.init({
+  ...config,
+  agent: new https.Agent({
+    ca: fs.readFileSync('corporate-ca.pem'),
+    cert: fs.readFileSync('client.pem'),
+    key: fs.readFileSync('client.key'),
+    keepAlive: true,
+  }),
+});
+```
+
+Your agent is used verbatim: the SDK creates none of its own and ignores
+`keepAlive`, `HTTPS_PROXY` and `HTTP_PROXY`, so nothing is silently layered over
+your TLS configuration. It is also yours to destroy — `close()` leaves it alone.
+
+Match the protocol. An `http.Agent` on an `https` client dials port 80 and the
+request fails; use `https.Agent` unless you set `protocol: 'http'`.
 
 ## Errors
 
@@ -204,10 +254,10 @@ try {
   await intempt.track('purchase', { userId: 'u1' });
 } catch (error) {
   if (error instanceof IntemptApiError) {
-    error.status;       // 429, 500, undefined on a transport failure
-    error.body;         // response body
+    error.status; // 429, 500, undefined on a transport failure
+    error.body; // response body
     error.retryAfterMs; // parsed Retry-After
-    error.retryable;    // 408, 429, 5xx, transport errors and timeouts
+    error.retryable; // 408, 429, 5xx, transport errors and timeouts
   }
 }
 ```
@@ -230,29 +280,29 @@ const client = sdk.v2; // the 2.x client, for incremental migration
 
 Breaking changes to expect:
 
-| 1.x | 2.x |
-|---|---|
-| `?apiKey=` query parameter | `Authorization: Basic` header |
-| invalid input warns and resolves | rejects |
-| product helpers return `{ error: true }` | reject |
-| `trackingClient` and friends | removed |
-| `NODE_ENV=test` targets staging | `host` is configuration |
-| `optOut()` gates tracking only | gates every write |
-| consent timestamp in milliseconds | seconds, as the API expects |
-| `profileId` required | any one identifier |
-| `choosePersonalizationsByGroups` and 3 more | `decide.experiences({ type })` |
-| `recommendation(...)` | `decide.recommend({ ... })` |
-| unbounded resend, no flush | buffering is opt-in, with `flush`/`close` |
+| 1.x                                         | 2.x                                       |
+| ------------------------------------------- | ----------------------------------------- |
+| `?apiKey=` query parameter                  | `Authorization: Basic` header             |
+| invalid input warns and resolves            | rejects                                   |
+| product helpers return `{ error: true }`    | reject                                    |
+| `trackingClient` and friends                | removed                                   |
+| `NODE_ENV=test` targets staging             | `host` is configuration                   |
+| `optOut()` gates tracking only              | gates every write                         |
+| consent timestamp in milliseconds           | seconds, as the API expects               |
+| `profileId` required                        | any one identifier                        |
+| `choosePersonalizationsByGroups` and 3 more | `decide.experiences({ type })`            |
+| `recommendation(...)`                       | `decide.recommend({ ... })`               |
+| unbounded resend, no flush                  | buffering is opt-in, with `flush`/`close` |
 
 ## Not in this SDK
 
-| Capability | Where it lives |
-|---|---|
-| Journeys, experiences, dashboards, segments, deals, brand | CLI and MCP server |
-| Tags and owner assignment | CLI and MCP server |
-| Profile and account creation | CLI and MCP server |
-| Identity merge | not exposed; use `alias()` |
-| Content and design generation | blocked: those endpoints require a bearer JWT with a `person_id` claim, and no API-key path exists |
+| Capability                                                | Where it lives                                                                                     |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Journeys, experiences, dashboards, segments, deals, brand | CLI and MCP server                                                                                 |
+| Tags and owner assignment                                 | CLI and MCP server                                                                                 |
+| Profile and account creation                              | CLI and MCP server                                                                                 |
+| Identity merge                                            | not exposed; use `alias()`                                                                         |
+| Content and design generation                             | blocked: those endpoints require a bearer JWT with a `person_id` claim, and no API-key path exists |
 
 ## Development
 

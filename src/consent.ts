@@ -33,7 +33,9 @@ export class Consent {
 
   async #record(action: 'accept' | 'reject', options: ConsentOptions): Promise<void> {
     if (!options || typeof options !== 'object') {
-      throw new TypeError(`consent.${action === 'accept' ? 'grant' : 'revoke'}: options are required`);
+      throw new TypeError(
+        `consent.${action === 'accept' ? 'grant' : 'revoke'}: options are required`,
+      );
     }
     const { userId, profileId, masterId } = options;
     if (!userId && !profileId && masterId === undefined) {
@@ -53,7 +55,8 @@ export class Consent {
       return;
     }
 
-    const ms = options.timestamp === undefined ? Date.now() : ensureTimestamp(options.timestamp);
+    const ms =
+      options.timestamp === undefined ? Date.now() : ensureTimestamp(options.timestamp);
     if (ms < LOW_TIMESTAMP_LIMIT_MS) {
       throw new RangeError(
         `consent: timestamp is below the API threshold of ${LOW_TIMESTAMP_LIMIT_MS} (2010-01-01)`,
@@ -80,6 +83,9 @@ export class Consent {
       deviceInfo: options.deviceInfo,
     });
 
-    await this.#deps.transport.post(this.#deps.transport.projectPath('/consents/data'), body);
+    await this.#deps.transport.post(
+      this.#deps.transport.projectPath('/consents/data'),
+      body,
+    );
   }
 }

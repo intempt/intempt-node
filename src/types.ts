@@ -1,3 +1,5 @@
+import type { Agent } from 'node:http';
+
 /** Minimal logger contract. `console` satisfies it. */
 export interface Logger {
   trace(message?: unknown, ...args: unknown[]): void;
@@ -48,6 +50,19 @@ export interface IntemptConfig {
    * 413 responses halve at runtime.
    */
   maxRequestEvents?: number;
+  /**
+   * How many requests a single `trackBatch()` may have in flight at once.
+   * Defaults to 1 (sequential). Raising it trades bandwidth for wall-clock on
+   * large batches.
+   */
+  maxConcurrentRequests?: number;
+  /**
+   * Supply your own agent to control TLS: a private CA, a client certificate
+   * for mTLS, or an explicit proxy policy. When set, the SDK does not create
+   * keep-alive agents and ignores `keepAlive`, `HTTPS_PROXY` and `HTTP_PROXY` —
+   * the agent you pass is used verbatim.
+   */
+  agent?: Agent;
 }
 
 export interface ResolvedBatchOptions extends Required<BatchOptions> {}
@@ -66,6 +81,8 @@ export interface ResolvedConfig {
   debug: boolean;
   batch: false | ResolvedBatchOptions;
   maxRequestEvents: number;
+  maxConcurrentRequests: number;
+  agent?: Agent;
 }
 
 /**

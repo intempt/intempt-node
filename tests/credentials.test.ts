@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { ApiKeyCredentials } from '../src';
 
 const KEY = 'pfx0123456789abcdef.sec0123456789abcdef';
-const EXPECTED = Buffer.from('pfx0123456789abcdef:sec0123456789abcdef').toString('base64');
+const EXPECTED = Buffer.from('pfx0123456789abcdef:sec0123456789abcdef').toString(
+  'base64',
+);
 
 describe('ApiKeyCredentials: parsing', () => {
   it('splits <prefix>.<secret> and encodes Basic auth', () => {

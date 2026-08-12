@@ -9,7 +9,9 @@ export const ORG = 'acme';
 export const PROJECT = 'web';
 export const SOURCE = '684508596718616576';
 export const API_KEY = 'pfx0123456789abcdef.sec0123456789abcdef';
-export const BASIC = Buffer.from('pfx0123456789abcdef:sec0123456789abcdef').toString('base64');
+export const BASIC = Buffer.from('pfx0123456789abcdef:sec0123456789abcdef').toString(
+  'base64',
+);
 
 export const TRACK_PATH = `/v1/${ORG}/projects/${PROJECT}/sources/${SOURCE}/track`;
 export const TRACK_PATH_NO_SOURCE = `/v1/${ORG}/projects/${PROJECT}/track`;
@@ -28,9 +30,11 @@ export function testLogger(): Logger & { calls: Record<string, unknown[][]> } {
     warn: [],
     error: [],
   };
-  const record = (level: string) => (...args: unknown[]) => {
-    calls[level]!.push(args);
-  };
+  const record =
+    (level: string) =>
+    (...args: unknown[]) => {
+      calls[level]!.push(args);
+    };
   return {
     calls,
     trace: record('trace'),

@@ -1,0 +1,15 @@
+{
+  "rules": {
+    "no-var": "error",
+    "eqeqeq": "error",
+    "no-eval": "error",
+    "no-throw-literal": "error",
+    "no-console": "error"
+  },
+  "overrides": [
+    {
+      "files": ["tests/**"],
+      "rules": { "no-console": "off" }
+    }
+  ]
+}

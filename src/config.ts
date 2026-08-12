@@ -22,6 +22,7 @@ const DEFAULT_CONFIG = {
   debug: false,
   batch: false as const,
   maxRequestEvents: 50,
+  maxConcurrentRequests: 1,
 };
 
 const DEFAULT_BATCH: ResolvedBatchOptions = {
@@ -96,6 +97,12 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     throw new RangeError('maxRequestEvents must be a positive integer');
   }
 
+  const maxConcurrentRequests =
+    config.maxConcurrentRequests ?? DEFAULT_CONFIG.maxConcurrentRequests;
+  if (!Number.isInteger(maxConcurrentRequests) || maxConcurrentRequests < 1) {
+    throw new RangeError('maxConcurrentRequests must be a positive integer');
+  }
+
   const { host, port } = splitHost(config.host ?? DEFAULT_CONFIG.host);
 
   return {
@@ -112,6 +119,8 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     debug: config.debug ?? DEFAULT_CONFIG.debug,
     batch: resolveBatch(config.batch),
     maxRequestEvents,
+    maxConcurrentRequests,
+    ...(config.agent !== undefined ? { agent: config.agent } : {}),
   };
 }
 
@@ -122,7 +131,9 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
  */
 export function mergeConfig(
   current: ResolvedConfig,
-  patch: Partial<Omit<IntemptConfig, 'org' | 'project' | 'apiKey' | 'sourceId' | 'batch'>>,
+  patch: Partial<
+    Omit<IntemptConfig, 'org' | 'project' | 'apiKey' | 'sourceId' | 'batch'>
+  >,
 ): ResolvedConfig {
   const next: ResolvedConfig = { ...current };
 

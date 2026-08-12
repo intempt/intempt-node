@@ -108,7 +108,9 @@ export class IntemptClient {
   // ---- config ----
 
   setConfig(
-    patch: Partial<Omit<IntemptConfig, 'org' | 'project' | 'apiKey' | 'sourceId' | 'batch'>>,
+    patch: Partial<
+      Omit<IntemptConfig, 'org' | 'project' | 'apiKey' | 'sourceId' | 'batch'>
+    >,
   ): void {
     this.#resolved = mergeConfig(this.#resolved, patch);
     this.#transport.setConfig(this.#resolved);
