@@ -35,20 +35,28 @@ const intempt = Intempt.init({
 });
 
 const userId = `sdk-e2e-${Date.now()}`;
+const accountId = `sdk-e2e-acct-${Date.now()}`;
 const results = [];
 
 async function step(name, fn) {
+  const started = Date.now();
   try {
     const value = await fn();
-    results.push({ name, ok: true });
-    console.log(`  PASS  ${name}${value === undefined ? '' : ` -> ${value}`}`);
+    const ms = Date.now() - started;
+    results.push({ name, ok: true, ms, note: value ?? '2xx' });
+    console.log(
+      `  PASS  ${name.padEnd(46)} ${String(ms).padStart(5)}ms  ${value ?? '2xx'}`,
+    );
   } catch (error) {
-    results.push({ name, ok: false, error });
-    const detail =
-      error instanceof IntemptApiError
-        ? `status=${error.status ?? 'none'} body=${(error.body ?? '').slice(0, 200)}`
-        : String(error);
-    console.error(`  FAIL  ${name}: ${detail}`);
+    const ms = Date.now() - started;
+    const status =
+      error instanceof IntemptApiError ? (error.status ?? 'transport') : 'error';
+    const body =
+      error instanceof IntemptApiError ? (error.body ?? '').slice(0, 160) : String(error);
+    results.push({ name, ok: false, ms, note: `${status}: ${body}` });
+    console.error(
+      `  FAIL  ${name.padEnd(46)} ${String(ms).padStart(5)}ms  ${status} ${body}`,
+    );
   }
 }
 
@@ -77,13 +85,21 @@ await step('trackBatch', () =>
     { event: 'sdk_e2e_b', userId },
   ]),
 );
-await step('group', () =>
-  intempt.group({ userId, accountId: `sdk-e2e-acct-${Date.now()}` }),
+await step('group', () => intempt.group({ userId, accountId }));
+await step('alias', () => intempt.alias({ userId, previousUserId: `${userId}-anon` }));
+await step('ecommerce.productViewed', () =>
+  intempt.ecommerce.productViewed({ userId, productId: 'sdk-e2e-sku' }),
+);
+await step('ecommerce.addedToCart', () =>
+  intempt.ecommerce.addedToCart({ userId, productId: 'sdk-e2e-sku', quantity: 3 }),
 );
 await step('ecommerce.ordered', () =>
   intempt.ecommerce.ordered({
     userId,
-    products: [{ productId: 'sdk-e2e-sku', quantity: 1 }],
+    products: [
+      { productId: 'sdk-e2e-sku', quantity: 1 },
+      { productId: 'sdk-e2e-sku-2', quantity: 2 },
+    ],
   }),
 );
 // Proves the epoch-seconds fix: milliseconds would be silently replaced by the
@@ -118,11 +134,42 @@ if (process.env.INTEMPT_FEED_ID) {
   console.log('  SKIP  decide.recommend (INTEMPT_FEED_ID not set)');
 }
 
+// Buffered mode against the real server: proves flush() drains over the wire and
+// that several events in a single request are accepted.
+const buffered = Intempt.init({
+  org: process.env.INTEMPT_ORG,
+  project: process.env.INTEMPT_PROJECT,
+  apiKey: process.env.INTEMPT_API_KEY,
+  sourceId: process.env.INTEMPT_SOURCE_ID,
+  host: process.env.INTEMPT_HOST ?? 'api.staging.intempt.com',
+  timeout: 20_000,
+  batch: { size: 50, flushMs: 60_000, flushOnExit: false },
+});
+await step('flush (batched, 5 events in one request)', async () => {
+  for (let i = 0; i < 5; i += 1) {
+    await buffered.track(`sdk_e2e_buffered_${i}`, { userId });
+  }
+  const before = buffered.buffered;
+  await buffered.flush();
+  return `${before} buffered -> ${buffered.buffered} after flush`;
+});
+await buffered.close();
+
 await intempt.close();
 
 const failed = results.filter((r) => !r.ok);
-console.log(`\n${results.length - failed.length}/${results.length} passed`);
+
+console.log('\n  per-method results');
+console.log('  ' + '-'.repeat(74));
+for (const r of results) {
+  console.log(
+    `  ${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padEnd(46)} ${String(r.ms).padStart(5)}ms  ${r.note}`,
+  );
+}
+console.log('  ' + '-'.repeat(74));
+console.log(`  ${results.length - failed.length}/${results.length} passed`);
+
 if (failed.length > 0) {
-  console.error(`Failed: ${failed.map((r) => r.name).join(', ')}`);
+  console.error(`\nFailed: ${failed.map((r) => r.name).join(', ')}`);
   process.exit(1);
 }
