@@ -15,7 +15,43 @@
  *
  * See .env.example for the full input list.
  */
+import { readFileSync } from 'node:fs';
 import { Intempt, IntemptApiError } from '../dist/index.js';
+
+// --- .env.local -------------------------------------------------------------
+// .env.example tells you to copy it to .env.local, so something has to read it.
+// Deliberately not a dependency: this is a handful of lines and the file format
+// is trivial. Real environment variables always win, so CI is unaffected.
+function loadEnvFile(path) {
+  let text;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch {
+    return 0;
+  }
+  let loaded = 0;
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq < 1) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!value || process.env[key] !== undefined) continue;
+    process.env[key] = value;
+    loaded += 1;
+  }
+  return loaded;
+}
+
+const envFile = new URL('../.env.local', import.meta.url).pathname;
+const loadedCount = loadEnvFile(envFile);
 
 // --- inputs -----------------------------------------------------------------
 const env = (...names) => {
@@ -75,6 +111,9 @@ const inputs = [
 ];
 
 console.log(`\nIntempt SDK contract test — ${HOST}`);
+if (loadedCount > 0) {
+  console.log(`  loaded ${loadedCount} value(s) from .env.local`);
+}
 console.log(`  profile: ${userId}${USER_ID ? ' (stable)' : ' (ephemeral)'}\n`);
 console.log('  project inputs');
 console.log('  ' + '-'.repeat(76));
@@ -111,6 +150,19 @@ async function step(name, fn) {
 function skip(name, why) {
   results.push({ name, state: 'SKIP', ms: 0, note: why });
   console.log(`  SKIP  ${name.padEnd(46)}         ${why}`);
+}
+
+/**
+ * A 2xx that cannot distinguish success from silence.
+ *
+ * The feeds endpoint answers 200 with an empty array both when the feed is
+ * missing and when it exists with nothing to return — AbstractFeedDataService
+ * does `if (feed == null) return new ArrayList<>()`. Marking that PASS would be a
+ * false green, so it is counted as not verified.
+ */
+function inconclusive(name, ms, why) {
+  results.push({ name, state: 'WARN', ms, note: why });
+  console.log(`  WARN  ${name.padEnd(46)} ${String(ms).padStart(5)}ms  ${why}`);
 }
 
 // --- writes -----------------------------------------------------------------
@@ -182,7 +234,9 @@ await step('consent via 1.x shim path (sourceId not rounded)', () =>
 // Experiments and personalizations are absent by design: they resolve a web
 // experience against a page and are served by the browser SDK.
 if (FEED_ID) {
-  await step('recommend (feeds identify by {id, type})', async () => {
+  const label = 'recommend (feeds identify by {id, type})';
+  const started = Date.now();
+  try {
     const feed = await intempt.recommend({
       userId,
       feedId: FEED_ID,
@@ -191,8 +245,33 @@ if (FEED_ID) {
         .split(',')
         .map((f) => f.trim()),
     });
-    return JSON.stringify(feed).slice(0, 110);
-  });
+    const ms = Date.now() - started;
+    const rows = Object.values(feed ?? {}).find(Array.isArray) ?? [];
+    if (rows.length === 0) {
+      inconclusive(
+        label,
+        ms,
+        `200 but empty ${JSON.stringify(feed)} — a missing feed answers exactly the ` +
+          `same way, so this proves nothing. Confirm feed ${FEED_ID} exists in this ` +
+          'project and has an algorithm configured.',
+      );
+    } else {
+      results.push({ name: label, state: 'PASS', ms, note: `${rows.length} product(s)` });
+      console.log(
+        `  PASS  ${label.padEnd(46)} ${String(ms).padStart(5)}ms  ${rows.length} product(s)`,
+      );
+    }
+  } catch (error) {
+    const ms = Date.now() - started;
+    const status =
+      error instanceof IntemptApiError ? (error.status ?? 'transport') : 'error';
+    const body =
+      error instanceof IntemptApiError ? (error.body ?? '').slice(0, 160) : String(error);
+    results.push({ name: label, state: 'FAIL', ms, note: `${status}: ${body}` });
+    console.error(
+      `  FAIL  ${label.padEnd(46)} ${String(ms).padStart(5)}ms  ${status} ${body}`,
+    );
+  }
 } else {
   skip('recommend', 'INTEMPT_E2E_FEED_ID not set — feed must exist');
 }
@@ -217,6 +296,7 @@ await intempt.close();
 const passed = results.filter((r) => r.state === 'PASS');
 const failed = results.filter((r) => r.state === 'FAIL');
 const skipped = results.filter((r) => r.state === 'SKIP');
+const warned = results.filter((r) => r.state === 'WARN');
 
 console.log('\n  per-method results');
 console.log('  ' + '-'.repeat(76));
@@ -227,12 +307,14 @@ for (const r of results) {
 }
 console.log('  ' + '-'.repeat(76));
 console.log(
-  `  ${passed.length} passed · ${failed.length} failed · ${skipped.length} skipped`,
+  `  ${passed.length} passed · ${failed.length} failed · ` +
+    `${warned.length} inconclusive · ${skipped.length} skipped`,
 );
 
-if (skipped.length > 0) {
-  console.log(`\n  Not verified against the API (missing project inputs):`);
-  for (const r of skipped) console.log(`    - ${r.name}`);
+const unverified = [...warned, ...skipped];
+if (unverified.length > 0) {
+  console.log(`\n  NOT verified against the API:`);
+  for (const r of unverified) console.log(`    - ${r.name}\n        ${r.note}`);
 }
 
 if (failed.length > 0) {

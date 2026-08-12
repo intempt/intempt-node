@@ -416,7 +416,8 @@ That would turn its "real socket" assertions into assertions about nock.
 Only `test:e2e` needs credentials, and it needs more than a key: several methods
 touch entities that must already exist in the project — an account, a catalog
 product, a feed, a published experiment. See [`.env.example`](./.env.example) for
-the full input list. Any step whose input is missing is reported as **SKIP**, never
+the full input list; copy it to `.env.local` and the contract test picks it up
+automatically. Any step whose input is missing is reported as **SKIP**, never
 as a pass: ingestion returns 201 for unknown ids, so a fabricated value would look
 green and prove nothing.
 
