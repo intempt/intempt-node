@@ -168,19 +168,16 @@ export interface ConsentOptions {
   timestamp?: Date | number;
 }
 
-export type OptimizationType = 'experiment' | 'personalization';
-
-export interface ExperiencesOptions extends LegacyIdentifiers {
-  type: OptimizationType;
-  groups?: string[];
-  names?: string[];
-  device?: string;
-}
-
-export interface RecommendOptions extends LegacyIdentifiers {
+/**
+ * Identify with exactly one of `userId` or `accountId`. The feeds API resolves a
+ * single entity from an `{id, type}` pair, so the two are mutually exclusive
+ * here, unlike on the tracking calls.
+ */
+export interface RecommendOptions extends Identifiers {
   feedId: string;
-  limit: number;
+  /** Product attribute names from your catalog schema. */
   fields: string[];
+  limit?: number;
   productId?: string;
 }
 

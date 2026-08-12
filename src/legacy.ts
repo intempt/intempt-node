@@ -191,8 +191,10 @@ export class SDK {
     fields: string[],
     productId?: string,
   ): Promise<unknown> {
-    return this.#client.decide.recommend({
-      profileId,
+    // 1.x passed a profileId, which the feeds API never read: it resolves an
+    // {id, type} pair. Mapped to a user lookup.
+    return this.#client.recommend({
+      userId: profileId,
       feedId: id,
       limit: quantity,
       fields,
@@ -200,39 +202,35 @@ export class SDK {
     });
   }
 
-  choosePersonalizationsByGroups(
-    profileId: string,
-    groups?: string[],
-  ): Promise<unknown[]> {
-    return this.#client.decide.experiences({
-      profileId,
-      type: 'personalization',
-      ...(groups ? { groups } : {}),
-    });
+  /**
+   * Experiments and personalizations resolve a web experience against a page and
+   * are served by the browser SDK. A server has no page to modify, so these four
+   * 1.x helpers cannot be honoured. They throw rather than returning an empty
+   * array: [] would read as "no variant assigned" and quietly disable a caller's
+   * experiment instead of telling them it moved.
+   */
+  static #experiencesRemoved(method: string): never {
+    throw new Error(
+      `${method} is not available in a server SDK. Experiments and ` +
+        'personalizations are resolved per page by the browser SDK. ' +
+        'See https://github.com/intempt/intempt-js',
+    );
   }
 
-  choosePersonalizationsByNames(profileId: string, names?: string[]): Promise<unknown[]> {
-    return this.#client.decide.experiences({
-      profileId,
-      type: 'personalization',
-      ...(names ? { names } : {}),
-    });
+  choosePersonalizationsByGroups(): Promise<never> {
+    return SDK.#experiencesRemoved('choosePersonalizationsByGroups');
   }
 
-  chooseExperimentsByGroups(profileId: string, groups?: string[]): Promise<unknown[]> {
-    return this.#client.decide.experiences({
-      profileId,
-      type: 'experiment',
-      ...(groups ? { groups } : {}),
-    });
+  choosePersonalizationsByNames(): Promise<never> {
+    return SDK.#experiencesRemoved('choosePersonalizationsByNames');
   }
 
-  chooseExperimentsByNames(profileId: string, names?: string[]): Promise<unknown[]> {
-    return this.#client.decide.experiences({
-      profileId,
-      type: 'experiment',
-      ...(names ? { names } : {}),
-    });
+  chooseExperimentsByGroups(): Promise<never> {
+    return SDK.#experiencesRemoved('chooseExperimentsByGroups');
+  }
+
+  chooseExperimentsByNames(): Promise<never> {
+    return SDK.#experiencesRemoved('chooseExperimentsByNames');
   }
 
   optIn(): void {

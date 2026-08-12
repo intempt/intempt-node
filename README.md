@@ -57,9 +57,10 @@ await intempt.track('purchase', {
   properties: { total: 99.99, currency: 'USD' },
 });
 
-const variants = await intempt.decide.experiences({
+const feed = await intempt.recommend({
   userId: 'user@example.com',
-  type: 'experiment',
+  feedId: '5292',
+  fields: ['id', 'title'],
 });
 ```
 
@@ -69,26 +70,25 @@ this safe in Lambda and other short-lived processes.
 
 ## API reference
 
-| Call                               | Returns              | Endpoint                             |
-| ---------------------------------- | -------------------- | ------------------------------------ |
-| `Intempt.init(config)`             | `IntemptClient`      | —                                    |
-| `track(event, options)`            | `Promise<void>`      | `POST …/track`                       |
-| `trackBatch(events)`               | `Promise<void>`      | `POST …/track`, chunked              |
-| `identify(options)`                | `Promise<void>`      | `POST …/track` (reserved `Identify`) |
-| `group(options)`                   | `Promise<void>`      | `POST …/track` (reserved `Identify`) |
-| `alias(options)`                   | `Promise<void>`      | `POST …/track` (reserved `Identify`) |
-| `consent.grant(options)`           | `Promise<void>`      | `POST …/consents/data`               |
-| `consent.revoke(options)`          | `Promise<void>`      | `POST …/consents/data`               |
-| `ecommerce.productViewed(options)` | `Promise<void>`      | `POST …/track`                       |
-| `ecommerce.addedToCart(options)`   | `Promise<void>`      | `POST …/track`                       |
-| `ecommerce.ordered(options)`       | `Promise<void>`      | `POST …/track`                       |
-| `decide.experiences(options)`      | `Promise<unknown[]>` | `POST …/optimization/choose-api`     |
-| `decide.recommend(options)`        | `Promise<unknown>`   | `POST …/feeds/{id}/data`             |
-| `optIn()` / `optOut()`             | `void`               | —                                    |
-| `isOptedIn()`                      | `boolean`            | —                                    |
-| `flush()` / `close()`              | `Promise<void>`      | —                                    |
-| `setConfig(patch)`                 | `void`               | —                                    |
-| `config` / `buffered`              | getters              | —                                    |
+| Call                               | Returns            | Endpoint                             |
+| ---------------------------------- | ------------------ | ------------------------------------ |
+| `Intempt.init(config)`             | `IntemptClient`    | —                                    |
+| `track(event, options)`            | `Promise<void>`    | `POST …/track`                       |
+| `trackBatch(events)`               | `Promise<void>`    | `POST …/track`, chunked              |
+| `identify(options)`                | `Promise<void>`    | `POST …/track` (reserved `Identify`) |
+| `group(options)`                   | `Promise<void>`    | `POST …/track` (reserved `Identify`) |
+| `alias(options)`                   | `Promise<void>`    | `POST …/track` (reserved `Identify`) |
+| `consent.grant(options)`           | `Promise<void>`    | `POST …/consents/data`               |
+| `consent.revoke(options)`          | `Promise<void>`    | `POST …/consents/data`               |
+| `ecommerce.productViewed(options)` | `Promise<void>`    | `POST …/track`                       |
+| `ecommerce.addedToCart(options)`   | `Promise<void>`    | `POST …/track`                       |
+| `ecommerce.ordered(options)`       | `Promise<void>`    | `POST …/track`                       |
+| `recommend(options)`               | `Promise<unknown>` | `POST …/feeds/{id}/data`             |
+| `optIn()` / `optOut()`             | `void`             | —                                    |
+| `isOptedIn()`                      | `boolean`          | —                                    |
+| `flush()` / `close()`              | `Promise<void>`    | —                                    |
+| `setConfig(patch)`                 | `void`             | —                                    |
+| `config` / `buffered`              | getters            | —                                    |
 
 Every method rejects on failure. Nothing is swallowed.
 
@@ -219,28 +219,32 @@ seconds the API expects.
 ## Reading decisions
 
 ```ts
-const variants = await intempt.decide.experiences({
-  userId: 'u1',
-  type: 'experiment', // or 'personalization'
-  names: ['checkout_test'], // optional
-  groups: ['homepage'], // optional, and may be combined with names
-});
-
-const feed = await intempt.decide.recommend({
-  userId: 'u1',
-  feedId: '848',
+const feed = await intempt.recommend({
+  userId: 'u1', // or accountId, not both
+  feedId: '5292',
   limit: 5,
   fields: ['id', 'title', 'price'], // product attribute names from your catalog
 });
 ```
 
-`names` and `groups` are both optional and can be combined; the API requires
-only the identifier. Each entry must match `^[a-zA-Z0-9_-]+$`, so no spaces or
-dots. The SDK checks that before sending, which turns a bare API 400 into a
-message naming the offending value.
-
 `fields` are **product attribute names from your catalog schema**, not arbitrary
-keys. Ask for what you intend to read.
+keys. `limit` is optional and falls back to the feed's own setting.
+
+The feeds API identifies an entity by an `{id, type}` pair rather than by
+`userId`, so the SDK maps `userId` to `type: 'user'` and `accountId` to
+`type: 'account'`. That is why the two are mutually exclusive here, unlike on the
+tracking calls.
+
+### Why there are no experiments or personalizations
+
+They resolve a **web experience against a page**, and are served by the browser
+SDK, [intempt-js](https://github.com/intempt/intempt-js). A server has no page to
+modify, so `/optimization/choose-api` is not part of this surface.
+
+The 1.x `chooseExperimentsBy*` and `choosePersonalizationsBy*` helpers throw a
+message pointing at the browser SDK rather than returning an empty array: `[]`
+reads as "no variant assigned" and would silently disable a caller's experiment
+instead of telling them where it moved.
 
 ## Privacy
 
@@ -250,7 +254,7 @@ intempt.isOptedIn(); // false
 intempt.optIn();
 ```
 
-`optOut()` covers all outbound writes. Read-side `decide` calls still work: they
+`optOut()` covers all outbound writes. `recommend()` still works: it
 send an identifier you already hold and return a decision without storing
 anything, so a user who opted out of collection still gets a working experience.
 
@@ -369,8 +373,8 @@ Breaking changes to expect:
 | `optOut()` gates tracking only              | gates every write                         |
 | consent timestamp in milliseconds           | seconds, as the API expects               |
 | `profileId` required                        | any one identifier                        |
-| `choosePersonalizationsByGroups` and 3 more | `decide.experiences({ type })`            |
-| `recommendation(...)`                       | `decide.recommend({ ... })`               |
+| `choosePersonalizationsByGroups` and 3 more | throw — browser SDK only                  |
+| `recommendation(...)`                       | `recommend({ userId, feedId, fields })`   |
 | unbounded resend, no flush                  | buffering is opt-in, with `flush`/`close` |
 
 ## Not in this SDK

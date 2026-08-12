@@ -80,16 +80,15 @@ async function main(): Promise<void> {
     log('consent (grant, revoke)');
 
     // ---- decisions out ----
-    const variants = await intempt.decide.experiences({ userId, type: 'experiment' });
-    log(`decide.experiences -> ${variants.length} choice(s)`);
-
-    const feed = await intempt.decide.recommend({
+    // Experiments and personalizations are browser-side: they resolve a web
+    // experience against a page, so there is nothing for a server to ask for.
+    const feed = await intempt.recommend({
       userId,
-      feedId: process.env.INTEMPT_FEED_ID ?? '1',
+      feedId: process.env.INTEMPT_E2E_FEED_ID ?? '1',
       limit: 3,
       fields: ['id', 'title'],
     });
-    log(`decide.recommend -> ${JSON.stringify(feed).slice(0, 60)}`);
+    log(`recommend -> ${JSON.stringify(feed).slice(0, 60)}`);
 
     // ---- privacy ----
     intempt.optOut();

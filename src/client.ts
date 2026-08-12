@@ -5,12 +5,13 @@ import { Batcher } from './batcher';
 import { Ingest } from './ingest';
 import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
-import { Decide } from './decide';
+import { Recommend } from './recommend';
 import type {
   AliasOptions,
   GroupOptions,
   IdentifyOptions,
   IntemptConfig,
+  RecommendOptions,
   ResolvedConfig,
   TrackEvent,
   TrackOptions,
@@ -26,7 +27,7 @@ export class IntemptClient {
 
   readonly consent: Consent;
   readonly ecommerce: Ecommerce;
-  readonly decide: Decide;
+  readonly #recommend: Recommend;
 
   constructor(config: IntemptConfig) {
     this.#resolved = resolveConfig(config);
@@ -57,7 +58,7 @@ export class IntemptClient {
       isOptedIn,
     });
     this.ecommerce = new Ecommerce(this.#ingest);
-    this.decide = new Decide({ transport: this.#transport, config: configRef });
+    this.#recommend = new Recommend({ transport: this.#transport, config: configRef });
   }
 
   // ---- ingest, lifted to the top level so the common calls stay short ----
@@ -80,6 +81,19 @@ export class IntemptClient {
 
   alias(options: AliasOptions): Promise<void> {
     return this.#ingest.alias(options);
+  }
+
+  // ---- decisions out ----
+
+  /**
+   * Product recommendations from a feed.
+   *
+   * Experiments and personalizations are deliberately absent: they resolve a
+   * web experience against a page, and are served by the browser SDK. A server
+   * has no page to modify.
+   */
+  recommend(options: RecommendOptions): Promise<unknown> {
+    return this.#recommend.fetch(options);
   }
 
   // ---- privacy ----

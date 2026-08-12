@@ -34,10 +34,6 @@ const USER_ID = env('INTEMPT_E2E_USER_ID');
 const ACCOUNT_ID = env('INTEMPT_E2E_ACCOUNT_ID');
 const FEED_ID = env('INTEMPT_E2E_FEED_ID', 'INTEMPT_FEED_ID');
 const PRODUCT_ID = env('INTEMPT_E2E_PRODUCT_ID');
-const EXPERIMENT_NAME = env('INTEMPT_E2E_EXPERIMENT_NAME');
-const EXPERIMENT_GROUP = env('INTEMPT_E2E_EXPERIMENT_GROUP');
-const PERSONALIZATION_NAME = env('INTEMPT_E2E_PERSONALIZATION_NAME');
-const PERSONALIZATION_GROUP = env('INTEMPT_E2E_PERSONALIZATION_GROUP');
 
 const missingRequired = [
   ['INTEMPT_ORGANIZATION_ID', ORG],
@@ -57,6 +53,8 @@ if (missingRequired.length > 0) {
 // A stable profile keeps runs idempotent and lets results be eyeballed in the
 // console. Minting one per run leaves a trail of junk profiles.
 const userId = USER_ID ?? `sdk-e2e-${Date.now()}`;
+// group() provisions the account, so a fixed id is enough and keeps runs idempotent.
+const accountId = ACCOUNT_ID ?? 'sdk-e2e-account';
 
 const clientConfig = {
   org: ORG,
@@ -71,13 +69,9 @@ const intempt = Intempt.init(clientConfig);
 // --- readiness --------------------------------------------------------------
 const inputs = [
   ['stable userId', USER_ID, 'identify, track, group, alias, consent'],
-  ['accountId', ACCOUNT_ID, 'group'],
-  ['feed id', FEED_ID, 'decide.recommend'],
+  ['accountId (optional)', ACCOUNT_ID, 'group — created automatically if absent'],
+  ['feed id', FEED_ID, 'recommend'],
   ['productId', PRODUCT_ID, 'ecommerce.*'],
-  ['experiment name', EXPERIMENT_NAME, 'decide.experiences by name'],
-  ['experiment group', EXPERIMENT_GROUP, 'decide.experiences by group'],
-  ['personalization name', PERSONALIZATION_NAME, 'decide.experiences by name'],
-  ['personalization group', PERSONALIZATION_GROUP, 'decide.experiences by group'],
 ];
 
 console.log(`\nIntempt SDK contract test — ${HOST}`);
@@ -141,13 +135,11 @@ await step('trackBatch (2 events, 1 request)', () =>
   ]),
 );
 
-if (ACCOUNT_ID) {
-  await step('group (existing account)', () =>
-    intempt.group({ userId, accountId: ACCOUNT_ID }),
-  );
-} else {
-  skip('group', 'INTEMPT_E2E_ACCOUNT_ID not set — account must already exist');
-}
+// group() creates the account if it does not exist, so no pre-existing account
+// is required. A fixed id keeps runs idempotent.
+await step('group (creates the account if absent)', () =>
+  intempt.group({ userId, accountId }),
+);
 
 await step('alias', () => intempt.alias({ userId, previousUserId: `${userId}-anon` }));
 
@@ -186,54 +178,12 @@ await step('consent via 1.x shim path (sourceId not rounded)', () =>
   intempt.consent.grant({ profileId: userId, category: 'sdk-e2e-profile' }),
 );
 
-// --- reads ------------------------------------------------------------------
-// Unfiltered: proves the endpoint answers. It cannot prove variant resolution,
-// because an empty choices array is a valid response for a project with nothing
-// published.
-await step('decide.experiences (unfiltered)', async () => {
-  const c = await intempt.decide.experiences({ userId, type: 'experiment' });
-  return `${c.length} choice(s)`;
-});
-await step('decide.experiences (personalization, unfiltered)', async () => {
-  const c = await intempt.decide.experiences({ userId, type: 'personalization' });
-  return `${c.length} choice(s)`;
-});
-
-for (const [label, type, name, group] of [
-  ['experiment', 'experiment', EXPERIMENT_NAME, EXPERIMENT_GROUP],
-  ['personalization', 'personalization', PERSONALIZATION_NAME, PERSONALIZATION_GROUP],
-]) {
-  if (name) {
-    // Named lookup is the only form that can prove resolution: a published
-    // variant must come back non-empty.
-    await step(`decide.experiences by ${label} name`, async () => {
-      const c = await intempt.decide.experiences({ userId, type, names: [name] });
-      if (c.length === 0)
-        throw new Error(`no choices returned for published ${label} "${name}"`);
-      return `${c.length} choice(s): ${JSON.stringify(c).slice(0, 90)}`;
-    });
-  } else {
-    skip(
-      `decide.experiences by ${label} name`,
-      `INTEMPT_E2E_${label.toUpperCase()}_NAME not set`,
-    );
-  }
-  if (group) {
-    await step(`decide.experiences by ${label} group`, async () => {
-      const c = await intempt.decide.experiences({ userId, type, groups: [group] });
-      return `${c.length} choice(s)`;
-    });
-  } else {
-    skip(
-      `decide.experiences by ${label} group`,
-      `INTEMPT_E2E_${label.toUpperCase()}_GROUP not set`,
-    );
-  }
-}
-
+// --- reads ---------------------------------------------------------------------
+// Experiments and personalizations are absent by design: they resolve a web
+// experience against a page and are served by the browser SDK.
 if (FEED_ID) {
-  await step('decide.recommend', async () => {
-    const feed = await intempt.decide.recommend({
+  await step('recommend (feeds identify by {id, type})', async () => {
+    const feed = await intempt.recommend({
       userId,
       feedId: FEED_ID,
       limit: 3,
@@ -244,7 +194,7 @@ if (FEED_ID) {
     return JSON.stringify(feed).slice(0, 110);
   });
 } else {
-  skip('decide.recommend', 'INTEMPT_E2E_FEED_ID not set — feed must exist');
+  skip('recommend', 'INTEMPT_E2E_FEED_ID not set — feed must exist');
 }
 
 // --- buffered mode ----------------------------------------------------------

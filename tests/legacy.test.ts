@@ -3,7 +3,6 @@ import { SDK } from '../src';
 import {
   API_KEY,
   BASIC,
-  CHOOSE_PATH,
   CONSENT_PATH,
   HOST,
   ORG,
@@ -156,34 +155,36 @@ describe('legacy SDK: forwarding', () => {
     );
   });
 
-  it('maps all four choose helpers onto one endpoint', async () => {
-    const bodies: Record<string, any>[] = [];
+  it('refuses the four choose helpers, which are browser-only', () => {
+    // Returning [] would read as "no variant assigned" and silently disable a
+    // caller's experiment. Throwing tells them where it went.
+    const sdk = legacy();
+    for (const method of [
+      'chooseExperimentsByGroups',
+      'chooseExperimentsByNames',
+      'choosePersonalizationsByGroups',
+      'choosePersonalizationsByNames',
+    ] as const) {
+      expect(() => sdk[method]()).toThrow(/not available in a server SDK/);
+      expect(() => sdk[method]()).toThrow(/intempt-js/);
+    }
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('maps recommendation onto an id/type feed lookup', async () => {
+    // 1.x passed a profileId, which the feeds API never read.
+    const bodies: Record<string, unknown>[] = [];
     nock(ORIGIN)
-      .post(CHOOSE_PATH, (body: Record<string, any>) => {
+      .post(feedPath('848'), (body: Record<string, unknown>) => {
         bodies.push(body);
         return true;
       })
-      .times(4)
-      .reply(200, { choices: [] });
+      .reply(200, { items: [] });
 
-    const sdk = legacy();
-    await sdk.chooseExperimentsByGroups('p1', ['g1']);
-    await sdk.chooseExperimentsByNames('p1', ['n1']);
-    await sdk.choosePersonalizationsByGroups('p1', ['g2']);
-    await sdk.choosePersonalizationsByNames('p1', ['n2']);
-
-    expect(bodies.map((b) => b.optimizationType)).toEqual([
-      'experiment',
-      'experiment',
-      'personalization',
-      'personalization',
-    ]);
-  });
-
-  it('maps recommendation onto decide.recommend', async () => {
-    nock(ORIGIN).post(feedPath('848')).reply(200, { items: [] });
     const result = await legacy().recommendation('p1', '848', 5, ['id', 'price']);
+
     expect(result).toEqual({ items: [] });
+    expect(bodies[0]).toMatchObject({ id: 'p1', type: 'user', limit: 5 });
   });
 
   it('keeps optIn and optOut working, now covering consent too', async () => {
@@ -223,7 +224,7 @@ describe('legacy SDK: deprecation', () => {
 
   it('exposes the v2 client for incremental migration', () => {
     const sdk = legacy();
-    expect(typeof sdk.v2.decide.experiences).toBe('function');
+    expect(typeof sdk.v2.recommend).toBe('function');
     expect(typeof sdk.v2.flush).toBe('function');
   });
 });

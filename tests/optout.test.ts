@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CHOOSE_PATH,
   CONSENT_PATH,
   ORIGIN,
   TRACK_PATH,
@@ -72,20 +71,17 @@ describe('optOut gates every write path', () => {
 });
 
 describe('optOut does not gate reads', () => {
-  it('leaves decide.experiences and decide.recommend working', async () => {
-    // These take an identifier the caller already holds and return a decision
-    // rather than storing anything, so suppressing them would break
-    // personalization for a user who only opted out of collection.
-    const choose = nock(ORIGIN).post(CHOOSE_PATH).reply(200, { choices: [] });
+  it('leaves recommend working', async () => {
+    // It takes an identifier the caller already holds and returns a decision
+    // rather than storing anything, so suppressing it would break
+    // recommendations for a user who only opted out of collection.
     const feed = nock(ORIGIN).post(feedPath('42')).reply(200, { items: [] });
 
     const c = client();
     c.optOut();
 
-    await c.decide.experiences({ userId: 'u1', type: 'experiment' });
-    await c.decide.recommend({ userId: 'u1', feedId: '42', limit: 3, fields: ['id'] });
+    await c.recommend({ userId: 'u1', feedId: '42', limit: 3, fields: ['id'] });
 
-    choose.done();
     feed.done();
   });
 });

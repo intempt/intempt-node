@@ -24,9 +24,10 @@ const PUBLIC_METHODS = [
   'flush',
   'close',
   'setConfig',
+  'recommend',
 ];
 const PUBLIC_GETTERS = ['config', 'buffered'];
-const PUBLIC_NAMESPACES = ['consent', 'ecommerce', 'decide'];
+const PUBLIC_NAMESPACES = ['consent', 'ecommerce'];
 
 function prototypeNames(value: object): string[] {
   return Object.getOwnPropertyNames(Object.getPrototypeOf(value))
@@ -113,10 +114,10 @@ describe('namespaces expose no internals', () => {
     expect(Object.keys(c.ecommerce)).toEqual([]);
   });
 
-  it('decide exposes only experiences and recommend', () => {
-    expect(prototypeNames(c.decide)).toEqual(['experiences', 'recommend']);
-    expect((c.decide as unknown as Record<string, unknown>).deps).toBeUndefined();
-    expect(Object.keys(c.decide)).toEqual([]);
+  it('exposes no decide namespace: experiences moved out, recommend is top level', () => {
+    const escape = c as unknown as Record<string, unknown>;
+    expect(escape.decide).toBeUndefined();
+    expect(typeof c.recommend).toBe('function');
   });
 });
 

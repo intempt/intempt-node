@@ -258,31 +258,12 @@ describe('over a real socket: failures', () => {
 });
 
 describe('over a real socket: reads', () => {
-  it('parses a real choose-api response body', async () => {
-    server.reset();
-    server.responses.push({
-      status: 200,
-      body: JSON.stringify({
-        choices: [{ name: 'variant-b', payload: { color: 'blue' } }],
-      }),
-    });
-
-    const c = realClient();
-    const choices = await c.decide.experiences({ userId: 'u1', type: 'experiment' });
-
-    expect(choices).toEqual([{ name: 'variant-b', payload: { color: 'blue' } }]);
-    expect(server.requests[0]!.url).toBe(
-      `/v1/${ORG}/projects/${PROJECT}/optimization/choose-api`,
-    );
-    await c.close();
-  });
-
-  it('parses a real feed response body', async () => {
+  it('parses a real feed response body and sends an id/type pair', async () => {
     server.reset();
     server.responses.push({ status: 200, body: JSON.stringify({ items: [{ id: 7 }] }) });
 
     const c = realClient();
-    const feed = await c.decide.recommend({
+    const feed = await c.recommend({
       userId: 'u1',
       feedId: '848',
       limit: 1,
@@ -290,6 +271,8 @@ describe('over a real socket: reads', () => {
     });
 
     expect(feed).toEqual({ items: [{ id: 7 }] });
+    expect(server.requests[0]!.url).toBe(`/v1/${ORG}/projects/${PROJECT}/feeds/848/data`);
+    expect(server.requests[0]!.body).toMatchObject({ id: 'u1', type: 'user' });
     await c.close();
   });
 });
