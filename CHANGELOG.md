@@ -158,6 +158,10 @@ data in, decisions out: no admin or console operations.
 - Identity merge (`/users/merge`, `/accounts/merge`) is deliberately not
   exposed. It is irreversible, has no inverse endpoint, and takes internal
   numeric IDs that this SDK has no way to resolve. Use `alias()`.
+- `recommend()` returning an empty `products` array is normal: it means the user
+  has no recommendations right now. A feed id that does not exist in the project
+  answers `400 "Name is null"`, so a 200 is itself the proof that the feed
+  resolved. The contract test asserts both, the second as a negative control.
 
 ## [1.0.1] — 2024-11-13
 

@@ -152,19 +152,6 @@ function skip(name, why) {
   console.log(`  SKIP  ${name.padEnd(46)}         ${why}`);
 }
 
-/**
- * A 2xx that cannot distinguish success from silence.
- *
- * The feeds endpoint answers 200 with an empty array both when the feed is
- * missing and when it exists with nothing to return — AbstractFeedDataService
- * does `if (feed == null) return new ArrayList<>()`. Marking that PASS would be a
- * false green, so it is counted as not verified.
- */
-function inconclusive(name, ms, why) {
-  results.push({ name, state: 'WARN', ms, note: why });
-  console.log(`  WARN  ${name.padEnd(46)} ${String(ms).padStart(5)}ms  ${why}`);
-}
-
 // --- writes -----------------------------------------------------------------
 // A 401 here means the Basic auth header is rejected, which is the single most
 // important thing this test exists to prove.
@@ -234,60 +221,39 @@ await step('consent via 1.x shim path (sourceId not rounded)', () =>
 // Experiments and personalizations are absent by design: they resolve a web
 // experience against a page and are served by the browser SDK.
 if (FEED_ID) {
-  const label = 'recommend (feeds identify by {id, type})';
   const fields = (process.env.INTEMPT_E2E_FEED_FIELDS ?? 'id')
     .split(',')
     .map((f) => f.trim());
 
-  // Feed contents are eventually consistent: the ecommerce events above are what
-  // a recently-viewed style algorithm feeds on, and they have to reach the graph
-  // first. Asking once, a second after writing them, is a race — it returned a
-  // product in one run and an empty array in the next. Poll instead.
-  const attempts = 6;
-  const gapMs = 2_000;
-  const started = Date.now();
-  let feed;
-  let rows = [];
-  let failure;
+  // A 200 is the proof, not a non-empty array. A feed id that does not exist in
+  // the project answers 400 "Name is null" — verified with three different bogus
+  // ids — so reaching 200 means the feed resolved and the {id, type} body was
+  // accepted. An empty products array only means this user has no
+  // recommendations right now, which is project state rather than SDK behaviour.
+  await step('recommend (real feed resolves)', async () => {
+    const feed = await intempt.recommend({ userId, feedId: FEED_ID, limit: 3, fields });
+    const rows = Object.values(feed ?? {}).find(Array.isArray) ?? [];
+    return rows.length > 0
+      ? `${rows.length} product(s): ${JSON.stringify(rows).slice(0, 60)}`
+      : '200, feed resolved, no products for this user right now';
+  });
 
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+  // Negative control. Without it the 200 above could be vacuous.
+  await step('recommend (unknown feed is rejected)', async () => {
+    const bogus = '90000000';
     try {
-      feed = await intempt.recommend({ userId, feedId: FEED_ID, limit: 3, fields });
-      rows = Object.values(feed ?? {}).find(Array.isArray) ?? [];
-      if (rows.length > 0) break;
+      await intempt.recommend({ userId, feedId: bogus, limit: 3, fields });
     } catch (error) {
-      failure = error;
-      break;
+      if (error instanceof IntemptApiError && error.status === 400) {
+        return `feed ${bogus} -> 400 as expected, so the 200 above is meaningful`;
+      }
+      throw error;
     }
-    if (attempt < attempts) await new Promise((r) => setTimeout(r, gapMs));
-  }
-
-  const ms = Date.now() - started;
-  if (failure) {
-    const status =
-      failure instanceof IntemptApiError ? (failure.status ?? 'transport') : 'error';
-    const body =
-      failure instanceof IntemptApiError
-        ? (failure.body ?? '').slice(0, 160)
-        : String(failure);
-    results.push({ name: label, state: 'FAIL', ms, note: `${status}: ${body}` });
-    console.error(
-      `  FAIL  ${label.padEnd(46)} ${String(ms).padStart(5)}ms  ${status} ${body}`,
+    throw new Error(
+      `feed ${bogus} returned 200; the server is not resolving feed ids, which ` +
+        'makes the positive case above prove nothing',
     );
-  } else if (rows.length > 0) {
-    const note = `${rows.length} product(s): ${JSON.stringify(rows).slice(0, 70)}`;
-    results.push({ name: label, state: 'PASS', ms, note });
-    console.log(`  PASS  ${label.padEnd(46)} ${String(ms).padStart(5)}ms  ${note}`);
-  } else {
-    inconclusive(
-      label,
-      ms,
-      `200 but still empty after ${attempts} attempts over ${(attempts * gapMs) / 1000}s ` +
-        `${JSON.stringify(feed)} — a missing feed answers exactly the same way, so this ` +
-        `proves nothing. Confirm feed ${FEED_ID} exists in this project and has an ` +
-        'algorithm configured.',
-    );
-  }
+  });
 } else {
   skip('recommend', 'INTEMPT_E2E_FEED_ID not set — feed must exist');
 }
@@ -312,7 +278,6 @@ await intempt.close();
 const passed = results.filter((r) => r.state === 'PASS');
 const failed = results.filter((r) => r.state === 'FAIL');
 const skipped = results.filter((r) => r.state === 'SKIP');
-const warned = results.filter((r) => r.state === 'WARN');
 
 console.log('\n  per-method results');
 console.log('  ' + '-'.repeat(76));
@@ -323,11 +288,10 @@ for (const r of results) {
 }
 console.log('  ' + '-'.repeat(76));
 console.log(
-  `  ${passed.length} passed · ${failed.length} failed · ` +
-    `${warned.length} inconclusive · ${skipped.length} skipped`,
+  `  ${passed.length} passed · ${failed.length} failed · ${skipped.length} skipped`,
 );
 
-const unverified = [...warned, ...skipped];
+const unverified = skipped;
 if (unverified.length > 0) {
   console.log(`\n  NOT verified against the API:`);
   for (const r of unverified) console.log(`    - ${r.name}\n        ${r.note}`);
