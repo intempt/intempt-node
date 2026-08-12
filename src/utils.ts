@@ -61,9 +61,39 @@ export function chunk<T>(arr: readonly T[], size: number): T[][] {
  * it, but it is not part of the public `Identifiers` type.
  */
 export function assertIdentifier(ids: LegacyIdentifiers, method: string): void {
-  if (!ids.userId && !ids.accountId && !ids.profileId) {
+  // Trimmed: a whitespace-only id is truthy in JS but meaningless as an
+  // identity, and it would key a profile on " " server-side.
+  const present = (value: string | undefined): boolean =>
+    typeof value === 'string' && value.trim() !== '';
+  if (!present(ids.userId) && !present(ids.accountId) && !present(ids.profileId)) {
     throw new TypeError(`${method}: one of userId or accountId is required`);
   }
+}
+
+/**
+ * Wraps a logger so a broken one cannot take down a request.
+ *
+ * The logger is caller-supplied. If its `debug` throws, and the SDK calls it on
+ * the path to sending an event, the event is lost to an unrelated bug in someone
+ * else's logging setup. Telemetry must not be that fragile.
+ */
+export function guardLogger(logger: Logger): Logger {
+  const guard =
+    (level: keyof Logger) =>
+    (...args: unknown[]): void => {
+      try {
+        logger[level](...args);
+      } catch {
+        // Nothing useful to do: reporting a logging failure needs a logger.
+      }
+    };
+  return {
+    trace: guard('trace'),
+    debug: guard('debug'),
+    info: guard('info'),
+    warn: guard('warn'),
+    error: guard('error'),
+  };
 }
 
 /** Drops keys whose value is `undefined` so they never reach the wire. */

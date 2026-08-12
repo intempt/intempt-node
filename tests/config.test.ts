@@ -66,14 +66,41 @@ describe('config: defaults', () => {
     }
   });
 
-  it('defaults the logger to console and validates a custom one', () => {
-    expect(Intempt.init(base).config.logger).toBe(console);
+  it('validates a custom logger and forwards to it', () => {
+    // config.logger is a guard around the caller's logger, not the same object:
+    // a logger that throws must not be able to fail a request. So assert
+    // forwarding rather than identity.
+    const seen: unknown[][] = [];
+    const custom = {
+      trace: () => {},
+      debug: () => {},
+      info: () => {},
+      warn: (...a: unknown[]) => seen.push(a),
+      error: () => {},
+    };
+    Intempt.init({ ...base, logger: custom }).config.logger.warn('hello');
+    expect(seen).toEqual([['hello']]);
+
     expect(() => Intempt.init({ ...base, logger: {} as never })).toThrow(
       /missing "trace"/,
     );
     expect(() => Intempt.init({ ...base, logger: 'nope' as never })).toThrow(
       /must be a valid Logger/,
     );
+  });
+
+  it('swallows a logger that throws instead of failing the call', () => {
+    const exploding = {
+      trace: () => {},
+      debug: () => {},
+      info: () => {},
+      warn: () => {
+        throw new Error('logger exploded');
+      },
+      error: () => {},
+    };
+    const c = Intempt.init({ ...base, logger: exploding });
+    expect(() => c.config.logger.warn('boom')).not.toThrow();
   });
 });
 
@@ -142,7 +169,6 @@ describe('config: setConfig', () => {
 
     expect(c.config.timeout).toBe(30_000);
     expect(c.config.debug).toBe(true);
-    expect(c.config.logger).toBe(logger);
 
     nock(ORIGIN).post(TRACK_PATH).reply(200, '');
     await c.track('purchase', { userId: 'u1' });

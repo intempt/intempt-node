@@ -218,7 +218,9 @@ describe('legacy SDK: deprecation', () => {
     // reaches a logger rather than the count, which is process-global.
     const sdk = new SDK(ORG, PROJECT, API_KEY, SOURCE);
     sdk.v2.setConfig({ logger });
-    expect(sdk.v2.config.logger).toBe(logger);
+    // The stored logger is a guard around this one, so assert it forwards.
+    sdk.v2.config.logger.warn('forwarded');
+    expect(warnings).toContainEqual(['forwarded']);
     await sdk.close();
   });
 

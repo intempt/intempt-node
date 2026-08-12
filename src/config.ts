@@ -11,7 +11,7 @@ import type {
   ResolvedBatchOptions,
   ResolvedConfig,
 } from './types';
-import { assertLogger } from './utils';
+import { assertLogger, guardLogger } from './utils';
 
 const DEFAULT_CONFIG = {
   host: 'api.intempt.com',
@@ -79,8 +79,9 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     throw new TypeError('Intempt.init: "sourceId" must not be empty when provided');
   }
 
-  const logger = config.logger ?? console;
-  assertLogger(logger);
+  const rawLogger = config.logger ?? console;
+  assertLogger(rawLogger);
+  const logger = guardLogger(rawLogger);
 
   const protocol = config.protocol ?? DEFAULT_CONFIG.protocol;
   if (protocol !== 'http' && protocol !== 'https') {
@@ -139,7 +140,7 @@ export function mergeConfig(
 
   if (patch.logger !== undefined) {
     assertLogger(patch.logger);
-    next.logger = patch.logger;
+    next.logger = guardLogger(patch.logger);
   }
   if (patch.host !== undefined) {
     const { host, port } = splitHost(patch.host);

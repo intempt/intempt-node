@@ -80,11 +80,21 @@ data in, decisions out: no admin or console operations.
 - `agent` to supply your own `https.Agent` for mutual TLS, a private CA, or an
   explicit proxy policy. When set it is used verbatim, the SDK creates none of its
   own, and `close()` does not destroy it.
+- **A request always settles.** A `close` guard rejects if a request ends without
+  emitting either a response or an error, so a caller can never be left awaiting a
+  promise that resolves nowhere. Real dead-socket cases — destroyed before the
+  response, destroyed mid-body, closed with zero bytes — are covered over an actual
+  socket in the integration suite.
+- **A logger that throws cannot fail a request.** The caller's logger is wrapped,
+  so an unrelated bug in someone's logging setup no longer loses an event.
+- Whitespace-only identifiers are rejected. `userId: '   '` is truthy in
+  JavaScript and would have keyed a profile on a blank string.
 - `IntemptApiError` with `status`, `body`, `retryAfterMs` and `retryable`.
-- 210 tests with an 80% coverage gate, in four layers: `nock` unit tests, a
+- 232 tests with an 80% coverage gate, in five layers: `nock` unit tests, a
   real-socket integration suite on loopback, a consumer-install check that packs
-  the tarball and runs a sample app against it, and an opt-in contract test
-  against staging.
+  the tarball and runs a sample app against it, an adversarial suite written to
+  break the SDK rather than confirm it, and an opt-in contract test against a real
+  project.
 - `examples/basic`, a runnable sample app covering every method. It installs the
   packed tarball rather than the source tree, and typechecks against the shipped
   `.d.ts` under `exactOptionalPropertyTypes` with `skipLibCheck` off — stricter

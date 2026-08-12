@@ -134,7 +134,23 @@ export class Transport {
       options.port = this.#config.port;
     }
 
-    return new Promise<TransportResponse<T>>((resolve, reject) => {
+    return new Promise<TransportResponse<T>>((resolveRaw, rejectRaw) => {
+      // A request can end without emitting either `response` or `error`: a socket
+      // destroyed elsewhere, or an error value that is not an Error instance.
+      // Without this guard the promise never settles and the caller waits
+      // forever, which is worse than any failure we could report.
+      let settled = false;
+      const resolve = (value: TransportResponse<T>): void => {
+        if (settled) return;
+        settled = true;
+        resolveRaw(value);
+      };
+      const reject = (error: unknown): void => {
+        if (settled) return;
+        settled = true;
+        rejectRaw(error);
+      };
+
       const request = requestLib.request(options, (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -185,6 +201,17 @@ export class Transport {
         reject(
           new IntemptApiError(`Intempt API request failed: ${message}`, { cause: error }),
         );
+      });
+
+      // Last resort. `close` always fires, so if nothing settled the promise by
+      // now, nothing ever will.
+      request.on('close', () => {
+        // Deferred by one tick: `close` can be emitted before a queued response
+        // `end` handler runs. If the response did complete, `settled` is already
+        // true and this is a no-op.
+        setImmediate(() => {
+          reject(new IntemptApiError('Intempt API request closed without a response'));
+        });
       });
 
       request.write(payload);

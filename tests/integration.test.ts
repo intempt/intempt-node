@@ -257,6 +257,58 @@ describe('over a real socket: failures', () => {
   });
 });
 
+describe('over a real socket: a dead connection always settles the promise', () => {
+  // The worst failure an SDK can have is a promise that never settles: the
+  // caller waits forever with no error to act on. These drive real sockets to
+  // their death in three different ways and assert that each one is reported.
+  async function outcomeAgainst(
+    handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+  ): Promise<string> {
+    const srv = http.createServer(handler);
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+    const { port } = srv.address() as AddressInfo;
+    const c = Intempt.init({
+      org: ORG,
+      project: PROJECT,
+      apiKey: API_KEY,
+      sourceId: SOURCE,
+      host: `127.0.0.1:${port}`,
+      protocol: 'http',
+      timeout: 30_000,
+      logger: testLogger(),
+    });
+    const outcome = await Promise.race([
+      c.track('probe', { userId: 'u1' }).then(
+        () => 'resolved',
+        () => 'rejected',
+      ),
+      new Promise<string>((r) => setTimeout(() => r('NEVER SETTLED'), 2_000)),
+    ]);
+    await c.close();
+    srv.closeAllConnections();
+    await new Promise<void>((r) => srv.close(() => r()));
+    return outcome;
+  }
+
+  it('rejects when the socket dies before any response', async () => {
+    expect(await outcomeAgainst((req) => req.socket.destroy())).toBe('rejected');
+  });
+
+  it('rejects when the socket dies after headers, mid-body', async () => {
+    expect(
+      await outcomeAgainst((_req, res) => {
+        res.writeHead(200, { 'Content-Length': '999' });
+        res.write('{');
+        res.socket?.destroy();
+      }),
+    ).toBe('rejected');
+  });
+
+  it('rejects when the server closes with zero bytes sent', async () => {
+    expect(await outcomeAgainst((req) => req.socket.end())).toBe('rejected');
+  });
+});
+
 describe('over a real socket: reads', () => {
   it('parses a real feed response body and sends an id/type pair', async () => {
     server.reset();
