@@ -53,9 +53,9 @@ async function step(name, fn) {
 }
 
 console.log(`Intempt SDK contract test against ${intempt.config.host}`);
-console.log(
-  `  org=${intempt.config.org} project=${intempt.config.project} user=${userId}\n`,
-);
+// Org, project and source id are intentionally not printed: on a public
+// repository the Actions log is world-readable.
+console.log(`  user=${userId}\n`);
 
 // A 401/403 here means the Basic auth header is not accepted, which is the single
 // most important thing this test exists to prove.
@@ -93,6 +93,12 @@ await step('consent.grant (proves epoch-seconds timestamps)', () =>
 );
 await step('consent.revoke', () =>
   intempt.consent.revoke({ userId, category: 'sdk-e2e' }),
+);
+// Exercises sourceId serialisation. A real source id is 19 digits, past
+// Number.MAX_SAFE_INTEGER, so a Number() coercion anywhere in this path would
+// address a different source or be rejected outright.
+await step('consent by profileId (proves sourceId is not rounded)', () =>
+  intempt.consent.grant({ profileId: userId, category: 'sdk-e2e-profile' }),
 );
 await step('decide.experiences', async () => {
   const choices = await intempt.decide.experiences({ userId, type: 'experiment' });

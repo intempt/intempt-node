@@ -91,6 +91,13 @@ data in, decisions out: no admin or console operations.
   shipped `.d.ts` under `exactOptionalPropertyTypes` with `skipLibCheck` off —
   stricter than the library's own build.
 - `npm run verify:consumer` and `npm run test:e2e`.
+- **Snowflake IDs are no longer coerced through `Number()`.** `consent` sent
+  `sourceId` and `masterId` as JS numbers. A real source id such as
+  `1841503112918048768` is 19 digits, past `Number.MAX_SAFE_INTEGER`, so it was
+  silently rounded to `1841503112918048800` — a different source. Both fields are
+  declared server-side with `LongFromStringDeserializer`, so a string is the
+  correct and intended representation. Regression-tested with the real 19-digit
+  id in the unit, integration and contract suites.
 - `exports` now includes `./package.json`. Without it,
   `require('intempt/package.json')` was a hard error, which breaks bundlers and
   version-reporting tools. Found by the consumer-install check; the unit suite

@@ -11,7 +11,8 @@ import type { Logger } from '../src';
 // rather than the SDK. This file must stay nock-free to mean anything.
 const ORG = 'acme';
 const PROJECT = 'web';
-const SOURCE = '684508596718616576';
+// A real 19-digit snowflake id, past Number.MAX_SAFE_INTEGER.
+const SOURCE = '1841503112918048768';
 const API_KEY = 'pfx0123456789abcdef.sec0123456789abcdef';
 const BASIC = Buffer.from('pfx0123456789abcdef:sec0123456789abcdef').toString('base64');
 
@@ -326,6 +327,12 @@ describe('over a real socket: consent wire format', () => {
     expect(ts * 1000).toBeLessThan(2_216_872_268_000); // UP_TIMESTAMP_LIMIT
     expect(body.action).toBe('accept');
     expect(body.source).toBe('NodeJs tracker');
+
+    // Over a real socket, the JSON must carry the 19-digit source id unrounded.
+    server.reset();
+    await c.consent.grant({ profileId: 'p-real' });
+    const raw = JSON.stringify(server.requests[0]!.body);
+    expect(raw).toContain(`"sourceId":"${SOURCE}"`);
 
     await c.close();
   });

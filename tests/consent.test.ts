@@ -65,7 +65,28 @@ describe('consent: identifiers', () => {
   it('accepts masterId and coerces it to a number', async () => {
     const bodies = capture();
     await client({ sourceId: undefined }).consent.grant({ masterId: '123' });
-    expect(bodies[0]!.masterId).toBe(123);
+    expect(bodies[0]!.masterId).toBe('123');
+  });
+
+  it('never rounds a 19-digit snowflake sourceId through Number()', async () => {
+    // A real source id: 19 digits, past Number.MAX_SAFE_INTEGER. Number() would
+    // turn it into ...048800 and address a different source. The API declares
+    // sourceId with LongFromStringDeserializer, so a string is correct.
+    const realSourceId = '1841503112918048768';
+    const bodies = capture();
+
+    await client({ sourceId: realSourceId }).consent.grant({ profileId: 'p1' });
+
+    expect(bodies[0]!.sourceId).toBe(realSourceId);
+    expect(String(bodies[0]!.sourceId)).not.toBe('1841503112918048800');
+  });
+
+  it('never rounds a large masterId either', async () => {
+    const bodies = capture();
+    await client({ sourceId: undefined }).consent.grant({
+      masterId: '9007199254740993', // MAX_SAFE_INTEGER + 2
+    });
+    expect(bodies[0]!.masterId).toBe('9007199254740993');
   });
 
   it('sends sourceId when identifying by profileId', async () => {
@@ -74,7 +95,7 @@ describe('consent: identifiers', () => {
     await client().consent.grant({ profileId: 'p1' });
 
     expect(bodies[0]!.profileId).toBe('p1');
-    expect(bodies[0]!.sourceId).toBe(Number(SOURCE));
+    expect(bodies[0]!.sourceId).toBe(SOURCE);
   });
 
   it('refuses a profileId consent when no sourceId is configured', async () => {

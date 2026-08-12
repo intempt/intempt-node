@@ -146,7 +146,7 @@ describe('legacy SDK: forwarding', () => {
 
     expect(bodies.map((b) => b.action)).toEqual(['accept', 'reject']);
     expect(bodies[1]!.category).toBe('marketing');
-    expect(bodies[1]!.sourceId).toBe(Number(SOURCE));
+    expect(bodies[1]!.sourceId).toBe(SOURCE);
   });
 
   it('rejects an unknown consent action instead of warning and resolving', async () => {

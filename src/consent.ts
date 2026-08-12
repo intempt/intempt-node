@@ -72,8 +72,13 @@ export class Consent {
       category: options.category,
       profileId,
       userId,
-      masterId: masterId === undefined ? undefined : Number(masterId),
-      sourceId: profileId && sourceId ? Number(sourceId) : undefined,
+      // Sent as strings, never coerced with Number(). These are snowflake IDs:
+      // a real sourceId such as 1841503112918048768 is 19 digits, well past
+      // Number.MAX_SAFE_INTEGER, so Number() would silently round it to
+      // 1841503112918048800 and address the wrong source. The API declares both
+      // fields with LongFromStringDeserializer for exactly this reason.
+      masterId: masterId === undefined ? undefined : String(masterId),
+      sourceId: profileId && sourceId ? String(sourceId) : undefined,
       validUntil: options.validUntil ?? 'unlimited',
       source: LIB_SOURCE,
       email: options.email,

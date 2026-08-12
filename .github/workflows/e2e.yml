@@ -14,7 +14,7 @@
 #   INTEMPT_E2E_PROJECT
 #   INTEMPT_E2E_SOURCE_ID
 # Optional:
-#   INTEMPT_E2E_HOST       defaults to api.staging.intempt.com
+#   INTEMPT_E2E_HOST       defaults to api.staging.intempt.com if unset
 #   INTEMPT_E2E_FEED_ID
 name: E2E (staging)
 
@@ -29,7 +29,6 @@ permissions:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    environment: staging
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
