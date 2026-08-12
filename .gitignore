@@ -2,7 +2,10 @@ node_modules/
 dist/
 coverage/
 pack.json
+*.tgz
 .env
 .env.*
 .idea/
 .DS_Store
+examples/*/node_modules/
+examples/*/package-lock.json

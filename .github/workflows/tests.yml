@@ -39,6 +39,14 @@ jobs:
 
       - run: npm run build
 
+      # Proves the published artifact works for a consumer: packs the tarball,
+      # installs it into examples/basic, typechecks the sample app against the
+      # shipped .d.ts under stricter settings than the library uses, then runs it
+      # end to end against a local mock API. The unit suite cannot catch a broken
+      # `exports` map or a missing `files` entry, because it imports from src/.
+      - name: Verify consumer install and sample app
+        run: npm run verify:consumer
+
       # The 1.x tarball shipped tests/ (with a live API key) and src/.
       # Fail the build if anything outside dist/ and the docs sneaks back in.
       - name: Verify package contents

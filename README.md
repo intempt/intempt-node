@@ -308,14 +308,37 @@ Breaking changes to expect:
 
 ```bash
 npm ci
-npm run typecheck
-npm test
+npm run check-format     # prettier
+npm run lint             # oxlint
+npm run typecheck        # tsc --noEmit
+npm test                 # vitest, offline
 npm run test:coverage
 npm run build
+npm run verify:consumer  # pack, install, typecheck and run the sample app
 ```
 
-Tests never touch the network; `nock` intercepts everything and unmocked
-requests fail.
+Four layers of verification, in increasing fidelity:
+
+| Layer                       | What it proves                                                                                                                                                    | Network        |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `tests/*.test.ts` (nock)    | what the SDK intends to send, and every branch of validation and retry                                                                                            | none           |
+| `tests/integration.test.ts` | what actually crosses a socket: header framing, keep-alive reuse, timeouts, the concurrency cap                                                                   | real, loopback |
+| `npm run verify:consumer`   | the published tarball installs, its `exports` map resolves, the shipped `.d.ts` typechecks under stricter settings than the library uses, and the sample app runs | real, loopback |
+| `npm run test:e2e`          | the Intempt API _accepts_ what we send                                                                                                                            | real, staging  |
+
+`tests/integration.test.ts` deliberately does not import the shared test helpers,
+because those load `nock`, and nock patches `http.ClientRequest` at import time.
+That would turn its "real socket" assertions into assertions about nock.
+
+Only `test:e2e` needs credentials. See [`examples/basic`](./examples/basic) for a
+runnable sample app.
+
+## Sample app
+
+[`examples/basic`](./examples/basic) exercises every namespace and runs offline
+against a local mock API, so `npm run verify:consumer` works with no credentials.
+Point it at a real environment with `INTEMPT_HOST`, `INTEMPT_ORG`,
+`INTEMPT_PROJECT`, `INTEMPT_API_KEY` and `INTEMPT_SOURCE_ID`.
 
 ## License
 

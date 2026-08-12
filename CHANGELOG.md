@@ -82,7 +82,19 @@ data in, decisions out: no admin or console operations.
   explicit proxy policy. When set it is used verbatim, the SDK creates none of its
   own, and `close()` does not destroy it.
 - `IntemptApiError` with `status`, `body`, `retryAfterMs` and `retryable`.
-- 199 tests, all offline via `nock`, with an 80% coverage gate.
+- 211 tests with an 80% coverage gate, in four layers: `nock` unit tests, a
+  real-socket integration suite on loopback, a consumer-install check that packs
+  the tarball and runs a sample app against it, and an opt-in contract test
+  against staging.
+- `examples/basic`, a runnable sample app covering every namespace. It installs
+  the packed tarball rather than the source tree, and typechecks against the
+  shipped `.d.ts` under `exactOptionalPropertyTypes` with `skipLibCheck` off —
+  stricter than the library's own build.
+- `npm run verify:consumer` and `npm run test:e2e`.
+- `exports` now includes `./package.json`. Without it,
+  `require('intempt/package.json')` was a hard error, which breaks bundlers and
+  version-reporting tools. Found by the consumer-install check; the unit suite
+  could not see it, because it imports from `src/`.
 - CI on pull requests across Node 20, 22 and 24, gated on `prettier --check`,
   `oxlint`, `tsc --noEmit`, coverage, build, and a tarball-contents check.
 - Publishing moved to version tags with npm provenance, and GitHub Release notes
