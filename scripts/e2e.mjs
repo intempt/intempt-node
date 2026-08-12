@@ -1,47 +1,97 @@
 /**
  * Contract test against a real Intempt environment.
  *
- * This is the only check that proves the API accepts what the SDK sends: the
- * Basic auth header authenticates, the track envelope is valid, consent
- * timestamps land in the epoch-seconds window ConsentService requires, and the
- * two read endpoints answer with parseable bodies.
+ * This is the only check that proves the API *accepts* what the SDK sends. The
+ * rest of the suite is offline: unit tests use nock, the integration suite uses
+ * a loopback server. Neither can catch a wire-format or auth regression.
  *
- * It writes real events, so point it at a throwaway project.
+ * It writes real events. Point it at a project you are happy to write into.
  *
- * Run: INTEMPT_ORG=... INTEMPT_PROJECT=... INTEMPT_API_KEY=... \
- *      INTEMPT_SOURCE_ID=... node scripts/e2e.mjs
+ * Every input that must already exist in the project is optional here, and any
+ * step needing a missing input is SKIPPED and counted, never quietly passed.
+ * That matters: posting `productId: "made-up-sku"` returns 201 and proves
+ * nothing about commerce, because ingestion accepts unknown ids. Acceptance is
+ * not correctness.
+ *
+ * See .env.example for the full input list.
  */
 import { Intempt, IntemptApiError } from '../dist/index.js';
 
-const required = [
-  'INTEMPT_ORG',
-  'INTEMPT_PROJECT',
-  'INTEMPT_API_KEY',
-  'INTEMPT_SOURCE_ID',
-];
-const missing = required.filter((name) => !process.env[name]);
-if (missing.length > 0) {
-  console.error(`Missing required environment: ${missing.join(', ')}`);
+// --- inputs -----------------------------------------------------------------
+const env = (...names) => {
+  for (const n of names) if (process.env[n]) return process.env[n];
+  return undefined;
+};
+
+const HOST = env('INTEMPT_HOST') ?? 'api.intempt.com';
+const ORG = env('INTEMPT_ORGANIZATION_ID', 'INTEMPT_ORG');
+const PROJECT = env('INTEMPT_PROJECT_ID', 'INTEMPT_PROJECT');
+const API_KEY = env('INTEMPT_API_KEY');
+const SOURCE_ID = env('INTEMPT_SOURCE_ID');
+
+// Project-resident entities. Absent -> the dependent step is skipped.
+const USER_ID = env('INTEMPT_E2E_USER_ID');
+const MASTER_ID = env('INTEMPT_E2E_MASTER_ID');
+const ACCOUNT_ID = env('INTEMPT_E2E_ACCOUNT_ID');
+const FEED_ID = env('INTEMPT_E2E_FEED_ID', 'INTEMPT_FEED_ID');
+const PRODUCT_ID = env('INTEMPT_E2E_PRODUCT_ID');
+const EXPERIMENT_NAME = env('INTEMPT_E2E_EXPERIMENT_NAME');
+const EXPERIMENT_GROUP = env('INTEMPT_E2E_EXPERIMENT_GROUP');
+const PERSONALIZATION_NAME = env('INTEMPT_E2E_PERSONALIZATION_NAME');
+const PERSONALIZATION_GROUP = env('INTEMPT_E2E_PERSONALIZATION_GROUP');
+
+const missingRequired = [
+  ['INTEMPT_ORGANIZATION_ID', ORG],
+  ['INTEMPT_PROJECT_ID', PROJECT],
+  ['INTEMPT_API_KEY', API_KEY],
+  ['INTEMPT_SOURCE_ID', SOURCE_ID],
+]
+  .filter(([, v]) => !v)
+  .map(([k]) => k);
+
+if (missingRequired.length > 0) {
+  console.error(`Missing required input: ${missingRequired.join(', ')}`);
+  console.error('See .env.example.');
   process.exit(1);
 }
 
-const intempt = Intempt.init({
-  org: process.env.INTEMPT_ORG,
-  project: process.env.INTEMPT_PROJECT,
-  apiKey: process.env.INTEMPT_API_KEY,
-  sourceId: process.env.INTEMPT_SOURCE_ID,
-  host: process.env.INTEMPT_HOST ?? 'api.staging.intempt.com',
-  timeout: 20_000,
-});
+// A stable profile keeps runs idempotent and lets results be eyeballed in the
+// console. Minting one per run leaves a trail of junk profiles.
+const userId = USER_ID ?? `sdk-e2e-${Date.now()}`;
 
-// Prefer a stable, pre-existing test profile. Minting `sdk-e2e-<epoch>` on every
-// run leaves a trail of junk profiles in the project and makes results
-// impossible to eyeball in the console. A fixed user also exercises the
-// masterId paths, which a brand-new profile cannot.
-const userId = process.env.INTEMPT_E2E_USER_ID ?? `sdk-e2e-${Date.now()}`;
-const accountId = process.env.INTEMPT_E2E_ACCOUNT_ID ?? `sdk-e2e-acct-${Date.now()}`;
-const masterId = process.env.INTEMPT_E2E_MASTER_ID;
-const ephemeral = !process.env.INTEMPT_E2E_USER_ID;
+const clientConfig = {
+  org: ORG,
+  project: PROJECT,
+  apiKey: API_KEY,
+  sourceId: SOURCE_ID,
+  host: HOST,
+  timeout: 20_000,
+};
+const intempt = Intempt.init(clientConfig);
+
+// --- readiness --------------------------------------------------------------
+const inputs = [
+  ['stable userId', USER_ID, 'identify, track, group, alias, consent'],
+  ['masterId', MASTER_ID, 'consent by masterId'],
+  ['accountId', ACCOUNT_ID, 'group'],
+  ['feed id', FEED_ID, 'decide.recommend'],
+  ['productId', PRODUCT_ID, 'ecommerce.*'],
+  ['experiment name', EXPERIMENT_NAME, 'decide.experiences by name'],
+  ['experiment group', EXPERIMENT_GROUP, 'decide.experiences by group'],
+  ['personalization name', PERSONALIZATION_NAME, 'decide.experiences by name'],
+  ['personalization group', PERSONALIZATION_GROUP, 'decide.experiences by group'],
+];
+
+console.log(`\nIntempt SDK contract test — ${HOST}`);
+console.log(`  profile: ${userId}${USER_ID ? ' (stable)' : ' (ephemeral)'}\n`);
+console.log('  project inputs');
+console.log('  ' + '-'.repeat(76));
+for (const [name, value, usedBy] of inputs) {
+  console.log(`  ${value ? 'have' : 'MISS'}  ${name.padEnd(22)} ${usedBy}`);
+}
+console.log('  ' + '-'.repeat(76) + '\n');
+
+// --- harness ----------------------------------------------------------------
 const results = [];
 
 async function step(name, fn) {
@@ -49,7 +99,7 @@ async function step(name, fn) {
   try {
     const value = await fn();
     const ms = Date.now() - started;
-    results.push({ name, ok: true, ms, note: value ?? '2xx' });
+    results.push({ name, state: 'PASS', ms, note: value ?? '2xx' });
     console.log(
       `  PASS  ${name.padEnd(46)} ${String(ms).padStart(5)}ms  ${value ?? '2xx'}`,
     );
@@ -59,25 +109,21 @@ async function step(name, fn) {
       error instanceof IntemptApiError ? (error.status ?? 'transport') : 'error';
     const body =
       error instanceof IntemptApiError ? (error.body ?? '').slice(0, 160) : String(error);
-    results.push({ name, ok: false, ms, note: `${status}: ${body}` });
+    results.push({ name, state: 'FAIL', ms, note: `${status}: ${body}` });
     console.error(
       `  FAIL  ${name.padEnd(46)} ${String(ms).padStart(5)}ms  ${status} ${body}`,
     );
   }
 }
 
-console.log(`Intempt SDK contract test against ${intempt.config.host}`);
-// Org, project and source id are intentionally not printed: on a public
-// repository the Actions log is world-readable.
-console.log(
-  `  user=${userId}${ephemeral ? ' (ephemeral — set INTEMPT_E2E_USER_ID for a stable profile)' : ' (stable)'}`,
-);
-console.log(
-  `  masterId=${masterId ? 'set' : 'not set — masterId paths will be skipped'}\n`,
-);
+function skip(name, why) {
+  results.push({ name, state: 'SKIP', ms: 0, note: why });
+  console.log(`  SKIP  ${name.padEnd(46)}         ${why}`);
+}
 
-// A 401/403 here means the Basic auth header is not accepted, which is the single
-// most important thing this test exists to prove.
+// --- writes -----------------------------------------------------------------
+// A 401 here means the Basic auth header is rejected, which is the single most
+// important thing this test exists to prove.
 await step('identify (proves Basic auth is accepted)', () =>
   intempt.identify({ userId, traits: { source: 'sdk-e2e' } }),
 );
@@ -90,82 +136,128 @@ await step('track with an explicit timestamp', () =>
     timestamp: new Date(Date.now() - 3_600_000),
   }),
 );
-await step('trackBatch', () =>
+await step('trackBatch (2 events, 1 request)', () =>
   intempt.trackBatch([
     { event: 'sdk_e2e_a', userId },
     { event: 'sdk_e2e_b', userId },
   ]),
 );
-await step('group', () => intempt.group({ userId, accountId }));
+
+if (ACCOUNT_ID) {
+  await step('group (existing account)', () =>
+    intempt.group({ userId, accountId: ACCOUNT_ID }),
+  );
+} else {
+  skip('group', 'INTEMPT_E2E_ACCOUNT_ID not set — account must already exist');
+}
+
 await step('alias', () => intempt.alias({ userId, previousUserId: `${userId}-anon` }));
-await step('ecommerce.productViewed', () =>
-  intempt.ecommerce.productViewed({ userId, productId: 'sdk-e2e-sku' }),
-);
-await step('ecommerce.addedToCart', () =>
-  intempt.ecommerce.addedToCart({ userId, productId: 'sdk-e2e-sku', quantity: 3 }),
-);
-await step('ecommerce.ordered', () =>
-  intempt.ecommerce.ordered({
-    userId,
-    products: [
-      { productId: 'sdk-e2e-sku', quantity: 1 },
-      { productId: 'sdk-e2e-sku-2', quantity: 2 },
-    ],
-  }),
-);
-// Proves the epoch-seconds fix: milliseconds would be silently replaced by the
-// server's own receive time, and a value below the floor is rejected outright.
+
+if (PRODUCT_ID) {
+  await step('ecommerce.productViewed (catalog product)', () =>
+    intempt.ecommerce.productViewed({ userId, productId: PRODUCT_ID }),
+  );
+  await step('ecommerce.addedToCart (catalog product)', () =>
+    intempt.ecommerce.addedToCart({ userId, productId: PRODUCT_ID, quantity: 2 }),
+  );
+  await step('ecommerce.ordered (catalog product, 1 line)', () =>
+    intempt.ecommerce.ordered({
+      userId,
+      products: [{ productId: PRODUCT_ID, quantity: 1 }],
+    }),
+  );
+} else {
+  // Ingestion accepts unknown product ids with a 201, so sending a fabricated
+  // one would look like a pass and prove nothing about commerce.
+  const why = 'INTEMPT_E2E_PRODUCT_ID not set — product must exist in the catalog';
+  skip('ecommerce.productViewed', why);
+  skip('ecommerce.addedToCart', why);
+  skip('ecommerce.ordered', why);
+}
+
 await step('consent.grant (proves epoch-seconds timestamps)', () =>
   intempt.consent.grant({ userId, category: 'sdk-e2e' }),
 );
 await step('consent.revoke', () =>
   intempt.consent.revoke({ userId, category: 'sdk-e2e' }),
 );
-if (masterId) {
-  // Only reachable with a real masterId, and it is the only consent path that
-  // does not need a source. Also the identity field the feeds API actually reads.
-  await step('consent.grant by masterId', () =>
-    intempt.consent.grant({ masterId, category: 'sdk-e2e-master' }),
-  );
-} else {
-  console.log('  SKIP  consent.grant by masterId (INTEMPT_E2E_MASTER_ID not set)');
-}
-// Exercises sourceId serialisation. A real source id is 19 digits, past
-// Number.MAX_SAFE_INTEGER, so a Number() coercion anywhere in this path would
-// address a different source or be rejected outright.
-await step('consent by profileId (proves sourceId is not rounded)', () =>
+await step('consent by profileId (sourceId not rounded)', () =>
   intempt.consent.grant({ profileId: userId, category: 'sdk-e2e-profile' }),
 );
-await step('decide.experiences', async () => {
-  const choices = await intempt.decide.experiences({ userId, type: 'experiment' });
-  return `${choices.length} choice(s)`;
+if (MASTER_ID) {
+  await step('consent by masterId', () =>
+    intempt.consent.grant({ masterId: MASTER_ID, category: 'sdk-e2e-master' }),
+  );
+} else {
+  skip('consent by masterId', 'INTEMPT_E2E_MASTER_ID not set');
+}
+
+// --- reads ------------------------------------------------------------------
+// Unfiltered: proves the endpoint answers. It cannot prove variant resolution,
+// because an empty choices array is a valid response for a project with nothing
+// published.
+await step('decide.experiences (unfiltered)', async () => {
+  const c = await intempt.decide.experiences({ userId, type: 'experiment' });
+  return `${c.length} choice(s)`;
 });
-if (process.env.INTEMPT_FEED_ID) {
+await step('decide.experiences (personalization, unfiltered)', async () => {
+  const c = await intempt.decide.experiences({ userId, type: 'personalization' });
+  return `${c.length} choice(s)`;
+});
+
+for (const [label, type, name, group] of [
+  ['experiment', 'experiment', EXPERIMENT_NAME, EXPERIMENT_GROUP],
+  ['personalization', 'personalization', PERSONALIZATION_NAME, PERSONALIZATION_GROUP],
+]) {
+  if (name) {
+    // Named lookup is the only form that can prove resolution: a published
+    // variant must come back non-empty.
+    await step(`decide.experiences by ${label} name`, async () => {
+      const c = await intempt.decide.experiences({ userId, type, names: [name] });
+      if (c.length === 0)
+        throw new Error(`no choices returned for published ${label} "${name}"`);
+      return `${c.length} choice(s): ${JSON.stringify(c).slice(0, 90)}`;
+    });
+  } else {
+    skip(
+      `decide.experiences by ${label} name`,
+      `INTEMPT_E2E_${label.toUpperCase()}_NAME not set`,
+    );
+  }
+  if (group) {
+    await step(`decide.experiences by ${label} group`, async () => {
+      const c = await intempt.decide.experiences({ userId, type, groups: [group] });
+      return `${c.length} choice(s)`;
+    });
+  } else {
+    skip(
+      `decide.experiences by ${label} group`,
+      `INTEMPT_E2E_${label.toUpperCase()}_GROUP not set`,
+    );
+  }
+}
+
+if (FEED_ID) {
   await step('decide.recommend', async () => {
     const feed = await intempt.decide.recommend({
       userId,
-      feedId: process.env.INTEMPT_FEED_ID,
+      ...(MASTER_ID ? { profileId: userId } : {}),
+      feedId: FEED_ID,
       limit: 3,
       fields: ['id'],
     });
-    return JSON.stringify(feed).slice(0, 80);
+    return JSON.stringify(feed).slice(0, 110);
   });
 } else {
-  console.log('  SKIP  decide.recommend (INTEMPT_FEED_ID not set)');
+  skip('decide.recommend', 'INTEMPT_E2E_FEED_ID not set — feed must exist');
 }
 
-// Buffered mode against the real server: proves flush() drains over the wire and
-// that several events in a single request are accepted.
+// --- buffered mode ----------------------------------------------------------
 const buffered = Intempt.init({
-  org: process.env.INTEMPT_ORG,
-  project: process.env.INTEMPT_PROJECT,
-  apiKey: process.env.INTEMPT_API_KEY,
-  sourceId: process.env.INTEMPT_SOURCE_ID,
-  host: process.env.INTEMPT_HOST ?? 'api.staging.intempt.com',
-  timeout: 20_000,
+  ...clientConfig,
   batch: { size: 50, flushMs: 60_000, flushOnExit: false },
 });
-await step('flush (batched, 5 events in one request)', async () => {
+await step('flush (5 events buffered, 1 request)', async () => {
   for (let i = 0; i < 5; i += 1) {
     await buffered.track(`sdk_e2e_buffered_${i}`, { userId });
   }
@@ -174,20 +266,29 @@ await step('flush (batched, 5 events in one request)', async () => {
   return `${before} buffered -> ${buffered.buffered} after flush`;
 });
 await buffered.close();
-
 await intempt.close();
 
-const failed = results.filter((r) => !r.ok);
+// --- report -----------------------------------------------------------------
+const passed = results.filter((r) => r.state === 'PASS');
+const failed = results.filter((r) => r.state === 'FAIL');
+const skipped = results.filter((r) => r.state === 'SKIP');
 
 console.log('\n  per-method results');
-console.log('  ' + '-'.repeat(74));
+console.log('  ' + '-'.repeat(76));
 for (const r of results) {
   console.log(
-    `  ${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padEnd(46)} ${String(r.ms).padStart(5)}ms  ${r.note}`,
+    `  ${r.state}  ${r.name.padEnd(46)} ${r.ms ? String(r.ms).padStart(5) + 'ms' : '       '}  ${r.note}`,
   );
 }
-console.log('  ' + '-'.repeat(74));
-console.log(`  ${results.length - failed.length}/${results.length} passed`);
+console.log('  ' + '-'.repeat(76));
+console.log(
+  `  ${passed.length} passed · ${failed.length} failed · ${skipped.length} skipped`,
+);
+
+if (skipped.length > 0) {
+  console.log(`\n  Not verified against the API (missing project inputs):`);
+  for (const r of skipped) console.log(`    - ${r.name}`);
+}
 
 if (failed.length > 0) {
   console.error(`\nFailed: ${failed.map((r) => r.name).join(', ')}`);

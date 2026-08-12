@@ -381,8 +381,14 @@ Four layers of verification, in increasing fidelity:
 because those load `nock`, and nock patches `http.ClientRequest` at import time.
 That would turn its "real socket" assertions into assertions about nock.
 
-Only `test:e2e` needs credentials. See [`examples/basic`](./examples/basic) for a
-runnable sample app.
+Only `test:e2e` needs credentials, and it needs more than a key: several methods
+touch entities that must already exist in the project — an account, a catalog
+product, a feed, a published experiment. See [`.env.example`](./.env.example) for
+the full input list. Any step whose input is missing is reported as **SKIP**, never
+as a pass: ingestion returns 201 for unknown ids, so a fabricated value would look
+green and prove nothing.
+
+See [`examples/basic`](./examples/basic) for a runnable sample app.
 
 ## Sample app
 

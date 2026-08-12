@@ -5,6 +5,7 @@ pack.json
 *.tgz
 .env
 .env.*
+!.env.example
 .idea/
 .DS_Store
 examples/*/node_modules/
