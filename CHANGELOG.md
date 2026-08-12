@@ -69,7 +69,6 @@ data in, decisions out: no admin or console operations.
 - `timestamp` on `track()`, accepting a `Date` or epoch milliseconds.
   Note: whether the event store honours a client-supplied timestamp or stamps
   ingest time is **unverified**; do not treat this as a backfill guarantee yet.
-- `decide.experiences({ type })` replaces four `choose*` methods.
 - `X-Intempt-Lib: intempt-node/<version>` on every request. Nothing is added to
   the event payload: a new payload field could affect a downstream event schema,
   and a header cannot.
@@ -82,14 +81,16 @@ data in, decisions out: no admin or console operations.
   explicit proxy policy. When set it is used verbatim, the SDK creates none of its
   own, and `close()` does not destroy it.
 - `IntemptApiError` with `status`, `body`, `retryAfterMs` and `retryable`.
-- 211 tests with an 80% coverage gate, in four layers: `nock` unit tests, a
+- 210 tests with an 80% coverage gate, in four layers: `nock` unit tests, a
   real-socket integration suite on loopback, a consumer-install check that packs
   the tarball and runs a sample app against it, and an opt-in contract test
   against staging.
-- `examples/basic`, a runnable sample app covering every namespace. It installs
-  the packed tarball rather than the source tree, and typechecks against the
-  shipped `.d.ts` under `exactOptionalPropertyTypes` with `skipLibCheck` off —
-  stricter than the library's own build.
+- `examples/basic`, a runnable sample app covering every method. It installs the
+  packed tarball rather than the source tree, and typechecks against the shipped
+  `.d.ts` under `exactOptionalPropertyTypes` with `skipLibCheck` off — stricter
+  than the library's own build. Offline against a bundled mock by default; give it
+  credentials and project object ids and it runs against the real API, which is
+  the only configuration that exercises the published artifact over the network.
 - `npm run verify:consumer` and `npm run test:e2e`.
 - **Snowflake IDs are no longer coerced through `Number()`.** `consent` sent
   `sourceId` and `masterId` as JS numbers. A real source id such as

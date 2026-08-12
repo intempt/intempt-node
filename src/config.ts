@@ -170,4 +170,3 @@ export function mergeConfig(
 }
 
 export type { BatchOptions };
-export { DEFAULT_BATCH };
