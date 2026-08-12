@@ -15,7 +15,9 @@ data in, decisions out: no admin or console operations.
   was `tests`, and it also excluded `dist/` — the directory `main` points at.
   Replaced with a `files` allowlist plus a CI check that fails the build if
   anything outside `dist/` and the docs enters the tarball.
-  **The exposed key must be rotated; that is not something this release can do.**
+  The exposed key has since been revoked. It remains in this repository's git
+  history and in the published 1.0.1 tarball, which is why revocation rather
+  than removal was the fix.
 - API keys now travel in an `Authorization: Basic` header instead of an
   `?apiKey=` query parameter. The server accepts both, but logs
   "API key received via query parameter — this is deprecated and insecure"
