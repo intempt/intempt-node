@@ -86,18 +86,43 @@ export interface ResolvedConfig {
 }
 
 /**
- * At least one of these must be present. The server sets
+ * At least one of these must be present.
+ *
+ * - `userId` — your own identifier for a person: an email, an internal user id.
+ * - `accountId` — your own identifier for a company or account.
+ *
+ * Those are the only two identifiers this SDK accepts, and both are values you
+ * already own. Two platform identifiers are deliberately NOT exposed:
+ *
+ * - `profileId` is the anonymous id the browser SDK mints and keeps on the
+ *   device. A server that invents one creates an orphan profile that never
+ *   stitches to a real visitor.
+ * - `masterId` is assigned internally after identity resolution. There is no
+ *   way to look one up from here, and a hardcoded one breaks the moment two
+ *   profiles merge.
+ *
+ * The platform resolves identity from `userId` on its own: it sets
  * `profileId = userId` when only `userId` is given.
  */
 export interface Identifiers {
   userId?: string;
-  profileId?: string;
   accountId?: string;
+}
+
+/**
+ * Adds the anonymous browser profile id. Internal: reachable only through the
+ * deprecated 1.x `SDK` shim, whose whole surface was profileId-first and whose
+ * callers' data is already keyed that way.
+ *
+ * @internal
+ */
+export interface LegacyIdentifiers extends Identifiers {
+  profileId?: string;
 }
 
 export type Properties = Record<string, unknown>;
 
-export interface TrackOptions extends Identifiers {
+export interface TrackOptions extends LegacyIdentifiers {
   properties?: Properties;
   userAttributes?: Properties;
   accountAttributes?: Properties;
@@ -109,21 +134,21 @@ export interface TrackEvent extends TrackOptions {
   event: string;
 }
 
-export interface IdentifyOptions extends Identifiers {
+export interface IdentifyOptions extends LegacyIdentifiers {
   traits?: Properties;
   /** Override the reserved event name. */
   event?: string;
   timestamp?: Date | number;
 }
 
-export interface GroupOptions extends Identifiers {
+export interface GroupOptions extends LegacyIdentifiers {
   accountId: string;
   attributes?: Properties;
   event?: string;
   timestamp?: Date | number;
 }
 
-export interface AliasOptions extends Identifiers {
+export interface AliasOptions extends LegacyIdentifiers {
   userId: string;
   previousUserId: string;
   timestamp?: Date | number;
@@ -131,8 +156,6 @@ export interface AliasOptions extends Identifiers {
 
 export interface ConsentOptions {
   userId?: string;
-  profileId?: string;
-  masterId?: string | number;
   category?: string;
   /** ISO date, epoch string, or `'unlimited'` (default). */
   validUntil?: string;
@@ -147,14 +170,14 @@ export interface ConsentOptions {
 
 export type OptimizationType = 'experiment' | 'personalization';
 
-export interface ExperiencesOptions extends Identifiers {
+export interface ExperiencesOptions extends LegacyIdentifiers {
   type: OptimizationType;
   groups?: string[];
   names?: string[];
   device?: string;
 }
 
-export interface RecommendOptions extends Identifiers {
+export interface RecommendOptions extends LegacyIdentifiers {
   feedId: string;
   limit: number;
   fields: string[];

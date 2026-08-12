@@ -31,7 +31,6 @@ const SOURCE_ID = env('INTEMPT_SOURCE_ID');
 
 // Project-resident entities. Absent -> the dependent step is skipped.
 const USER_ID = env('INTEMPT_E2E_USER_ID');
-const MASTER_ID = env('INTEMPT_E2E_MASTER_ID');
 const ACCOUNT_ID = env('INTEMPT_E2E_ACCOUNT_ID');
 const FEED_ID = env('INTEMPT_E2E_FEED_ID', 'INTEMPT_FEED_ID');
 const PRODUCT_ID = env('INTEMPT_E2E_PRODUCT_ID');
@@ -72,7 +71,6 @@ const intempt = Intempt.init(clientConfig);
 // --- readiness --------------------------------------------------------------
 const inputs = [
   ['stable userId', USER_ID, 'identify, track, group, alias, consent'],
-  ['masterId', MASTER_ID, 'consent by masterId'],
   ['accountId', ACCOUNT_ID, 'group'],
   ['feed id', FEED_ID, 'decide.recommend'],
   ['productId', PRODUCT_ID, 'ecommerce.*'],
@@ -181,16 +179,12 @@ await step('consent.grant (proves epoch-seconds timestamps)', () =>
 await step('consent.revoke', () =>
   intempt.consent.revoke({ userId, category: 'sdk-e2e' }),
 );
-await step('consent by profileId (sourceId not rounded)', () =>
+// profileId is internal-only now, reachable through the deprecated 1.x shim.
+// It is still the only consent path that sends sourceId, so it is the only one
+// that exercises the 19-digit snowflake serialisation.
+await step('consent via 1.x shim path (sourceId not rounded)', () =>
   intempt.consent.grant({ profileId: userId, category: 'sdk-e2e-profile' }),
 );
-if (MASTER_ID) {
-  await step('consent by masterId', () =>
-    intempt.consent.grant({ masterId: MASTER_ID, category: 'sdk-e2e-master' }),
-  );
-} else {
-  skip('consent by masterId', 'INTEMPT_E2E_MASTER_ID not set');
-}
 
 // --- reads ------------------------------------------------------------------
 // Unfiltered: proves the endpoint answers. It cannot prove variant resolution,
@@ -241,7 +235,6 @@ if (FEED_ID) {
   await step('decide.recommend', async () => {
     const feed = await intempt.decide.recommend({
       userId,
-      ...(MASTER_ID ? { profileId: userId } : {}),
       feedId: FEED_ID,
       limit: 3,
       fields: ['id'],

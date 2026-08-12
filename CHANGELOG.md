@@ -98,6 +98,16 @@ data in, decisions out: no admin or console operations.
   declared server-side with `LongFromStringDeserializer`, so a string is the
   correct and intended representation. Regression-tested with the real 19-digit
   id in the unit, integration and contract suites.
+- **The public identifier surface is `userId` and `accountId` only.** 1.x took
+  `profileId` on every call and consent additionally took `masterId`. Both are
+  platform-internal: `profileId` is minted by the browser SDK on the device, and
+  `masterId` is assigned after identity resolution with no way to look one up
+  from a server. A server supplying either produces an orphan profile or breaks
+  on merge. Verified against the live API that `userId` alone is accepted by
+  `/track` (201), `/consents/data` (200) and `/optimization/choose-api` (200) —
+  the platform sets `profileId = userId` itself. `profileId` remains reachable
+  through the deprecated 1.x `SDK` shim, whose callers' data is already keyed
+  that way, but it is typed out of the public options.
 - `exports` now includes `./package.json`. Without it,
   `require('intempt/package.json')` was a hard error, which breaks bundlers and
   version-reporting tools. Found by the consumer-install check; the unit suite

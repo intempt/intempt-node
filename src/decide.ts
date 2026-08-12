@@ -38,9 +38,10 @@ export class Decide {
     const { sourceId } = this.#deps.config();
     const body = compact({
       identification: compact({
-        profileId: options.profileId ?? options.userId,
         userId: options.userId,
         accountId: options.accountId,
+        // Only ever set by the deprecated 1.x shim.
+        profileId: options.profileId,
         sourceId,
       }),
       groups: options.groups,
@@ -71,9 +72,10 @@ export class Decide {
 
     const { sourceId } = this.#deps.config();
     const body = compact({
-      profileId: options.profileId ?? options.userId,
       userId: options.userId,
       accountId: options.accountId,
+      // Only ever set by the deprecated 1.x shim.
+      profileId: options.profileId,
       sourceId,
       fields: options.fields,
       limit: options.limit,

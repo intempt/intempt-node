@@ -1,4 +1,4 @@
-import type { Identifiers, ProductLine } from './types';
+import type { LegacyIdentifiers, ProductLine } from './types';
 import { assertIdentifier, compact } from './utils';
 import type { Ingest } from './ingest';
 
@@ -20,7 +20,7 @@ export class Ecommerce {
     this.#ingest = ingest;
   }
 
-  async productViewed(options: Identifiers & { productId: string }): Promise<void> {
+  async productViewed(options: LegacyIdentifiers & { productId: string }): Promise<void> {
     if (!options?.productId) {
       throw new TypeError('productViewed: productId is required');
     }
@@ -30,7 +30,7 @@ export class Ecommerce {
   }
 
   async addedToCart(
-    options: Identifiers & { productId: string; quantity: number },
+    options: LegacyIdentifiers & { productId: string; quantity: number },
   ): Promise<void> {
     if (!options?.productId) {
       throw new TypeError('addedToCart: productId is required');
@@ -45,7 +45,7 @@ export class Ecommerce {
     ]);
   }
 
-  async ordered(options: Identifiers & { products: ProductLine[] }): Promise<void> {
+  async ordered(options: LegacyIdentifiers & { products: ProductLine[] }): Promise<void> {
     if (!Array.isArray(options?.products) || options.products.length === 0) {
       throw new TypeError('ordered: products must be a non-empty array');
     }

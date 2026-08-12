@@ -51,8 +51,21 @@ describe('ingest: identifiers', () => {
 
   it('rejects a call with no identifier at all', async () => {
     await expect(client().track('purchase', {})).rejects.toThrow(
-      /one of userId, profileId or accountId/,
+      /one of userId or accountId/,
     );
+  });
+
+  it('does not expose profileId or masterId as public identifiers', async () => {
+    // Both are platform-internal: profileId is minted by the browser SDK on the
+    // device, masterId is assigned after identity resolution. A server has no
+    // way to obtain either, so neither is part of the public surface.
+    const bodies = capture();
+    await client().identify({ userId: 'u1' });
+    const item = bodies[0]!.track[0]!.payload[0]!;
+    expect(item).not.toHaveProperty('profileId');
+    expect(item).not.toHaveProperty('masterId');
+    // The platform derives profileId from userId itself.
+    expect(item.userId).toBe('u1');
   });
 });
 

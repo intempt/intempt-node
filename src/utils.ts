@@ -4,7 +4,7 @@
     See NOTICE.
 */
 
-import type { Identifiers, Logger } from './types';
+import type { LegacyIdentifiers, Logger } from './types';
 
 const LOGGER_METHODS = ['trace', 'debug', 'info', 'warn', 'error'] as const;
 
@@ -56,10 +56,13 @@ export function chunk<T>(arr: readonly T[], size: number): T[][] {
 /**
  * The track and consent endpoints both require at least one identifier.
  * `DataRequest` rejects a payload item carrying none of them.
+ *
+ * `profileId` counts at runtime because the deprecated 1.x shim still supplies
+ * it, but it is not part of the public `Identifiers` type.
  */
-export function assertIdentifier(ids: Identifiers, method: string): void {
-  if (!ids.userId && !ids.profileId && !ids.accountId) {
-    throw new TypeError(`${method}: one of userId, profileId or accountId is required`);
+export function assertIdentifier(ids: LegacyIdentifiers, method: string): void {
+  if (!ids.userId && !ids.accountId && !ids.profileId) {
+    throw new TypeError(`${method}: one of userId or accountId is required`);
   }
 }
 

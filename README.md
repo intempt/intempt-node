@@ -126,9 +126,28 @@ Call `setConfig()` to change any of these on a live client, except `org`,
 
 ### Identifiers
 
-Every call takes at least one of `userId`, `profileId` or `accountId`. You do
-not need a `profileId`: the API accepts `userId` on its own and links it to a
-profile for you. Consent also accepts `masterId`.
+Every call takes at least one of two identifiers, and both are values you
+already own:
+
+|             |                                                             |
+| ----------- | ----------------------------------------------------------- |
+| `userId`    | your identifier for a person: an email, an internal user id |
+| `accountId` | your identifier for a company or account                    |
+
+That is the whole list. The platform resolves identity from `userId` itself.
+
+Two platform identifiers are deliberately **not** exposed:
+
+- **`profileId`** is the anonymous id the browser SDK mints and keeps on the
+  device. A server that invents one creates an orphan profile that never
+  stitches to a real visitor.
+- **`masterId`** is assigned internally after identity resolution. There is no
+  way to look one up from here, and a hardcoded one breaks the moment two
+  profiles merge.
+
+If you need to tie server events to a visitor's pre-login browser activity,
+send the `userId` as soon as you know it and let the platform stitch. Same
+reasoning as [`alias()`](#sending-data): declare identity, don't manage it.
 
 ## Sending data
 

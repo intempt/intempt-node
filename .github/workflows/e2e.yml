@@ -16,7 +16,6 @@
 # Optional but strongly recommended:
 #   INTEMPT_E2E_USER_ID    a stable pre-existing test profile, so runs do not
 #                          create a new throwaway profile every night
-#   INTEMPT_E2E_MASTER_ID  that profile's masterId; unlocks the masterId paths
 #   INTEMPT_E2E_ACCOUNT_ID a stable test account
 #   INTEMPT_E2E_HOST       defaults to api.staging.intempt.com if unset
 #   INTEMPT_E2E_FEED_ID    a real product feed id; decide.recommend skips without it
@@ -68,7 +67,6 @@ jobs:
           INTEMPT_API_KEY: ${{ secrets.INTEMPT_E2E_API_KEY }}
           INTEMPT_SOURCE_ID: ${{ secrets.INTEMPT_E2E_SOURCE_ID }}
           INTEMPT_E2E_USER_ID: ${{ secrets.INTEMPT_E2E_USER_ID }}
-          INTEMPT_E2E_MASTER_ID: ${{ secrets.INTEMPT_E2E_MASTER_ID }}
           INTEMPT_E2E_ACCOUNT_ID: ${{ secrets.INTEMPT_E2E_ACCOUNT_ID }}
           INTEMPT_E2E_FEED_ID: ${{ secrets.INTEMPT_E2E_FEED_ID }}
           INTEMPT_E2E_PRODUCT_ID: ${{ secrets.INTEMPT_E2E_PRODUCT_ID }}

@@ -79,9 +79,10 @@ describe('chunk', () => {
 describe('assertIdentifier', () => {
   it.each([
     { userId: 'u1' },
-    { profileId: 'p1' },
     { accountId: 'a1' },
     { userId: 'u1', accountId: 'a1' },
+    // Internal only: still honoured at runtime for the deprecated 1.x shim.
+    { profileId: 'p1' },
   ])('accepts %j', (ids) => {
     expect(() => assertIdentifier(ids, 'test')).not.toThrow();
   });

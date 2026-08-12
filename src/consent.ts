@@ -1,4 +1,7 @@
 import type { ConsentOptions, ResolvedConfig } from './types';
+
+/** @internal — the 1.x shim identifies by profileId. */
+type InternalConsentOptions = ConsentOptions & { profileId?: string };
 import { compact, ensureTimestamp } from './utils';
 import type { Transport } from './transport';
 
@@ -31,15 +34,18 @@ export class Consent {
     return this.#record('reject', options);
   }
 
-  async #record(action: 'accept' | 'reject', options: ConsentOptions): Promise<void> {
+  async #record(
+    action: 'accept' | 'reject',
+    options: InternalConsentOptions,
+  ): Promise<void> {
     if (!options || typeof options !== 'object') {
       throw new TypeError(
         `consent.${action === 'accept' ? 'grant' : 'revoke'}: options are required`,
       );
     }
-    const { userId, profileId, masterId } = options;
-    if (!userId && !profileId && masterId === undefined) {
-      throw new TypeError('consent: one of userId, profileId or masterId is required');
+    const { userId, profileId } = options;
+    if (!userId && !profileId) {
+      throw new TypeError('consent: userId is required');
     }
 
     const { sourceId } = this.#deps.config();
@@ -72,12 +78,11 @@ export class Consent {
       category: options.category,
       profileId,
       userId,
-      // Sent as strings, never coerced with Number(). These are snowflake IDs:
-      // a real sourceId such as 1841503112918048768 is 19 digits, well past
-      // Number.MAX_SAFE_INTEGER, so Number() would silently round it to
-      // 1841503112918048800 and address the wrong source. The API declares both
-      // fields with LongFromStringDeserializer for exactly this reason.
-      masterId: masterId === undefined ? undefined : String(masterId),
+      // A string, never coerced with Number(). A real sourceId such as
+      // 1841503112918048768 is 19 digits, well past Number.MAX_SAFE_INTEGER, so
+      // Number() would silently round it to 1841503112918048800 and address the
+      // wrong source. The API declares the field with LongFromStringDeserializer
+      // for exactly this reason.
       sourceId: profileId && sourceId ? String(sourceId) : undefined,
       validUntil: options.validUntil ?? 'unlimited',
       source: LIB_SOURCE,

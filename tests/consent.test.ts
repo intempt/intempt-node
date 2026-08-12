@@ -62,12 +62,6 @@ describe('consent: identifiers', () => {
     expect(bodies[0]).not.toHaveProperty('sourceId');
   });
 
-  it('accepts masterId and coerces it to a number', async () => {
-    const bodies = capture();
-    await client({ sourceId: undefined }).consent.grant({ masterId: '123' });
-    expect(bodies[0]!.masterId).toBe('123');
-  });
-
   it('never rounds a 19-digit snowflake sourceId through Number()', async () => {
     // A real source id: 19 digits, past Number.MAX_SAFE_INTEGER. Number() would
     // turn it into ...048800 and address a different source. The API declares
@@ -75,24 +69,16 @@ describe('consent: identifiers', () => {
     const realSourceId = '1841503112918048768';
     const bodies = capture();
 
-    await client({ sourceId: realSourceId }).consent.grant({ profileId: 'p1' });
+    await client({ sourceId: realSourceId }).consent.grant({ profileId: 'p1' } as never);
 
     expect(bodies[0]!.sourceId).toBe(realSourceId);
     expect(String(bodies[0]!.sourceId)).not.toBe('1841503112918048800');
   });
 
-  it('never rounds a large masterId either', async () => {
-    const bodies = capture();
-    await client({ sourceId: undefined }).consent.grant({
-      masterId: '9007199254740993', // MAX_SAFE_INTEGER + 2
-    });
-    expect(bodies[0]!.masterId).toBe('9007199254740993');
-  });
-
   it('sends sourceId when identifying by profileId', async () => {
     // ConsentService: "Source is required for profileId".
     const bodies = capture();
-    await client().consent.grant({ profileId: 'p1' });
+    await client().consent.grant({ profileId: 'p1' } as never);
 
     expect(bodies[0]!.profileId).toBe('p1');
     expect(bodies[0]!.sourceId).toBe(SOURCE);
@@ -100,14 +86,20 @@ describe('consent: identifiers', () => {
 
   it('refuses a profileId consent when no sourceId is configured', async () => {
     await expect(
-      client({ sourceId: undefined }).consent.grant({ profileId: 'p1' }),
+      client({ sourceId: undefined }).consent.grant({ profileId: 'p1' } as never),
     ).rejects.toThrow(/sourceId must be configured/);
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('requires at least one identifier', async () => {
-    await expect(client().consent.grant({})).rejects.toThrow(
-      /one of userId, profileId or masterId/,
+  it('requires userId', async () => {
+    await expect(client().consent.grant({})).rejects.toThrow(/userId is required/);
+  });
+
+  it('does not accept masterId — an internal id no caller can resolve', async () => {
+    // Typed out of ConsentOptions; also rejected at runtime because it is not
+    // an identifier assertIdentifier recognises.
+    await expect(client().consent.grant({ masterId: '123' } as never)).rejects.toThrow(
+      /userId is required/,
     );
   });
 });

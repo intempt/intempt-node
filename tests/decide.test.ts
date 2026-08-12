@@ -61,15 +61,16 @@ describe('decide.experiences', () => {
     const bodies = captureChoose();
     await client().decide.experiences({ userId: 'u1', type: 'experiment' });
 
+    // Verified live — a userId-only identification returns HTTP 200.
+    // No profileId: the platform resolves identity from userId on its own.
     expect(bodies[0]!.identification).toEqual({
-      profileId: 'u1',
       userId: 'u1',
       sourceId: SOURCE,
     });
     expect(bodies[0]!.device).toBe('all');
   });
 
-  it('prefers an explicit profileId over userId', async () => {
+  it('carries profileId only when the deprecated shim supplies it', async () => {
     const bodies = captureChoose();
     await client().decide.experiences({
       userId: 'u1',
@@ -122,7 +123,6 @@ describe('decide.recommend', () => {
 
     expect(result).toEqual({ items: [{ id: 1 }] });
     expect(bodies[0]).toEqual({
-      profileId: 'u1',
       userId: 'u1',
       sourceId: SOURCE,
       fields: ['id', 'price', 'title'],
