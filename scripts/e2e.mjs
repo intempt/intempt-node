@@ -235,41 +235,57 @@ await step('consent via 1.x shim path (sourceId not rounded)', () =>
 // experience against a page and are served by the browser SDK.
 if (FEED_ID) {
   const label = 'recommend (feeds identify by {id, type})';
+  const fields = (process.env.INTEMPT_E2E_FEED_FIELDS ?? 'id')
+    .split(',')
+    .map((f) => f.trim());
+
+  // Feed contents are eventually consistent: the ecommerce events above are what
+  // a recently-viewed style algorithm feeds on, and they have to reach the graph
+  // first. Asking once, a second after writing them, is a race — it returned a
+  // product in one run and an empty array in the next. Poll instead.
+  const attempts = 6;
+  const gapMs = 2_000;
   const started = Date.now();
-  try {
-    const feed = await intempt.recommend({
-      userId,
-      feedId: FEED_ID,
-      limit: 3,
-      fields: (process.env.INTEMPT_E2E_FEED_FIELDS ?? 'id')
-        .split(',')
-        .map((f) => f.trim()),
-    });
-    const ms = Date.now() - started;
-    const rows = Object.values(feed ?? {}).find(Array.isArray) ?? [];
-    if (rows.length === 0) {
-      inconclusive(
-        label,
-        ms,
-        `200 but empty ${JSON.stringify(feed)} — a missing feed answers exactly the ` +
-          `same way, so this proves nothing. Confirm feed ${FEED_ID} exists in this ` +
-          'project and has an algorithm configured.',
-      );
-    } else {
-      results.push({ name: label, state: 'PASS', ms, note: `${rows.length} product(s)` });
-      console.log(
-        `  PASS  ${label.padEnd(46)} ${String(ms).padStart(5)}ms  ${rows.length} product(s)`,
-      );
+  let feed;
+  let rows = [];
+  let failure;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      feed = await intempt.recommend({ userId, feedId: FEED_ID, limit: 3, fields });
+      rows = Object.values(feed ?? {}).find(Array.isArray) ?? [];
+      if (rows.length > 0) break;
+    } catch (error) {
+      failure = error;
+      break;
     }
-  } catch (error) {
-    const ms = Date.now() - started;
+    if (attempt < attempts) await new Promise((r) => setTimeout(r, gapMs));
+  }
+
+  const ms = Date.now() - started;
+  if (failure) {
     const status =
-      error instanceof IntemptApiError ? (error.status ?? 'transport') : 'error';
+      failure instanceof IntemptApiError ? (failure.status ?? 'transport') : 'error';
     const body =
-      error instanceof IntemptApiError ? (error.body ?? '').slice(0, 160) : String(error);
+      failure instanceof IntemptApiError
+        ? (failure.body ?? '').slice(0, 160)
+        : String(failure);
     results.push({ name: label, state: 'FAIL', ms, note: `${status}: ${body}` });
     console.error(
       `  FAIL  ${label.padEnd(46)} ${String(ms).padStart(5)}ms  ${status} ${body}`,
+    );
+  } else if (rows.length > 0) {
+    const note = `${rows.length} product(s): ${JSON.stringify(rows).slice(0, 70)}`;
+    results.push({ name: label, state: 'PASS', ms, note });
+    console.log(`  PASS  ${label.padEnd(46)} ${String(ms).padStart(5)}ms  ${note}`);
+  } else {
+    inconclusive(
+      label,
+      ms,
+      `200 but still empty after ${attempts} attempts over ${(attempts * gapMs) / 1000}s ` +
+        `${JSON.stringify(feed)} — a missing feed answers exactly the same way, so this ` +
+        `proves nothing. Confirm feed ${FEED_ID} exists in this project and has an ` +
+        'algorithm configured.',
     );
   }
 } else {

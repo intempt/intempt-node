@@ -6,32 +6,55 @@
  * `.d.ts` typechecks, and every namespace is callable.
  *
  * By default it points at a local mock server, so `npm start` works offline with
- * no credentials. Point it at staging by setting the environment:
+ * no credentials. Set INTEMPT_API_KEY and it talks to the real API instead:
  *
- *   INTEMPT_HOST=api.staging.intempt.com \
- *   INTEMPT_ORG=my-org INTEMPT_PROJECT=my-project \
- *   INTEMPT_API_KEY=prefix.secret INTEMPT_SOURCE_ID=123 \
+ *   INTEMPT_HOST=api.intempt.com \
+ *   INTEMPT_ORGANIZATION_ID=my-org INTEMPT_PROJECT_ID=my-project \
+ *   INTEMPT_API_KEY=prefix.secret INTEMPT_SOURCE_ID=1841... \
+ *   INTEMPT_E2E_USER_ID=someone@example.com \
+ *   INTEMPT_E2E_PRODUCT_ID=21 INTEMPT_E2E_FEED_ID=5292 \
  *   npm start
+ *
+ * Against a real project, supply the object ids: a fabricated productId is
+ * accepted with a 201 and proves nothing about your catalog.
  */
 import { Intempt, IntemptApiError, type IntemptClient } from 'intempt';
 import { startMockApi } from './mock-api';
 
 const useMock = !process.env.INTEMPT_API_KEY;
 
+const env = (...names: string[]): string | undefined => {
+  for (const n of names) if (process.env[n]) return process.env[n];
+  return undefined;
+};
+
+function baseConfig(mockHost?: string) {
+  return {
+    org: env('INTEMPT_ORGANIZATION_ID', 'INTEMPT_ORG') ?? 'demo-org',
+    project: env('INTEMPT_PROJECT_ID', 'INTEMPT_PROJECT') ?? 'demo-project',
+    apiKey: env('INTEMPT_API_KEY') ?? 'demoprefix.demosecret',
+    sourceId: env('INTEMPT_SOURCE_ID') ?? '1',
+    host: mockHost ?? env('INTEMPT_HOST') ?? 'api.intempt.com',
+    protocol: (mockHost ? 'http' : 'https') as 'http' | 'https',
+  };
+}
+
 async function main(): Promise<void> {
   const mock = useMock ? await startMockApi() : undefined;
 
   const intempt: IntemptClient = Intempt.init({
-    org: process.env.INTEMPT_ORG ?? 'demo-org',
-    project: process.env.INTEMPT_PROJECT ?? 'demo-project',
-    apiKey: process.env.INTEMPT_API_KEY ?? 'demoprefix.demosecret',
-    sourceId: process.env.INTEMPT_SOURCE_ID ?? '1',
-    host: mock ? mock.host : (process.env.INTEMPT_HOST ?? 'api.intempt.com'),
-    protocol: mock ? 'http' : 'https',
-    timeout: 10_000,
+    ...baseConfig(mock?.host),
+    timeout: 15_000,
   });
 
-  const userId = `demo-${Date.now()}`;
+  // Real project ids where supplied; the mock accepts anything.
+  const userId = env('INTEMPT_E2E_USER_ID') ?? `demo-${Date.now()}`;
+  const accountId = env('INTEMPT_E2E_ACCOUNT_ID') ?? 'demo-account';
+  const productId = env('INTEMPT_E2E_PRODUCT_ID') ?? 'sku-42';
+  const feedId = env('INTEMPT_E2E_FEED_ID') ?? '1';
+
+  console.log(`  target: ${mock ? 'local mock' : baseConfig().host}`);
+  console.log(`  profile: ${userId}\n`);
 
   try {
     // ---- identity ----
@@ -40,7 +63,7 @@ async function main(): Promise<void> {
 
     await intempt.group({
       userId,
-      accountId: 'acme-inc',
+      accountId,
       attributes: { tier: 'enterprise', domain: 'acme.com' },
     });
     log('group');
@@ -63,16 +86,10 @@ async function main(): Promise<void> {
     log('trackBatch (3 events)');
 
     // ---- commerce ----
-    await intempt.ecommerce.productViewed({ userId, productId: 'sku-42' });
-    await intempt.ecommerce.addedToCart({ userId, productId: 'sku-42', quantity: 2 });
-    await intempt.ecommerce.ordered({
-      userId,
-      products: [
-        { productId: 'sku-42', quantity: 2 },
-        { productId: 'sku-7', quantity: 1 },
-      ],
-    });
-    log('ecommerce (viewed, cart, ordered)');
+    await intempt.ecommerce.productViewed({ userId, productId });
+    await intempt.ecommerce.addedToCart({ userId, productId, quantity: 2 });
+    await intempt.ecommerce.ordered({ userId, products: [{ productId, quantity: 2 }] });
+    log(`ecommerce viewed/cart/ordered (product ${productId})`);
 
     // ---- consent ----
     await intempt.consent.grant({ userId, category: 'marketing' });
@@ -84,11 +101,17 @@ async function main(): Promise<void> {
     // experience against a page, so there is nothing for a server to ask for.
     const feed = await intempt.recommend({
       userId,
-      feedId: process.env.INTEMPT_E2E_FEED_ID ?? '1',
+      feedId,
       limit: 3,
-      fields: ['id', 'title'],
+      fields: (env('INTEMPT_E2E_FEED_FIELDS') ?? 'id').split(',').map((f) => f.trim()),
     });
-    log(`recommend -> ${JSON.stringify(feed).slice(0, 60)}`);
+    const rows = Object.values((feed ?? {}) as Record<string, unknown>).find(
+      Array.isArray,
+    );
+    log(
+      `recommend (feed ${feedId}) -> ${rows?.length ?? 0} row(s) ` +
+        `${JSON.stringify(feed).slice(0, 50)}`,
+    );
 
     // ---- privacy ----
     intempt.optOut();
@@ -96,14 +119,13 @@ async function main(): Promise<void> {
     log(`optOut suppresses writes (isOptedIn=${intempt.isOptedIn()})`);
     intempt.optIn();
 
+    // ---- config ----
+    intempt.setConfig({ timeout: 20_000 });
+    log(`setConfig -> timeout=${intempt.config.timeout}, buffered=${intempt.buffered}`);
+
     // ---- buffered mode ----
     const buffered = Intempt.init({
-      org: process.env.INTEMPT_ORG ?? 'demo-org',
-      project: process.env.INTEMPT_PROJECT ?? 'demo-project',
-      apiKey: process.env.INTEMPT_API_KEY ?? 'demoprefix.demosecret',
-      sourceId: process.env.INTEMPT_SOURCE_ID ?? '1',
-      host: mock ? mock.host : (process.env.INTEMPT_HOST ?? 'api.intempt.com'),
-      protocol: mock ? 'http' : 'https',
+      ...baseConfig(mock?.host),
       batch: { size: 10, flushMs: 2_000 },
       maxConcurrentRequests: 4,
     });
