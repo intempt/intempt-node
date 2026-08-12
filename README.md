@@ -1,18 +1,44 @@
 # Intempt Node.js SDK
 
-Server-side client for [Intempt](https://intempt.com). Data in, decisions out.
+[![Tests](https://github.com/intempt/intempt-node/actions/workflows/tests.yml/badge.svg)](https://github.com/intempt/intempt-node/actions/workflows/tests.yml)
+[![npm](https://img.shields.io/npm/v/intempt.svg)](https://www.npmjs.com/package/intempt)
+[![node](https://img.shields.io/node/v/intempt.svg)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/intempt.svg)](./LICENSE)
+
+Server-side client for [Intempt](https://intempt.com). **Data in, decisions out.**
 
 - **In** — events, identity, consent, commerce
 - **Out** — experiences, personalizations, recommendations
 
-Console and configuration operations are deliberately not here. Those live in
-the [Intempt CLI and MCP server](https://github.com/intempt/cli).
+This is a server library, not a browser one. It holds no per-user state: every
+call takes its identifier explicitly, so one client instance is safe to share
+across requests for all users. For the browser, use
+[intempt-js](https://github.com/intempt/intempt-js).
+
+Console and configuration operations are deliberately not here — see
+[Not in this SDK](#not-in-this-sdk).
 
 ```bash
 npm install intempt
 ```
 
-Requires Node 20 or newer.
+Requires Node 20 or newer. Written in TypeScript; types ship with the package.
+
+- [Changelog](./CHANGELOG.md)
+- [Security policy](./SECURITY.md)
+- [Sample app](./examples/basic)
+
+## The Intempt toolchain
+
+| Tool                                                | For                  | Use it when                                                |
+| --------------------------------------------------- | -------------------- | ---------------------------------------------------------- |
+| **`intempt`** (this package)                        | your server          | sending events, reading decisions on the request path      |
+| [intempt-js](https://github.com/intempt/intempt-js) | the browser          | client-side auto-tracking, page and session context        |
+| [`@intempt/cli`](https://github.com/intempt/cli)    | your terminal and CI | tracking plans, typed wrapper codegen, coverage checks     |
+| `@intempt/mcp-server`                               | AI agents            | journeys, dashboards, segments, brand — the management API |
+
+If an operation is configuration or analysis rather than something on a
+customer request path, it belongs in the CLI or MCP server, not here.
 
 ## Quick start
 
@@ -40,6 +66,31 @@ const variants = await intempt.decide.experiences({
 By default each call sends one request and the promise resolves when the server
 responds. Nothing is buffered, so there is nothing to lose on exit — which makes
 this safe in Lambda and other short-lived processes.
+
+## API reference
+
+| Call                               | Returns              | Endpoint                             |
+| ---------------------------------- | -------------------- | ------------------------------------ |
+| `Intempt.init(config)`             | `IntemptClient`      | —                                    |
+| `track(event, options)`            | `Promise<void>`      | `POST …/track`                       |
+| `trackBatch(events)`               | `Promise<void>`      | `POST …/track`, chunked              |
+| `identify(options)`                | `Promise<void>`      | `POST …/track` (reserved `Identify`) |
+| `group(options)`                   | `Promise<void>`      | `POST …/track` (reserved `Identify`) |
+| `alias(options)`                   | `Promise<void>`      | `POST …/track` (reserved `Identify`) |
+| `consent.grant(options)`           | `Promise<void>`      | `POST …/consents/data`               |
+| `consent.revoke(options)`          | `Promise<void>`      | `POST …/consents/data`               |
+| `ecommerce.productViewed(options)` | `Promise<void>`      | `POST …/track`                       |
+| `ecommerce.addedToCart(options)`   | `Promise<void>`      | `POST …/track`                       |
+| `ecommerce.ordered(options)`       | `Promise<void>`      | `POST …/track`                       |
+| `decide.experiences(options)`      | `Promise<unknown[]>` | `POST …/optimization/choose-api`     |
+| `decide.recommend(options)`        | `Promise<unknown>`   | `POST …/feeds/{id}/data`             |
+| `optIn()` / `optOut()`             | `void`               | —                                    |
+| `isOptedIn()`                      | `boolean`            | —                                    |
+| `flush()` / `close()`              | `Promise<void>`      | —                                    |
+| `setConfig(patch)`                 | `void`               | —                                    |
+| `config` / `buffered`              | getters              | —                                    |
+
+Every method rejects on failure. Nothing is swallowed.
 
 ## Configuration
 
@@ -339,6 +390,87 @@ runnable sample app.
 against a local mock API, so `npm run verify:consumer` works with no credentials.
 Point it at a real environment with `INTEMPT_HOST`, `INTEMPT_ORG`,
 `INTEMPT_PROJECT`, `INTEMPT_API_KEY` and `INTEMPT_SOURCE_ID`.
+
+## FAQ
+
+**Why does every call need an identifier? Why is there no stateful `identify()`?**
+
+This library is stateless by design, so one instance can be shared across
+requests for every user. Client-side SDKs tie one instance to one user and can
+hold a `profileId`; a server cannot. Pass `userId`, `profileId` or `accountId`
+with each call.
+
+**Do I need a `profileId`?**
+
+No. The API accepts `userId` on its own and links it to a profile for you.
+Consent additionally accepts `masterId`.
+
+**Where is `users.merge()` / profile merging?**
+
+Deliberately absent. Merging is irreversible, no inverse endpoint exists, and it
+takes internal numeric IDs this SDK has no way to resolve. Use `alias()` and let
+the platform resolve identity itself. If you genuinely need a merge, do it
+through the CLI or MCP server, where a human confirms it.
+
+**Which API key should I use?**
+
+A **public** key. It carries exactly the ingestion scopes this SDK needs. Never
+deploy a private or admin key in an application server — those grant full
+project access. See [SECURITY.md](./SECURITY.md).
+
+**Can I generate emails, images or copy with this SDK?**
+
+Not yet. Those endpoints authenticate with a bearer JWT tied to a person, and
+there is no API-key path into them, so it cannot be done from a server key.
+Use the CLI or MCP server today.
+
+**Should I turn batching on?**
+
+Only for a long-lived, high-volume process. The default sends one request per
+call and resolves when the server responds, which is the right behaviour for
+Lambda and anything that can exit at any moment. See [Batching](#batching).
+
+**Is `timestamp` a backfill mechanism?**
+
+Treat it as unconfirmed. The ingestion API forwards a client timestamp, but
+whether the event store honours it or stamps arrival time is not yet verified.
+Do not build a historical import on it without checking.
+
+## Support
+
+- Bugs and feature requests: [open an issue](https://github.com/intempt/intempt-node/issues)
+- Security reports: **security@intempt.com** — please do not use a public issue
+- Platform documentation: [docs.intempt.com](https://docs.intempt.com)
+
+## Contributing
+
+```bash
+git clone https://github.com/intempt/intempt-node.git
+cd intempt-node
+npm ci
+npm run check-format && npm run lint && npm run typecheck && npm test
+npm run verify:consumer
+```
+
+Pull request titles follow [Conventional Commits](https://www.conventionalcommits.org)
+(`feat:`, `fix:`, `chore:`, …) and are checked in CI, because the release notes are
+generated from the commit log. Every change needs a test, and
+`tests/integration.test.ts` must stay free of `nock` — see
+[Development](#development) for why.
+
+## Attribution and credits
+
+This SDK derives roughly 190 lines from
+[mixpanel-node](https://github.com/mixpanel/mixpanel-node): its configuration
+object, credential handling, keep-alive and proxy agent setup, response
+classification, library-version reporting, and the batch-size ceiling with 413
+halving.
+
+Copyright (c) 2012 Carl Sverre, MIT licensed. Both projects are MIT.
+[NOTICE](./NOTICE) records what is copied verbatim versus adapted, per file.
+
+The HTTP transport, wire format, endpoints, retry policy and every public method
+signature are Intempt's own.
 
 ## License
 
