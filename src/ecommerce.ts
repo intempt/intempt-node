@@ -14,7 +14,11 @@ export const COMMERCE_EVENTS = {
 } as const;
 
 export class Ecommerce {
-  constructor(private readonly ingest: Ingest) {}
+  readonly #ingest: Ingest;
+
+  constructor(ingest: Ingest) {
+    this.#ingest = ingest;
+  }
 
   async productViewed(options: Identifiers & { productId: string }): Promise<void> {
     if (!options?.productId) {
@@ -22,7 +26,7 @@ export class Ecommerce {
     }
     assertIdentifier(options, 'productViewed');
     const { productId, ...ids } = options;
-    await this.ingest.trackLines(COMMERCE_EVENTS.productViewed, ids, [{ productId }]);
+    await this.#ingest.trackLines(COMMERCE_EVENTS.productViewed, ids, [{ productId }]);
   }
 
   async addedToCart(
@@ -36,7 +40,7 @@ export class Ecommerce {
     }
     assertIdentifier(options, 'addedToCart');
     const { productId, quantity, ...ids } = options;
-    await this.ingest.trackLines(COMMERCE_EVENTS.addedToCart, ids, [{ productId, quantity }]);
+    await this.#ingest.trackLines(COMMERCE_EVENTS.addedToCart, ids, [{ productId, quantity }]);
   }
 
   async ordered(options: Identifiers & { products: ProductLine[] }): Promise<void> {
@@ -57,7 +61,7 @@ export class Ecommerce {
     assertIdentifier(options, 'ordered');
 
     const { products, ...ids } = options;
-    await this.ingest.trackLines(
+    await this.#ingest.trackLines(
       COMMERCE_EVENTS.ordered,
       ids,
       products.map((product) => compact({ ...product })),

@@ -22,7 +22,6 @@ const DEFAULT_CONFIG = {
   debug: false,
   batch: false as const,
   maxRequestEvents: 50,
-  stampLibVersion: false,
 };
 
 const DEFAULT_BATCH: ResolvedBatchOptions = {
@@ -113,7 +112,6 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     debug: config.debug ?? DEFAULT_CONFIG.debug,
     batch: resolveBatch(config.batch),
     maxRequestEvents,
-    stampLibVersion: config.stampLibVersion ?? DEFAULT_CONFIG.stampLibVersion,
   };
 }
 
@@ -156,7 +154,6 @@ export function mergeConfig(
   }
   if (patch.keepAlive !== undefined) next.keepAlive = patch.keepAlive;
   if (patch.debug !== undefined) next.debug = patch.debug;
-  if (patch.stampLibVersion !== undefined) next.stampLibVersion = patch.stampLibVersion;
 
   return next;
 }

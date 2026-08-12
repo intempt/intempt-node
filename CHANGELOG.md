@@ -55,7 +55,7 @@ data in, decisions out: no admin or console operations.
 - `Intempt.init({ org, project, apiKey, sourceId?, ... })` replaces the
   positional constructor.
 - Configuration: `host`, `protocol`, `path`, `timeout`, `keepAlive`, `logger`,
-  `debug`, `batch`, `maxRequestEvents`, `stampLibVersion`, plus `setConfig()`.
+  `debug`, `batch`, `maxRequestEvents`, plus `setConfig()`.
 - Keep-alive HTTP agents and `HTTPS_PROXY` / `HTTP_PROXY` support.
 - `trackBatch()`, chunked at `maxRequestEvents` (default 50) so one call cannot
   become one oversized request.
@@ -68,9 +68,11 @@ data in, decisions out: no admin or console operations.
   Note: whether the event store honours a client-supplied timestamp or stamps
   ingest time is **unverified**; do not treat this as a backfill guarantee yet.
 - `decide.experiences({ type })` replaces four `choose*` methods.
-- `X-Intempt-Lib: intempt-node/<version>` on every request. Payload stamping of
-  `$lib` / `$libVersion` is available via `stampLibVersion` but off by default,
-  since a new payload field could affect a downstream event schema.
+- `X-Intempt-Lib: intempt-node/<version>` on every request. Nothing is added to
+  the event payload: a new payload field could affect a downstream event schema,
+  and a header cannot.
+- Every internal is a true `#private` field, so no part of the object graph
+  reaches the transport, the credential, or a namespace's dependencies.
 - `IntemptApiError` with `status`, `body`, `retryAfterMs` and `retryable`.
 - 176 tests, all offline via `nock`, with an 80% coverage gate.
 - CI on pull requests across Node 18, 20 and 22. Publishing moved to version

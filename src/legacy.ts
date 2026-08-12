@@ -16,8 +16,8 @@ import type { Logger, ProductLine } from './types';
  * Deprecated. Use `Intempt.init()`.
  */
 export class SDK {
-  private readonly client: IntemptClient;
-  private static warned = false;
+  readonly #client: IntemptClient;
+  static #warned = false;
 
   constructor(
     orgName: string,
@@ -39,7 +39,7 @@ export class SDK {
             ...(time !== undefined ? { flushMs: time } : {}),
           };
 
-    this.client = new IntemptClient({
+    this.#client = new IntemptClient({
       org: orgName,
       project: projectName,
       apiKey,
@@ -47,12 +47,12 @@ export class SDK {
       batch,
     });
 
-    SDK.warnOnce(this.client.config.logger);
+    SDK.#warnOnce(this.#client.config.logger);
   }
 
-  private static warnOnce(logger: Logger): void {
-    if (SDK.warned) return;
-    SDK.warned = true;
+  static #warnOnce(logger: Logger): void {
+    if (SDK.#warned) return;
+    SDK.#warned = true;
     logger.warn(
       '[intempt] `new SDK(...)` is deprecated and will be removed in 3.0.0. ' +
         'Use `Intempt.init({ org, project, apiKey, sourceId })`.',
@@ -61,7 +61,7 @@ export class SDK {
 
   /** Escape hatch to the 2.x client while migrating. */
   get v2(): IntemptClient {
-    return this.client;
+    return this.#client;
   }
 
   async identify(
@@ -70,7 +70,7 @@ export class SDK {
     eventTitle?: string,
     userAttributes?: object,
   ): Promise<void> {
-    await this.client.identify({
+    await this.#client.identify({
       profileId,
       userId,
       ...(eventTitle ? { event: eventTitle } : {}),
@@ -84,7 +84,7 @@ export class SDK {
     eventTitle?: string,
     accountAttributes?: object,
   ): Promise<void> {
-    await this.client.group({
+    await this.#client.group({
       profileId,
       accountId,
       ...(eventTitle ? { event: eventTitle } : {}),
@@ -95,7 +95,7 @@ export class SDK {
   }
 
   async track(profileId: string, eventTitle: string, data: object): Promise<void> {
-    await this.client.track(eventTitle, {
+    await this.#client.track(eventTitle, {
       profileId,
       properties: data as Record<string, unknown>,
     });
@@ -110,7 +110,7 @@ export class SDK {
     userAttributes?: object,
     accountAttributes?: object,
   ): Promise<void> {
-    await this.client.track(eventTitle, {
+    await this.#client.track(eventTitle, {
       profileId,
       ...(userId ? { userId } : {}),
       ...(accountId ? { accountId } : {}),
@@ -123,7 +123,7 @@ export class SDK {
   }
 
   async alias(profileId: string, userId: string, anotherUserId: string): Promise<void> {
-    await this.client.alias({ profileId, userId, previousUserId: anotherUserId });
+    await this.#client.alias({ profileId, userId, previousUserId: anotherUserId });
   }
 
   async consents(
@@ -155,20 +155,20 @@ export class SDK {
       ...(message ? { message } : {}),
     };
     await (action === 'accept'
-      ? this.client.consent.grant(options)
-      : this.client.consent.revoke(options));
+      ? this.#client.consent.grant(options)
+      : this.#client.consent.revoke(options));
   }
 
   async productAdd(profileId: string, productId: string, quantity: number): Promise<void> {
-    await this.client.ecommerce.addedToCart({ profileId, productId, quantity });
+    await this.#client.ecommerce.addedToCart({ profileId, productId, quantity });
   }
 
   async productView(profileId: string, productId: string): Promise<void> {
-    await this.client.ecommerce.productViewed({ profileId, productId });
+    await this.#client.ecommerce.productViewed({ profileId, productId });
   }
 
   async productOrdered(profileId: string, products: ProductLine[]): Promise<void> {
-    await this.client.ecommerce.ordered({ profileId, products });
+    await this.#client.ecommerce.ordered({ profileId, products });
   }
 
   async recommendation(
@@ -178,7 +178,7 @@ export class SDK {
     fields: string[],
     productId?: string,
   ): Promise<unknown> {
-    return this.client.decide.recommend({
+    return this.#client.decide.recommend({
       profileId,
       feedId: id,
       limit: quantity,
@@ -188,7 +188,7 @@ export class SDK {
   }
 
   choosePersonalizationsByGroups(profileId: string, groups?: string[]): Promise<unknown[]> {
-    return this.client.decide.experiences({
+    return this.#client.decide.experiences({
       profileId,
       type: 'personalization',
       ...(groups ? { groups } : {}),
@@ -196,7 +196,7 @@ export class SDK {
   }
 
   choosePersonalizationsByNames(profileId: string, names?: string[]): Promise<unknown[]> {
-    return this.client.decide.experiences({
+    return this.#client.decide.experiences({
       profileId,
       type: 'personalization',
       ...(names ? { names } : {}),
@@ -204,7 +204,7 @@ export class SDK {
   }
 
   chooseExperimentsByGroups(profileId: string, groups?: string[]): Promise<unknown[]> {
-    return this.client.decide.experiences({
+    return this.#client.decide.experiences({
       profileId,
       type: 'experiment',
       ...(groups ? { groups } : {}),
@@ -212,7 +212,7 @@ export class SDK {
   }
 
   chooseExperimentsByNames(profileId: string, names?: string[]): Promise<unknown[]> {
-    return this.client.decide.experiences({
+    return this.#client.decide.experiences({
       profileId,
       type: 'experiment',
       ...(names ? { names } : {}),
@@ -220,18 +220,18 @@ export class SDK {
   }
 
   optIn(): void {
-    this.client.optIn();
+    this.#client.optIn();
   }
 
   optOut(): void {
-    this.client.optOut();
+    this.#client.optOut();
   }
 
   flush(): Promise<void> {
-    return this.client.flush();
+    return this.#client.flush();
   }
 
   close(): Promise<void> {
-    return this.client.close();
+    return this.#client.close();
   }
 }

@@ -17,17 +17,21 @@ export interface ConsentDeps {
 }
 
 export class Consent {
-  constructor(private readonly deps: ConsentDeps) {}
+  readonly #deps: ConsentDeps;
+
+  constructor(deps: ConsentDeps) {
+    this.#deps = deps;
+  }
 
   grant(options: ConsentOptions): Promise<void> {
-    return this.record('accept', options);
+    return this.#record('accept', options);
   }
 
   revoke(options: ConsentOptions): Promise<void> {
-    return this.record('reject', options);
+    return this.#record('reject', options);
   }
 
-  private async record(action: 'accept' | 'reject', options: ConsentOptions): Promise<void> {
+  async #record(action: 'accept' | 'reject', options: ConsentOptions): Promise<void> {
     if (!options || typeof options !== 'object') {
       throw new TypeError(`consent.${action === 'accept' ? 'grant' : 'revoke'}: options are required`);
     }
@@ -36,7 +40,7 @@ export class Consent {
       throw new TypeError('consent: one of userId, profileId or masterId is required');
     }
 
-    const { sourceId } = this.deps.config();
+    const { sourceId } = this.#deps.config();
     // The server rejects a profileId-identified consent record without a source.
     if (profileId && !sourceId) {
       throw new TypeError(
@@ -45,7 +49,7 @@ export class Consent {
       );
     }
 
-    if (!this.deps.isOptedIn()) {
+    if (!this.#deps.isOptedIn()) {
       return;
     }
 
@@ -76,6 +80,6 @@ export class Consent {
       deviceInfo: options.deviceInfo,
     });
 
-    await this.deps.transport.post(this.deps.transport.projectPath('/consents/data'), body);
+    await this.#deps.transport.post(this.#deps.transport.projectPath('/consents/data'), body);
   }
 }

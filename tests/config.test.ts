@@ -38,7 +38,6 @@ describe('config: defaults', () => {
       debug: false,
       batch: false,
       maxRequestEvents: 50,
-      stampLibVersion: false,
     });
   });
 

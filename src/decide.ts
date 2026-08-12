@@ -20,7 +20,11 @@ interface ChooseResponse {
  * same public API key that ingests events can read decisions.
  */
 export class Decide {
-  constructor(private readonly deps: DecideDeps) {}
+  readonly #deps: DecideDeps;
+
+  constructor(deps: DecideDeps) {
+    this.#deps = deps;
+  }
 
   /**
    * Resolves the variants this profile should see. One call covers both
@@ -35,7 +39,7 @@ export class Decide {
       throw new TypeError('experiences: pass groups or names, not both');
     }
 
-    const { sourceId } = this.deps.config();
+    const { sourceId } = this.#deps.config();
     const body = compact({
       identification: compact({
         profileId: options.profileId ?? options.userId,
@@ -49,8 +53,8 @@ export class Decide {
       device: options.device ?? 'all',
     });
 
-    const response = await this.deps.transport.post<ChooseResponse>(
-      this.deps.transport.projectPath('/optimization/choose-api'),
+    const response = await this.#deps.transport.post<ChooseResponse>(
+      this.#deps.transport.projectPath('/optimization/choose-api'),
       body,
     );
     return response.body?.choices ?? [];
@@ -69,7 +73,7 @@ export class Decide {
     }
     assertIdentifier(options, 'recommend');
 
-    const { sourceId } = this.deps.config();
+    const { sourceId } = this.#deps.config();
     const body = compact({
       profileId: options.profileId ?? options.userId,
       userId: options.userId,
@@ -80,8 +84,8 @@ export class Decide {
       productId: options.productId,
     });
 
-    const response = await this.deps.transport.post(
-      this.deps.transport.projectPath(`/feeds/${encodeURIComponent(options.feedId)}/data`),
+    const response = await this.#deps.transport.post(
+      this.#deps.transport.projectPath(`/feeds/${encodeURIComponent(options.feedId)}/data`),
       body,
     );
     return response.body;

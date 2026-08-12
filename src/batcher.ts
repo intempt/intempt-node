@@ -25,55 +25,55 @@ export interface BatcherOptions {
 }
 
 export class Batcher {
-  private readonly options: ResolvedBatchOptions;
-  private readonly maxRequestEvents: number;
-  private readonly logger: Logger;
-  private readonly send: (events: WireEvent[]) => Promise<unknown>;
+  readonly #options: ResolvedBatchOptions;
+  readonly #maxRequestEvents: number;
+  readonly #logger: Logger;
+  readonly #send: (events: WireEvent[]) => Promise<unknown>;
 
-  private queue: WireEvent[] = [];
-  private batchSize: number;
-  private timer: NodeJS.Timeout | undefined;
+  #queue: WireEvent[] = [];
+  #batchSize: number;
+  #timer: NodeJS.Timeout | undefined;
   /** Serialises flushes so two callers can never drain the same slice. */
-  private chain: Promise<void> = Promise.resolve();
-  private consecutiveFailures = 0;
-  private stopped = false;
-  private exitHook: (() => void) | undefined;
+  #chain: Promise<void> = Promise.resolve();
+  #consecutiveFailures = 0;
+  #stopped = false;
+  #exitHook: (() => void) | undefined;
 
   constructor({ options, maxRequestEvents, logger, send }: BatcherOptions) {
-    this.options = options;
-    this.maxRequestEvents = maxRequestEvents;
-    this.logger = logger;
-    this.send = send;
-    this.batchSize = Math.min(options.size, maxRequestEvents);
+    this.#options = options;
+    this.#maxRequestEvents = maxRequestEvents;
+    this.#logger = logger;
+    this.#send = send;
+    this.#batchSize = Math.min(options.size, maxRequestEvents);
 
     if (options.flushOnExit) {
-      this.exitHook = () => {
+      this.#exitHook = () => {
         void this.flush();
       };
-      process.on('beforeExit', this.exitHook);
+      process.on('beforeExit', this.#exitHook);
     }
   }
 
   /** Buffers an event. Returns false when the event was dropped. */
   enqueue(event: WireEvent): boolean {
-    if (this.stopped) {
-      this.logger.error('[intempt] batching is stopped; event dropped', { name: event.name });
+    if (this.#stopped) {
+      this.#logger.error('[intempt] batching is stopped; event dropped', { name: event.name });
       return false;
     }
-    if (this.queue.length >= this.options.maxQueue) {
-      this.logger.error('[intempt] batch queue full; event dropped', {
+    if (this.#queue.length >= this.#options.maxQueue) {
+      this.#logger.error('[intempt] batch queue full; event dropped', {
         name: event.name,
-        maxQueue: this.options.maxQueue,
+        maxQueue: this.#options.maxQueue,
       });
       return false;
     }
 
-    this.queue.push(event);
+    this.#queue.push(event);
 
-    if (this.queue.length >= this.batchSize) {
+    if (this.#queue.length >= this.#batchSize) {
       void this.flush();
     } else {
-      this.scheduleFlush(this.options.flushMs);
+      this.#scheduleFlush(this.#options.flushMs);
     }
     return true;
   }
@@ -83,34 +83,34 @@ export class Batcher {
    * the batcher has stopped, so `close()` cannot return with events buffered.
    */
   async flush(): Promise<void> {
-    const next = this.chain.then(() => this.drain());
+    const next = this.#chain.then(() => this.#drain());
     // Keep the chain itself settled so one failure cannot poison later flushes.
-    this.chain = next.then(
+    this.#chain = next.then(
       () => undefined,
       () => undefined,
     );
     return next;
   }
 
-  private async drain(): Promise<void> {
-    this.clearTimer();
+  async #drain(): Promise<void> {
+    this.#clearTimer();
 
-    while (this.queue.length > 0 && !this.stopped) {
+    while (this.#queue.length > 0 && !this.#stopped) {
       // Take a slice rather than the whole array: events appended during the
       // await stay queued instead of being cleared out from under the send.
-      const batch = this.queue.slice(0, this.batchSize);
+      const batch = this.#queue.slice(0, this.#batchSize);
 
       try {
-        await this.send(batch);
+        await this.#send(batch);
       } catch (error) {
-        const handled = await this.handleFailure(error, batch);
+        const handled = await this.#handleFailure(error, batch);
         if (handled === 'requeue') continue;
         if (handled === 'stop') return;
       }
 
-      this.queue.splice(0, batch.length);
-      this.consecutiveFailures = 0;
-      this.batchSize = Math.min(this.options.size, this.maxRequestEvents);
+      this.#queue.splice(0, batch.length);
+      this.#consecutiveFailures = 0;
+      this.#batchSize = Math.min(this.#options.size, this.#maxRequestEvents);
     }
   }
 
@@ -122,7 +122,7 @@ export class Batcher {
    * timeout          exponential backoff
    * other 4xx        drop the batch, surface the error
    */
-  private async handleFailure(
+  async #handleFailure(
     error: unknown,
     batch: WireEvent[],
   ): Promise<'requeue' | 'stop'> {
@@ -131,81 +131,81 @@ export class Batcher {
 
     if (status === 413) {
       if (batch.length > 1) {
-        this.batchSize = Math.max(1, Math.floor(batch.length / 2));
-        this.logger.warn(`[intempt] 413 received; reducing batch size to ${this.batchSize}`);
+        this.#batchSize = Math.max(1, Math.floor(batch.length / 2));
+        this.#logger.warn(`[intempt] 413 received; reducing batch size to ${this.#batchSize}`);
         return 'requeue';
       }
-      this.logger.error('[intempt] single event too large; dropping', {
+      this.#logger.error('[intempt] single event too large; dropping', {
         name: batch[0]?.name,
       });
-      this.queue.splice(0, 1);
-      this.batchSize = Math.min(this.options.size, this.maxRequestEvents);
+      this.#queue.splice(0, 1);
+      this.#batchSize = Math.min(this.#options.size, this.#maxRequestEvents);
       return 'requeue';
     }
 
     if (apiError && !apiError.retryable) {
-      this.logger.error('[intempt] non-retryable error; dropping batch', {
+      this.#logger.error('[intempt] non-retryable error; dropping batch', {
         status,
         body: apiError.body,
         count: batch.length,
       });
-      this.queue.splice(0, batch.length);
+      this.#queue.splice(0, batch.length);
       return 'requeue';
     }
 
-    this.consecutiveFailures += 1;
-    if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-      this.logger.error(
-        `[intempt] ${this.consecutiveFailures} consecutive failures; stopping batching. ` +
-          `${this.queue.length} event(s) remain buffered.`,
+    this.#consecutiveFailures += 1;
+    if (this.#consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      this.#logger.error(
+        `[intempt] ${this.#consecutiveFailures} consecutive failures; stopping batching. ` +
+          `${this.#queue.length} event(s) remain buffered.`,
         error,
       );
-      this.stopped = true;
+      this.#stopped = true;
       return 'stop';
     }
 
     const backoff = Math.min(
       MAX_RETRY_INTERVAL_MS,
-      apiError?.retryAfterMs ?? this.options.flushMs * 2 ** this.consecutiveFailures,
+      apiError?.retryAfterMs ?? this.#options.flushMs * 2 ** this.#consecutiveFailures,
     );
-    this.logger.warn(`[intempt] send failed; retrying in ${backoff}ms`, error);
+    this.#logger.warn(`[intempt] send failed; retrying in ${backoff}ms`, error);
     await delay(backoff);
     return 'requeue';
   }
 
-  private scheduleFlush(ms: number): void {
-    if (this.timer || this.stopped) return;
-    this.timer = setTimeout(() => {
-      this.timer = undefined;
+  #scheduleFlush(ms: number): void {
+    if (this.#timer || this.#stopped) return;
+    this.#timer = setTimeout(() => {
+      this.#timer = undefined;
       void this.flush();
     }, ms);
     // Never hold the event loop open just to wait for a flush.
-    this.timer.unref?.();
+    this.#timer.unref?.();
   }
 
-  private clearTimer(): void {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = undefined;
+  #clearTimer(): void {
+    if (this.#timer) {
+      clearTimeout(this.#timer);
+      this.#timer = undefined;
     }
   }
 
   /** Number of events still buffered. */
   get size(): number {
-    return this.queue.length;
+    return this.#queue.length;
   }
 
   get isStopped(): boolean {
-    return this.stopped;
+    return this.#stopped;
   }
 
   async close(): Promise<void> {
     await this.flush();
-    this.stopped = true;
-    this.clearTimer();
-    if (this.exitHook) {
-      process.removeListener('beforeExit', this.exitHook);
-      this.exitHook = undefined;
+    this.#stopped = true;
+    this.#clearTimer();
+    if (this.#exitHook) {
+      process.removeListener('beforeExit', this.#exitHook);
+      this.#exitHook = undefined;
     }
   }
 }

@@ -61,7 +61,6 @@ Intempt.init({
 
   batch: false,                  // see Batching
   maxRequestEvents: 50,          // hard ceiling on events per request
-  stampLibVersion: false,        // see Library identity
 });
 ```
 
@@ -216,9 +215,8 @@ try {
 ## Library identity
 
 Every request carries `X-Intempt-Lib: intempt-node/<version>`, so a bad batch
-can be traced to an SDK version. Set `stampLibVersion: true` to also add
-`$lib` and `$libVersion` to each event payload — off by default, because a new
-payload field can affect a downstream event schema.
+can be traced to an SDK version. Nothing is added to the event payload: a new
+payload field could affect a downstream event schema, and a header cannot.
 
 ## Migrating from 1.x
 

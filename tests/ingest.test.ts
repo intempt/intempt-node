@@ -125,16 +125,14 @@ describe('ingest: wire format', () => {
     expect(Object.keys(item).sort()).toEqual(['eventId', 'timestamp', 'userId']);
   });
 
-  it('leaves $lib out of the payload unless stampLibVersion is on', async () => {
-    const off = capture();
+  it('never adds $lib fields to the payload; identity is a header only', async () => {
+    // A new payload field could alter a downstream event schema. The version
+    // travels in X-Intempt-Lib, which cannot.
+    const bodies = capture();
     await client().track('purchase', { userId: 'u1' });
-    expect(off[0]!.track[0]!.payload[0]).not.toHaveProperty('$lib');
-
-    nock.cleanAll();
-    const on = capture();
-    await client({ stampLibVersion: true }).track('purchase', { userId: 'u1' });
-    expect(on[0]!.track[0]!.payload[0]!.$lib).toBe('intempt-node');
-    expect(on[0]!.track[0]!.payload[0]!.$libVersion).toMatch(/^\d+\.\d+\.\d+/);
+    const item = bodies[0]!.track[0]!.payload[0]!;
+    expect(item).not.toHaveProperty('$lib');
+    expect(item).not.toHaveProperty('$libVersion');
   });
 });
 

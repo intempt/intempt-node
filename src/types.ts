@@ -48,12 +48,6 @@ export interface IntemptConfig {
    * 413 responses halve at runtime.
    */
   maxRequestEvents?: number;
-  /**
-   * Also stamp `$lib`/`$libVersion` onto each event payload. Off by default:
-   * the SDK identity always travels in the `X-Intempt-Lib` header, which
-   * cannot affect downstream event schemas.
-   */
-  stampLibVersion?: boolean;
 }
 
 export interface ResolvedBatchOptions extends Required<BatchOptions> {}
@@ -72,7 +66,6 @@ export interface ResolvedConfig {
   debug: boolean;
   batch: false | ResolvedBatchOptions;
   maxRequestEvents: number;
-  stampLibVersion: boolean;
 }
 
 /**
@@ -167,8 +160,6 @@ export interface WirePayloadItem {
   userAttributes?: Properties;
   accountAttributes?: Properties;
   anotherUserId?: string;
-  $lib?: string;
-  $libVersion?: string;
 }
 
 export interface WireEvent {

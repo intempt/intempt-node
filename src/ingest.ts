@@ -10,7 +10,6 @@ import type {
   WirePayloadItem,
 } from './types';
 import { assertIdentifier, chunk, compact, ensureTimestamp } from './utils';
-import { stampPayload } from './stamp';
 import type { Transport } from './transport';
 import type { Batcher } from './batcher';
 
@@ -25,17 +24,21 @@ export interface IngestDeps {
 }
 
 export class Ingest {
-  constructor(private readonly deps: IngestDeps) {}
+  readonly #deps: IngestDeps;
 
-  /** `/sources/{id}/track` when a sourceId is configured, else `/track`. */
-  private trackPath(): string {
-    const { sourceId } = this.deps.config();
-    return sourceId
-      ? this.deps.transport.projectPath(`/sources/${encodeURIComponent(sourceId)}/track`)
-      : this.deps.transport.projectPath('/track');
+  constructor(deps: IngestDeps) {
+    this.#deps = deps;
   }
 
-  private buildEvent(name: string, options: TrackOptions): WireEvent {
+  /** `/sources/{id}/track` when a sourceId is configured, else `/track`. */
+  #trackPath(): string {
+    const { sourceId } = this.#deps.config();
+    return sourceId
+      ? this.#deps.transport.projectPath(`/sources/${encodeURIComponent(sourceId)}/track`)
+      : this.#deps.transport.projectPath('/track');
+  }
+
+  #buildEvent(name: string, options: TrackOptions): WireEvent {
     const item: WirePayloadItem = compact({
       eventId: randomUUID(),
       timestamp: options.timestamp === undefined ? Date.now() : ensureTimestamp(options.timestamp),
@@ -47,10 +50,7 @@ export class Ingest {
       accountAttributes: options.accountAttributes,
     });
 
-    return {
-      name,
-      payload: [stampPayload(item, this.deps.config().stampLibVersion)],
-    };
+    return { name, payload: [item] };
   }
 
   /**
@@ -69,35 +69,30 @@ export class Ingest {
     const eventId = randomUUID();
     const timestamp =
       options.timestamp === undefined ? Date.now() : ensureTimestamp(options.timestamp);
-    const stamp = this.deps.config().stampLibVersion;
-
     const event: WireEvent = {
       name,
       payload: lines.map((line) =>
-        stampPayload(
-          compact({
-            eventId,
-            timestamp,
-            profileId: options.profileId,
-            userId: options.userId,
-            accountId: options.accountId,
-            data: line,
-          }),
-          stamp,
-        ),
+        compact({
+          eventId,
+          timestamp,
+          profileId: options.profileId,
+          userId: options.userId,
+          accountId: options.accountId,
+          data: line,
+        }),
       ),
     };
 
-    await this.submit([event]);
+    await this.#submit([event]);
   }
 
   /** Sends immediately, or buffers when batching is enabled. */
-  private async submit(events: WireEvent[]): Promise<void> {
-    if (!this.deps.isOptedIn() || events.length === 0) {
+  async #submit(events: WireEvent[]): Promise<void> {
+    if (!this.#deps.isOptedIn() || events.length === 0) {
       return;
     }
 
-    const batcher = this.deps.batcher();
+    const batcher = this.#deps.batcher();
     if (batcher) {
       for (const event of events) {
         batcher.enqueue(event);
@@ -110,13 +105,13 @@ export class Ingest {
 
   /** Posts one request. Used directly by the batcher. */
   async send(events: WireEvent[]): Promise<void> {
-    await this.deps.transport.post(this.trackPath(), { track: events });
+    await this.#deps.transport.post(this.#trackPath(), { track: events });
   }
 
   async track(event: string, options: TrackOptions): Promise<void> {
     assertEventName(event, 'track');
     assertIdentifier(options, 'track');
-    await this.submit([this.buildEvent(event, options)]);
+    await this.#submit([this.#buildEvent(event, options)]);
   }
 
   /**
@@ -136,15 +131,15 @@ export class Ingest {
       assertIdentifier(event, `trackBatch[${index}]`);
     });
 
-    const wire = events.map(({ event, ...options }) => this.buildEvent(event, options));
+    const wire = events.map(({ event, ...options }) => this.#buildEvent(event, options));
 
-    const batcher = this.deps.batcher();
-    if (batcher || !this.deps.isOptedIn()) {
-      await this.submit(wire);
+    const batcher = this.#deps.batcher();
+    if (batcher || !this.#deps.isOptedIn()) {
+      await this.#submit(wire);
       return;
     }
 
-    for (const group of chunk(wire, this.deps.config().maxRequestEvents)) {
+    for (const group of chunk(wire, this.#deps.config().maxRequestEvents)) {
       await this.send(group);
     }
   }
@@ -152,8 +147,8 @@ export class Ingest {
   async identify(options: IdentifyOptions): Promise<void> {
     assertIdentifier(options, 'identify');
     const { traits, event, ...ids } = options;
-    await this.submit([
-      this.buildEvent(reservedName(event, 'identify'), {
+    await this.#submit([
+      this.#buildEvent(reservedName(event, 'identify'), {
         ...ids,
         ...(traits !== undefined ? { userAttributes: traits } : {}),
       }),
@@ -166,8 +161,8 @@ export class Ingest {
     }
     assertIdentifier(options, 'group');
     const { attributes, event, ...ids } = options;
-    await this.submit([
-      this.buildEvent(reservedName(event, 'group'), {
+    await this.#submit([
+      this.#buildEvent(reservedName(event, 'group'), {
         ...ids,
         ...(attributes !== undefined ? { accountAttributes: attributes } : {}),
       }),
@@ -184,12 +179,12 @@ export class Ingest {
       throw new TypeError('alias: userId and previousUserId are required');
     }
     const { previousUserId, ...ids } = options;
-    const event = this.buildEvent(IDENTIFY_EVENT, ids);
+    const event = this.#buildEvent(IDENTIFY_EVENT, ids);
     const item = event.payload[0];
     if (item) {
       item.anotherUserId = previousUserId;
     }
-    await this.submit([event]);
+    await this.#submit([event]);
   }
 }
 
