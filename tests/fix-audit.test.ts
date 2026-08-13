@@ -8,6 +8,7 @@ import {
   nock,
   setupNock,
   testLogger,
+  waitFor,
 } from './helpers';
 
 setupNock();
@@ -172,8 +173,10 @@ describe('audit the retry floor', () => {
     await c.track('a', { userId: 'u1' });
     const flushing = c.flush();
 
-    // 2s advised, so it must not have retried by 300ms.
-    await new Promise((r) => setTimeout(r, 300));
+    // Wait for the backoff decision to be logged, then assert what it chose.
+    await waitFor(() =>
+      logger.calls.warn.some((a) => /retrying in \d+ms/.test(String(a[0]))),
+    );
     expect(logger.calls.warn.some((a) => /retrying in 2000ms/.test(String(a[0])))).toBe(
       true,
     );
@@ -190,7 +193,9 @@ describe('audit the retry floor', () => {
     });
     await c.track('a', { userId: 'u1' });
     void c.flush();
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(() =>
+      logger.calls.warn.some((a) => /retrying in \d+ms/.test(String(a[0]))),
+    );
 
     const advised = logger.calls.warn
       .map((a) => /retrying in (\d+)ms/.exec(String(a[0]))?.[1])

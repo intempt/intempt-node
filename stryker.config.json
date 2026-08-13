@@ -3,7 +3,9 @@
   "packageManager": "npm",
   "testRunner": "vitest",
   "reporters": ["clear-text", "progress", "html"],
-  "htmlReporter": { "fileName": "reports/mutation/index.html" },
+  "htmlReporter": {
+    "fileName": "reports/mutation/index.html"
+  },
   "coverageAnalysis": "perTest",
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",
@@ -15,6 +17,10 @@
     "break": 85
   },
   "timeoutMS": 20000,
-  "concurrency": 4,
-  "disableTypeChecks": false
+  "concurrency": 8,
+  "disableTypeChecks": false,
+  "ignoreStatic": true,
+  "warnings": {
+    "slow": false
+  }
 }

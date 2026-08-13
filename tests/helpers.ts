@@ -70,4 +70,25 @@ export function setupNock(): void {
   });
 }
 
+/**
+ * Polls until `predicate` holds, instead of sleeping a fixed amount.
+ *
+ * A fixed sleep is a race: the suite ran green alone and failed two tests while
+ * a mutation run saturated all eight cores, because 200ms of wall clock is not
+ * 200ms of scheduling. Polling makes the assertion depend on the condition
+ * rather than on how busy the machine is.
+ */
+export async function waitFor(
+  predicate: () => boolean,
+  { timeoutMs = 5_000, stepMs = 10 }: { timeoutMs?: number; stepMs?: number } = {},
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(`waitFor: condition still false after ${timeoutMs}ms`);
+    }
+    await new Promise((r) => setTimeout(r, stepMs));
+  }
+}
+
 export { nock };

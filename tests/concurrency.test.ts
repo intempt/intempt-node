@@ -115,7 +115,9 @@ describe('trackBatch concurrency', () => {
       await expect(
         client({ maxRequestEvents: 1, maxConcurrentRequests: 4 }).trackBatch(events(4)),
       ).rejects.toThrow(/responded 500/);
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      // Give any stray rejection a chance to surface; polling is not possible
+      // here because we are asserting the ABSENCE of an event.
+      await new Promise((resolve) => setTimeout(resolve, 250));
       expect(unhandled).toEqual([]);
     } finally {
       process.removeListener('unhandledRejection', onUnhandled);

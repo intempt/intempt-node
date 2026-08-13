@@ -232,7 +232,8 @@ describe('attack: concurrency in trackBatch', () => {
           Array.from({ length: 6 }, (_, i) => ({ event: `e${i}`, userId: 'u1' })),
         ),
       ).rejects.toThrow(IntemptApiError);
-      await new Promise((r) => setTimeout(r, 60));
+      // Asserting the absence of an unhandled rejection, so a wait is unavoidable.
+      await new Promise((r) => setTimeout(r, 250));
       expect(unhandled).toEqual([]);
     } finally {
       process.removeListener('unhandledRejection', onUnhandled);

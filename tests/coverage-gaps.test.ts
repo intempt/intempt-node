@@ -13,6 +13,7 @@ import {
   nock,
   setupNock,
   testLogger,
+  waitFor,
 } from './helpers';
 
 setupNock();
@@ -126,10 +127,12 @@ describe('batcher: the idle timer flushes without an explicit flush()', () => {
     await c.track('b', { userId: 'u1' });
     expect(c.buffered).toBe(2);
 
-    await new Promise((r) => setTimeout(r, 200));
+    // Wait on the end state, not on the request being observed: nock's body
+    // matcher runs when the request is sent, which is before the response
+    // arrives and before the batcher splices the queue.
+    await waitFor(() => c.buffered === 0);
 
     expect(widths).toEqual([2]);
-    expect(c.buffered).toBe(0);
     await c.close();
   });
 });
@@ -154,10 +157,9 @@ describe('batcher: the beforeExit hook actually drains', () => {
     expect(c.buffered).toBe(1);
 
     process.emit('beforeExit', 0);
-    await new Promise((r) => setTimeout(r, 100));
+    await waitFor(() => c.buffered === 0);
 
     expect(widths).toEqual([1]);
-    expect(c.buffered).toBe(0);
     await c.close();
   });
 });
