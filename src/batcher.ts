@@ -17,6 +17,11 @@ const MAX_RETRY_INTERVAL_MS = 10 * 60 * 1000;
 const MIN_RETRY_INTERVAL_MS = 100;
 const MAX_CONSECUTIVE_FAILURES = 5;
 /**
+ * Consecutive single-event 413 drops, with no successful send in between, before
+ * batching stops. Separate from the failure budget because a 413 never reaches it.
+ */
+const MAX_CONSECUTIVE_DROPS = 5;
+/**
  * Successful sends at a reduced width before trying a wider one again.
  *
  * A 413 is usually about payload size, which is a property of the events rather
@@ -48,6 +53,7 @@ export class Batcher {
   #chain: Promise<void> = Promise.resolve();
   #consecutiveFailures = 0;
   #consecutiveSuccesses = 0;
+  #consecutiveDrops = 0;
   #stopped = false;
   #exitHook: (() => void) | undefined;
 
@@ -132,6 +138,7 @@ export class Batcher {
 
       this.#queue.splice(0, batch.length);
       this.#consecutiveFailures = 0;
+      this.#consecutiveDrops = 0;
 
       // Widen back toward full after a run of successes at the current width.
       //
@@ -147,8 +154,13 @@ export class Batcher {
       // batcher alternates 413/200 at double the request count, with the
       // breaker never tripping because each success clears the counter. Hence
       // the run of successes and the doubling rather than a jump to full.
+      //
+      // Only a send that filled the current width counts. A trickle producer
+      // flushing one event per timer tick would otherwise earn a widening from
+      // ten width-1 requests, none of which tested the width being left behind —
+      // so the batcher would widen on evidence it had not actually gathered.
       const full = Math.min(this.#options.size, this.#maxRequestEvents);
-      if (this.#batchSize < full) {
+      if (this.#batchSize < full && batch.length >= this.#batchSize) {
         this.#consecutiveSuccesses += 1;
         if (this.#consecutiveSuccesses >= SUCCESSES_BEFORE_WIDENING) {
           this.#batchSize = Math.min(full, this.#batchSize * 2);
@@ -160,7 +172,7 @@ export class Batcher {
 
   /**
    * 413 (batch > 1)  halve the batch size and retry
-   * 413 (batch = 1)  drop the event, log the drop
+   * 413 (batch = 1)  drop the event, log it; stop after MAX_CONSECUTIVE_DROPS
    * 429              honour Retry-After, else exponential backoff
    * 5xx / 408        exponential backoff
    * timeout          exponential backoff
@@ -190,6 +202,29 @@ export class Batcher {
       // straight back to full rather than crawling up through the run counter.
       this.#batchSize = Math.min(this.#options.size, this.#maxRequestEvents);
       this.#consecutiveSuccesses = 0;
+
+      // Drops need their own budget, because none of the paths above can trip the
+      // breaker: a 413 returns before #consecutiveFailures is incremented, and
+      // this branch resets it outright so that one oversized event among many
+      // does not stop batching.
+      //
+      // A gateway whose body limit sits below a single event 413s everything, and
+      // the loop then became: halve to 1, drop, reset to full, halve again —
+      // every event discarded, forever, with the breaker never tripping. Counting
+      // consecutive drops bounds it. A successful send clears the tally, so an
+      // occasional oversized event still costs only that event.
+      this.#consecutiveDrops += 1;
+      if (this.#consecutiveDrops >= MAX_CONSECUTIVE_DROPS) {
+        this.#logger.error(
+          `[intempt] ${this.#consecutiveDrops} consecutive events rejected as too large ` +
+            `with none accepted in between; stopping batching. ` +
+            `${this.#queue.length} event(s) remain buffered. ` +
+            `Check the gateway's request body limit.`,
+          error,
+        );
+        this.#stopped = true;
+        return 'stop';
+      }
       return 'requeue';
     }
 
@@ -207,6 +242,9 @@ export class Batcher {
       return 'requeue';
     }
 
+    // Any failure ends the run of successes: a widening decision should rest on an
+    // unbroken streak, not on nine successes with a 500 in the middle.
+    this.#consecutiveSuccesses = 0;
     this.#consecutiveFailures += 1;
     if (this.#consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
       this.#logger.error(

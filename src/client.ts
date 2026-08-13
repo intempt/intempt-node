@@ -38,13 +38,7 @@ export class IntemptClient {
     // silent no-op by design, while using a closed client is a programming error
     // and must be loud.
     const isOptedIn = (): boolean => this.#optedIn && !this.#closed;
-    const assertOpen = (): void => {
-      if (this.#closed) {
-        throw new Error(
-          'Intempt client is closed. Calls after close() are not sent; create a new client.',
-        );
-      }
-    };
+    const assertOpen = (): void => this.#assertOpen();
 
     this.#ingest = new Ingest({
       transport: this.#transport,
@@ -104,7 +98,17 @@ export class IntemptClient {
    * web experience against a page, and are served by the browser SDK. A server
    * has no page to modify.
    */
-  recommend(options: RecommendOptions): Promise<unknown> {
+  async recommend(options: RecommendOptions): Promise<unknown> {
+    // Gated like every other method. It was the one public call with no check,
+    // so it kept working after close() — and since close() destroys the agents,
+    // and Agent.destroy() only reaps *idle* sockets, the call opened a fresh
+    // socket that nothing would ever release. That contradicted the close()
+    // contract two lines of doc away from it.
+    //
+    // `async` so the guard surfaces as a rejection. Every other method reaches an
+    // async body before throwing, and a lone synchronous throw here would escape
+    // a caller's `.catch()` and land as an uncaught exception instead.
+    this.#assertOpen();
     return this.#recommend.fetch(options);
   }
 
@@ -120,8 +124,10 @@ export class IntemptClient {
 
   /**
    * Suppresses all outbound writes: track, batch, commerce and consent.
-   * Read-side `decide` calls are unaffected — they send an identifier the
-   * caller already holds and return a decision rather than storing anything.
+   * `recommend()` is unaffected — it sends an identifier the caller already holds
+   * and returns a decision rather than storing anything. (It is still refused
+   * after close(), which is a different condition: opting out is a policy choice,
+   * a closed client is a programming error.)
    */
   optOut(): void {
     this.#optedIn = false;
@@ -133,9 +139,18 @@ export class IntemptClient {
 
   // ---- config ----
 
+  /**
+   * `keepAlive` and `agent` are omitted, matching `mergeConfig`, which throws on
+   * either. They were previously accepted by this type and rejected at runtime, so
+   * `setConfig({ keepAlive: false })` compiled clean and then threw. A fixed option
+   * belongs in the signature, not in an exception.
+   */
   setConfig(
     patch: Partial<
-      Omit<IntemptConfig, 'org' | 'project' | 'apiKey' | 'sourceId' | 'batch'>
+      Omit<
+        IntemptConfig,
+        'org' | 'project' | 'apiKey' | 'sourceId' | 'batch' | 'keepAlive' | 'agent'
+      >
     >,
   ): void {
     this.#resolved = mergeConfig(this.#resolved, patch);
@@ -171,6 +186,14 @@ export class IntemptClient {
   async flush(): Promise<void> {
     if (this.#batcher) {
       await this.#batcher.flush();
+    }
+  }
+
+  #assertOpen(): void {
+    if (this.#closed) {
+      throw new Error(
+        'Intempt client is closed. Calls after close() are not sent; create a new client.',
+      );
     }
   }
 

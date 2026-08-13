@@ -4,7 +4,6 @@ import {
   ORIGIN,
   TRACK_PATH,
   client,
-  feedPath,
   nock,
   setupNock,
   testLogger,
@@ -77,17 +76,19 @@ describe('audit the closed-client throw', () => {
     await expect(c.flush()).resolves.toBeUndefined();
   });
 
-  it('leaves read paths usable after close rather than half-breaking', async () => {
-    // recommend() is a read and was never gated by optOut, so closing must not
-    // change it into a throw by accident. Whatever the choice, it must be
-    // consistent, not accidental.
+  it('gates the read path after close, like every other method', async () => {
+    // This test used to assert the opposite — that recommend() still worked after
+    // close() — on the reasoning that a read is harmless. It is not: close()
+    // destroys the agents, and Agent.destroy() reaps only *idle* sockets, so the
+    // call opened a fresh socket nothing would ever release. It also contradicted
+    // the documented close() contract. The gate is the consistent choice.
     const c = client();
     await c.close();
-    const scope = nock(ORIGIN).post(feedPath('f')).reply(200, {});
     await expect(
       c.recommend({ userId: 'u1', feedId: 'f', fields: ['id'] }),
-    ).resolves.toEqual({});
-    scope.done();
+    ).rejects.toThrow(/client is closed/);
+    // Nothing left the process.
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('throws synchronously enough to be catchable with await', async () => {

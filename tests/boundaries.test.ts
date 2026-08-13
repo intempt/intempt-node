@@ -386,3 +386,116 @@ describe('the queue-full drop is reported with enough detail to act on', () => {
     await c.close();
   }, 10_000);
 });
+
+describe('a gateway that rejects every single event does not loop forever', () => {
+  it('stops batching after a run of drops with nothing accepted in between', async () => {
+    // None of the other paths can trip the breaker here: a 413 returns before
+    // #consecutiveFailures is incremented, and the single-event drop resets it so
+    // that one oversized event does not stop batching. Without a drop budget a
+    // gateway whose body limit sits below one event discards the entire stream —
+    // halve to 1, drop, reset to full, halve again — forever.
+    let attempts = 0;
+    nock(ORIGIN)
+      .post(TRACK_PATH)
+      .times(60)
+      .reply(() => {
+        attempts += 1;
+        return [413, ''];
+      });
+
+    const { c, logger } = batched({
+      batch: { size: 2, flushMs: 10_000, maxQueue: 50, flushOnExit: false },
+    });
+    for (let i = 0; i < 12; i += 1) await c.track(`e${i}`, { userId: 'u1' });
+    await c.flush();
+
+    const stop = logger.calls.error.find((a) =>
+      /consecutive events rejected as too large/.test(String(a[0])),
+    );
+    expect(stop).toBeDefined();
+    expect(String(stop![0])).toMatch(/stopping batching/);
+    expect(String(stop![0])).toMatch(/gateway's request body limit/);
+
+    // It gave up rather than draining all 12 by dropping them one at a time.
+    expect(c.buffered).toBeGreaterThan(0);
+    const before = attempts;
+    await c.flush();
+    expect(attempts).toBe(before);
+  }, 20_000);
+
+  it('forgives an occasional oversized event when others do get through', async () => {
+    // A successful send clears the drop tally, so one bad event costs one event.
+    const widths: number[] = [];
+    let rejectNext = true;
+    nock(ORIGIN)
+      .post(TRACK_PATH, (b: { track: unknown[] }) => {
+        widths.push(b.track.length);
+        return true;
+      })
+      .times(40)
+      .reply(function () {
+        if (rejectNext) {
+          rejectNext = false;
+          return [413, ''];
+        }
+        return [200, ''];
+      });
+
+    const { c, logger } = batched({
+      batch: { size: 1, flushMs: 10_000, maxQueue: 50, flushOnExit: false },
+    });
+    for (let i = 0; i < 8; i += 1) {
+      await c.track(`e${i}`, { userId: 'u1' });
+      rejectNext = i % 3 === 0; // a bad one every third round
+      await c.flush();
+    }
+
+    expect(
+      logger.calls.error.some((a) => /consecutive events rejected/.test(String(a[0]))),
+    ).toBe(false);
+    expect(c.buffered).toBe(0);
+    await c.close();
+  }, 20_000);
+});
+
+describe('widening rests on evidence actually gathered', () => {
+  it('does not widen from sends narrower than the current width', async () => {
+    // A trickle producer flushing one event per tick would otherwise earn a
+    // widening from ten width-1 requests, none of which tested the width that a
+    // 413 had just taken away.
+    const widths: number[] = [];
+    let rejectWide = true;
+    nock(ORIGIN)
+      .post(TRACK_PATH, (b: { track: unknown[] }) => {
+        widths.push(b.track.length);
+        return true;
+      })
+      .times(60)
+      .reply(function () {
+        const n = widths[widths.length - 1] ?? 0;
+        return rejectWide && n > 2 ? [413, ''] : [200, ''];
+      });
+
+    const { c } = batched({
+      batch: { size: 4, flushMs: 10_000, maxQueue: 100, flushOnExit: false },
+    });
+
+    // Drop to width 2.
+    for (let i = 0; i < 4; i += 1) await c.track(`a${i}`, { userId: 'u1' });
+    await c.flush();
+    rejectWide = false;
+
+    // Twenty single-event flushes. Each is width 1, below the width of 2, so none
+    // of them should count toward widening.
+    const before = widths.length;
+    for (let i = 0; i < 20; i += 1) {
+      await c.track(`b${i}`, { userId: 'u1' });
+      await c.flush();
+    }
+
+    const singles = widths.slice(before);
+    expect(singles.every((w) => w === 1)).toBe(true);
+    expect(Math.max(...singles)).toBe(1);
+    await c.close();
+  }, 20_000);
+});
