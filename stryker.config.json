@@ -7,11 +7,7 @@
   "coverageAnalysis": "perTest",
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",
-  "mutate": [
-    "src/**/*.ts",
-    "!src/types.ts",
-    "!src/index.ts"
-  ],
+  "mutate": ["src/**/*.ts", "!src/types.ts", "!src/index.ts"],
   "ignorePatterns": ["dist", "coverage", "reports", "examples", "scripts"],
   "thresholds": {
     "high": 90,
