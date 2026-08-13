@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Intempt, IntemptApiError } from '../src';
+import { IntemptApiError } from '../src';
 import { ORIGIN, TRACK_PATH, client, nock, setupNock, testLogger } from './helpers';
 
 setupNock();

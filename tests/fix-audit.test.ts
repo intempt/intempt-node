@@ -104,9 +104,15 @@ describe('audit the closed-client throw', () => {
 });
 
 describe('audit the 413 width policy', () => {
-  it('recovers full width once the server accepts full-width batches again', async () => {
-    // Keeping the reduced width forever would permanently halve throughput after
-    // one transient 413.
+  // Recovery of the full width is asserted in tests/boundaries.test.ts, which
+  // counts width-4 requests before and after the 413. This test only proves the
+  // narrower property that a 413 does not lose events.
+  //
+  // It used to be titled "recovers full width…" and asserted `widths` contained a
+  // 4 — which the rejected pre-413 attempt already satisfied, so it passed while
+  // the width in fact stayed halved for the life of the client. Mutation testing
+  // caught the vacuous assertion.
+  it('drains the queue through a 413 without losing events', async () => {
     const widths: number[] = [];
     let rejectBig = true;
     nock(ORIGIN)
@@ -128,12 +134,15 @@ describe('audit the 413 width policy', () => {
     await c.flush();
     expect(c.buffered).toBe(0);
 
-    // Server healthy again: the next full buffer should go out at full width.
+    // Server healthy again: everything queued after the 413 still gets sent.
     rejectBig = false;
     for (let i = 0; i < 4; i += 1) await c.track(`b${i}`, { userId: 'u1' });
     await c.flush();
 
-    expect(widths).toContain(4);
+    // 4 rejected + 4 accepted + 4 more = every event accounted for, counting the
+    // rejected attempt once.
+    const accepted = widths.slice(1).reduce((a, b) => a + b, 0);
+    expect(accepted).toBe(8);
     expect(c.buffered).toBe(0);
     await c.close();
   });

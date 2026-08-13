@@ -16,6 +16,15 @@ const MAX_RETRY_INTERVAL_MS = 10 * 60 * 1000;
 /** Floor for any retry, so a zero or past Retry-After cannot become a hot loop. */
 const MIN_RETRY_INTERVAL_MS = 100;
 const MAX_CONSECUTIVE_FAILURES = 5;
+/**
+ * Successful sends at a reduced width before trying a wider one again.
+ *
+ * A 413 is usually about payload size, which is a property of the events rather
+ * than a transient condition, so retrying the wider width immediately just
+ * alternates 413/200 forever. Waiting for a run of successes bounds that to one
+ * oversized attempt in eleven while still letting throughput recover.
+ */
+const SUCCESSES_BEFORE_WIDENING = 10;
 
 export interface BatcherOptions {
   options: ResolvedBatchOptions;
@@ -38,6 +47,7 @@ export class Batcher {
   /** Serialises flushes so two callers can never drain the same slice. */
   #chain: Promise<void> = Promise.resolve();
   #consecutiveFailures = 0;
+  #consecutiveSuccesses = 0;
   #stopped = false;
   #exitHook: (() => void) | undefined;
 
@@ -56,20 +66,29 @@ export class Batcher {
     }
   }
 
-  /** Buffers an event. Returns false when the event was dropped. */
-  enqueue(event: WireEvent): boolean {
+  /**
+   * Buffers an event, or logs and drops it when batching has stopped or the
+   * queue is full.
+   *
+   * Returns nothing on purpose. It used to return a boolean for "dropped", which
+   * the only caller discarded, so the three branches carrying that value were
+   * untestable through any public surface — mutation testing flagged them as
+   * unkillable. A drop is reported through the logger, which is the channel
+   * callers actually have.
+   */
+  enqueue(event: WireEvent): void {
     if (this.#stopped) {
       this.#logger.error('[intempt] batching is stopped; event dropped', {
         name: event.name,
       });
-      return false;
+      return;
     }
     if (this.#queue.length >= this.#options.maxQueue) {
       this.#logger.error('[intempt] batch queue full; event dropped', {
         name: event.name,
         maxQueue: this.#options.maxQueue,
       });
-      return false;
+      return;
     }
 
     this.#queue.push(event);
@@ -79,7 +98,6 @@ export class Batcher {
     } else {
       this.#scheduleFlush(this.#options.flushMs);
     }
-    return true;
   }
 
   /**
@@ -115,14 +133,27 @@ export class Batcher {
       this.#queue.splice(0, batch.length);
       this.#consecutiveFailures = 0;
 
-      // Only restore the full width after a full-width send succeeds. Resetting
-      // unconditionally undid the halving that a 413 had just applied, so the
-      // next request was oversized again and the batcher alternated 413/200
-      // forever — at double the request count, with the breaker never tripping
-      // because each success cleared the counter.
+      // Widen back toward full after a run of successes at the current width.
+      //
+      // This used to compare `batch.length >= full`, which could never be true:
+      // `batch` is sliced to #batchSize, so once a 413 halved the width the
+      // condition was unreachable and the reduction became permanent for the
+      // life of the client. One transient 413 halved throughput forever.
+      // Mutation testing found it — the comparison was unkillable because no
+      // input could reach it.
+      //
+      // Resetting to full on every success is the opposite failure: it undoes
+      // the halving immediately, so the next request is oversized again and the
+      // batcher alternates 413/200 at double the request count, with the
+      // breaker never tripping because each success clears the counter. Hence
+      // the run of successes and the doubling rather than a jump to full.
       const full = Math.min(this.#options.size, this.#maxRequestEvents);
-      if (batch.length >= full) {
-        this.#batchSize = full;
+      if (this.#batchSize < full) {
+        this.#consecutiveSuccesses += 1;
+        if (this.#consecutiveSuccesses >= SUCCESSES_BEFORE_WIDENING) {
+          this.#batchSize = Math.min(full, this.#batchSize * 2);
+          this.#consecutiveSuccesses = 0;
+        }
       }
     }
   }
@@ -142,6 +173,9 @@ export class Batcher {
     if (status === 413) {
       if (batch.length > 1) {
         this.#batchSize = Math.max(1, Math.floor(batch.length / 2));
+        // Start the run over, so a widening attempt that 413s does not leave a
+        // near-complete tally that widens again on the very next success.
+        this.#consecutiveSuccesses = 0;
         this.#logger.warn(
           `[intempt] 413 received; reducing batch size to ${this.#batchSize}`,
         );
@@ -152,7 +186,10 @@ export class Batcher {
       });
       this.#queue.splice(0, 1);
       this.#consecutiveFailures = 0;
+      // The offending event is gone, so the width was never the problem: go
+      // straight back to full rather than crawling up through the run counter.
       this.#batchSize = Math.min(this.#options.size, this.#maxRequestEvents);
+      this.#consecutiveSuccesses = 0;
       return 'requeue';
     }
 

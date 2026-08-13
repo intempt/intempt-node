@@ -33,10 +33,16 @@ export class IntemptApiError extends Error {
   ) {
     super(message);
     this.name = 'IntemptApiError';
-    if (detail.status !== undefined) this.status = detail.status;
-    if (detail.body !== undefined) this.body = detail.body;
-    if (detail.retryAfterMs !== undefined) this.retryAfterMs = detail.retryAfterMs;
-    if (detail.cause !== undefined) this.cause = detail.cause;
+    // Assigned unconditionally. These four are declared class fields and the
+    // target is ES2022, so `useDefineForClassFields` already defines every one of
+    // them as an own property set to undefined before this runs. Guarding each
+    // assignment with `!== undefined` therefore changed nothing an caller could
+    // observe — `'status' in error` is true either way — and mutation testing
+    // flagged all four conditionals as unkillable for that reason.
+    this.status = detail.status;
+    this.body = detail.body;
+    this.retryAfterMs = detail.retryAfterMs;
+    this.cause = detail.cause;
   }
 
   /** True for statuses worth retrying: 408, 429, and any 5xx. */
