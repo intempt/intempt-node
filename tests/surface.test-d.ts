@@ -42,6 +42,14 @@ void client.identify(viaVariable);
 void client.group({ ...viaVariable, accountId: 'acme' });
 // @ts-expect-error profileId is not a v2 identifier
 void client.alias({ ...viaVariable, userId: 'u1', previousUserId: 'p' });
+// trackBatch matters most of the four: TrackEvent extends TrackOptions, and if that
+// link were ever loosened the payload builder would put the field straight on the
+// wire. A mutant shaped like ingest.ts's own `WithProfileId` left typecheck clean
+// and all tests green before this line existed.
+// @ts-expect-error profileId is not a v2 identifier
+void client.trackBatch([{ event: 'e', ...viaVariable }]);
+// @ts-expect-error profileId is not a v2 identifier
+void client.recommend({ ...viaVariable, feedId: '5292', fields: ['id'] });
 // @ts-expect-error profileId is not a v2 identifier
 void client.consent.grant(viaVariable);
 // @ts-expect-error profileId is not a v2 identifier

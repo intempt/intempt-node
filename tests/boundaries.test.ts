@@ -429,7 +429,7 @@ describe('a gateway that rejects every single event', () => {
     await c.flush();
 
     const notices = logger.calls.error.filter((a) =>
-      /request body limit is likely below a single event/.test(String(a[0])),
+      /rejected as too large with none accepted in between/.test(String(a[0])),
     );
     // Once, not once per drop: eight events were dropped.
     expect(notices).toHaveLength(1);
@@ -515,7 +515,7 @@ describe('a gateway that rejects every single event', () => {
     });
     const notices = (): number =>
       logger.calls.error.filter((a) =>
-        /request body limit is likely below a single event/.test(String(a[0])),
+        /rejected as too large with none accepted in between/.test(String(a[0])),
       ).length;
 
     for (let i = 0; i < 3; i += 1) await c.track(`a${i}`, { userId: 'u1' });

@@ -197,7 +197,7 @@ export interface ConsentOptions extends NoProfileId {
  * single entity from an `{id, type}` pair, so the two are mutually exclusive
  * here, unlike on the tracking calls.
  */
-export interface RecommendOptions extends Identifiers {
+export interface RecommendOptions extends Identifiers, NoProfileId {
   feedId: string;
   /** Product attribute names from your catalog schema. */
   fields: string[];

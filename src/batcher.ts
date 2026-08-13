@@ -193,7 +193,7 @@ export class Batcher {
 
   /**
    * 413 (batch > 1)  halve the batch size and retry
-   * 413 (batch = 1)  drop the event, log it; stop after MAX_CONSECUTIVE_DROPS
+   * 413 (batch = 1)  drop the event, log it, return the width to full
    * 429              honour Retry-After, else exponential backoff
    * 5xx / 408        exponential backoff
    * timeout          exponential backoff
@@ -237,10 +237,16 @@ export class Batcher {
       // between. That pattern means the gateway's body limit is below a single
       // event, which no retry policy can work around — only a human can.
       if (this.#consecutiveDrops === DROPS_BEFORE_WARNING) {
+        // Hedged on purpose. The tally cannot distinguish a gateway whose body
+        // limit is below one event from a burst of events that are individually
+        // oversized — that ambiguity is exactly why no behaviour hangs off it — and
+        // in the second case the events behind these will send perfectly well. An
+        // unhedged claim would send an operator to reconfigure a healthy gateway.
         this.#logger.error(
           `[intempt] ${this.#consecutiveDrops} events rejected as too large with none ` +
-            `accepted in between. The gateway's request body limit is likely below a ` +
-            `single event; every event will be dropped until it is raised.`,
+            `accepted in between. Either those events are individually oversized, or ` +
+            `the gateway's request body limit is below a single event — if it is the ` +
+            `latter, every event will be dropped until the limit is raised.`,
         );
       }
       return 'requeue';
