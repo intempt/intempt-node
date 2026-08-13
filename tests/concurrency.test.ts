@@ -1,6 +1,6 @@
 import http from 'node:http';
 import https from 'node:https';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Intempt, IntemptApiError } from '../src';
 import {
   API_KEY,
@@ -187,9 +187,17 @@ describe('custom agent injection', () => {
       agent,
     });
 
+    // destroy() must not tear down an agent the caller owns and may reuse.
+    //
+    // This used to assert `agent.destroyed` was falsy. `http.Agent` has no such
+    // property — `'destroyed' in agent` is false and the read is always
+    // `undefined` — so the assertion passed no matter what the SDK did. Spying on
+    // the method that would do the damage is the check that actually holds.
+    const destroy = vi.spyOn(agent, 'destroy');
     await c.close();
 
-    // destroy() must not tear down an agent the caller owns and may reuse.
-    expect(agent.destroyed).toBeFalsy();
+    expect(destroy).not.toHaveBeenCalled();
+    // Still usable afterwards, which is the property the caller cares about.
+    expect(typeof agent.createConnection).toBe('function');
   });
 });

@@ -436,8 +436,7 @@ Point it at a real environment with `INTEMPT_HOST`, `INTEMPT_ORG`,
 
 This library is stateless by design, so one instance can be shared across
 requests for every user. Client-side SDKs tie one instance to one user and can
-hold a `profileId`; a server cannot. Pass `userId`, `profileId` or `accountId`
-with each call.
+hold a `profileId`; a server cannot. Pass `userId` or `accountId` with each call.
 
 **Do I need a `profileId`?**
 

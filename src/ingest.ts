@@ -19,6 +19,22 @@ import {
 import type { Transport } from './transport';
 import type { Batcher } from './batcher';
 
+/**
+ * The option shapes as seen from inside, where `profileId` is still a real field.
+ *
+ * The public types deliberately omit it. Only the deprecated 1.x shim supplies
+ * one, and it does so through these intersections rather than by widening the
+ * public types — which is what previously leaked `profileId` back onto the v2
+ * surface. Same pattern as `InternalConsentOptions` in consent.ts.
+ *
+ * @internal
+ */
+type WithProfileId<T> = T & { profileId?: string };
+type InternalTrackOptions = WithProfileId<TrackOptions>;
+type InternalIdentifyOptions = WithProfileId<IdentifyOptions>;
+type InternalGroupOptions = WithProfileId<GroupOptions>;
+type InternalAliasOptions = WithProfileId<AliasOptions>;
+
 /** Reserved event name the platform interprets as an identity write. */
 export const IDENTIFY_EVENT = 'Identify';
 
@@ -46,7 +62,7 @@ export class Ingest {
       : this.#deps.transport.projectPath('/track');
   }
 
-  #buildEvent(name: string, options: TrackOptions): WireEvent {
+  #buildEvent(name: string, options: InternalTrackOptions): WireEvent {
     const item: WirePayloadItem = compact({
       eventId: randomUUID(),
       timestamp:
@@ -72,7 +88,7 @@ export class Ingest {
    */
   async trackLines(
     name: string,
-    options: TrackOptions,
+    options: InternalTrackOptions,
     lines: readonly Record<string, unknown>[],
   ): Promise<void> {
     const eventId = randomUUID();
@@ -135,7 +151,7 @@ export class Ingest {
     await this.#deps.transport.post(this.#trackPath(), { track: events });
   }
 
-  async track(event: string, options: TrackOptions): Promise<void> {
+  async track(event: string, options: InternalTrackOptions): Promise<void> {
     assertEventName(event, 'track');
     assertIdentifier(options, 'track');
     await this.#submit([this.#buildEvent(event, options)]);
@@ -146,7 +162,7 @@ export class Ingest {
    * oversized request; the server's per-request ceiling is not published, so
    * the chunk size comes from config and 413s halve it at runtime.
    */
-  async trackBatch(events: TrackEvent[]): Promise<void> {
+  async trackBatch(events: WithProfileId<TrackEvent>[]): Promise<void> {
     if (!Array.isArray(events)) {
       throw new TypeError('trackBatch: events must be an array');
     }
@@ -205,7 +221,7 @@ export class Ingest {
     }
   }
 
-  async identify(options: IdentifyOptions): Promise<void> {
+  async identify(options: InternalIdentifyOptions): Promise<void> {
     assertIdentifier(options, 'identify');
     const { traits, event, ...ids } = options;
     await this.#submit([
@@ -216,7 +232,7 @@ export class Ingest {
     ]);
   }
 
-  async group(options: GroupOptions): Promise<void> {
+  async group(options: InternalGroupOptions): Promise<void> {
     // No assertIdentifier here: accountId is required by the signature and is
     // itself an identifier, so the check can never fail. Mutation testing found
     // it — the string 'group' could be rewritten to anything and no test noticed,
@@ -236,7 +252,7 @@ export class Ingest {
    * resolve them. This is the supported path; the destructive
    * `/users/merge` endpoint is deliberately not exposed here.
    */
-  async alias(options: AliasOptions): Promise<void> {
+  async alias(options: InternalAliasOptions): Promise<void> {
     assertNonBlank(options?.userId, 'alias', 'userId');
     assertNonBlank(options?.previousUserId, 'alias', 'previousUserId');
     const { previousUserId, ...ids } = options;

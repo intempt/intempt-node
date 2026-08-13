@@ -38,7 +38,7 @@
   },
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "lint": "oxlint .",
     "format": "prettier --write .",
     "check-format": "prettier --check .",

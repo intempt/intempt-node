@@ -1,7 +1,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Intempt, type IntemptClient } from '../src';
+import { Intempt, SDK, type IntemptClient } from '../src';
 import type { Logger } from '../src';
 
 // Deliberately NOT importing ./helpers: it loads `nock`, and nock patches
@@ -365,12 +365,25 @@ describe('over a real socket: consent wire format', () => {
     expect(body.action).toBe('accept');
     expect(body.source).toBe('NodeJs tracker');
 
-    // Over a real socket, the JSON must carry the 19-digit source id unrounded.
-    server.reset();
-    await c.consent.grant({ profileId: 'p-real' });
-    const raw = JSON.stringify(server.requests[0]!.body);
-    expect(raw).toContain(`"sourceId":"${SOURCE}"`);
-
     await c.close();
+  });
+
+  it('carries the 19-digit source id unrounded when identified by profileId', async () => {
+    // sourceId is only sent on the profileId-identified path, and profileId is
+    // reachable only through the deprecated 1.x shim — it is deliberately absent
+    // from the v2 option types. So the shim is what exercises this, and going
+    // through it is also what proves the shim still reaches the same wire format.
+    server.reset();
+    const sdk = new SDK(ORG, PROJECT, API_KEY, SOURCE);
+    sdk.v2.setConfig({ host: server.host, protocol: 'http' });
+
+    await sdk.consents('p-real', 'accept');
+
+    const raw = JSON.stringify(server.requests[0]!.body);
+    // A string, not a number: Number(SOURCE) would round the last two digits.
+    expect(raw).toContain(`"sourceId":"${SOURCE}"`);
+    expect(raw).not.toContain(`"sourceId":${SOURCE}`);
+
+    await sdk.close();
   });
 });

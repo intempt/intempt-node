@@ -110,9 +110,18 @@ export interface Identifiers {
 }
 
 /**
- * Adds the anonymous browser profile id. Internal: reachable only through the
- * deprecated 1.x `SDK` shim, whose whole surface was profileId-first and whose
- * callers' data is already keyed that way.
+ * Adds the anonymous browser profile id.
+ *
+ * Internal, and deliberately NOT part of any option type a v2 caller can reach.
+ * It exists for the deprecated 1.x `SDK` shim, whose whole surface was
+ * profileId-first and whose callers' data is already keyed that way.
+ *
+ * The v2 option types below extend `Identifiers`, not this. They used to extend
+ * this one, which put `profileId` back on the public surface by structural
+ * typing — `client.track('e', { profileId })` compiled — contradicting both the
+ * comment on `Identifiers` and the README. Widening a public option type is not
+ * the way to feed an internal field: see `InternalTrackOptions` and friends in
+ * ingest.ts for the pattern, which consent.ts already used.
  *
  * @internal
  */
@@ -122,7 +131,7 @@ export interface LegacyIdentifiers extends Identifiers {
 
 export type Properties = Record<string, unknown>;
 
-export interface TrackOptions extends LegacyIdentifiers {
+export interface TrackOptions extends Identifiers {
   properties?: Properties;
   userAttributes?: Properties;
   accountAttributes?: Properties;
@@ -134,21 +143,21 @@ export interface TrackEvent extends TrackOptions {
   event: string;
 }
 
-export interface IdentifyOptions extends LegacyIdentifiers {
+export interface IdentifyOptions extends Identifiers {
   traits?: Properties;
   /** Override the reserved event name. */
   event?: string;
   timestamp?: Date | number;
 }
 
-export interface GroupOptions extends LegacyIdentifiers {
+export interface GroupOptions extends Identifiers {
   accountId: string;
   attributes?: Properties;
   event?: string;
   timestamp?: Date | number;
 }
 
-export interface AliasOptions extends LegacyIdentifiers {
+export interface AliasOptions extends Identifiers {
   userId: string;
   previousUserId: string;
   timestamp?: Date | number;

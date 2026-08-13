@@ -1,0 +1,15 @@
+{
+  // `npm run typecheck` uses tsconfig.json, whose `include` is src/** only —
+  // correct for the build, since tests must never reach dist. The effect was that
+  // nothing typechecked the tests: vitest transpiles without checking, and
+  // Stryker's typescript checker points at the build config too. A type error in
+  // any test file passed every CI leg unnoticed.
+  //
+  // This config adds the tests without emitting, so `typecheck` covers both.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*", "tests/**/*", "scripts/**/*"]
+}

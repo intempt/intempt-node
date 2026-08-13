@@ -21,8 +21,16 @@ export function feedPath(id: string): string {
   return `/v1/${ORG}/projects/${PROJECT}/feeds/${id}/data`;
 }
 
-export function testLogger(): Logger & { calls: Record<string, unknown[][]> } {
-  const calls: Record<string, unknown[][]> = {
+type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
+
+/**
+ * `calls` is keyed by the five known levels rather than by `Record<string, …>`.
+ * The index-signature version was only assertable with a `!` at every call site,
+ * because `noUncheckedIndexedAccess` widens each lookup to `| undefined` — and
+ * once `npm run typecheck` started covering tests, that produced 27 errors.
+ */
+export function testLogger(): Logger & { calls: Record<LogLevel, unknown[][]> } {
+  const calls: Record<LogLevel, unknown[][]> = {
     trace: [],
     debug: [],
     info: [],
@@ -30,9 +38,9 @@ export function testLogger(): Logger & { calls: Record<string, unknown[][]> } {
     error: [],
   };
   const record =
-    (level: string) =>
+    (level: LogLevel) =>
     (...args: unknown[]) => {
-      calls[level]!.push(args);
+      calls[level].push(args);
     };
   return {
     calls,

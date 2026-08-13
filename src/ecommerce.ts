@@ -1,4 +1,8 @@
-import type { LegacyIdentifiers, ProductLine } from './types';
+import type { Identifiers, ProductLine } from './types';
+
+// `profileId` is deliberately absent from these public parameters. The 1.x shim
+// still sends one; it attaches it via withProfileId() in legacy.ts and it reaches
+// the wire through Ingest.trackLines, whose own parameter type still carries it.
 import { assertIdentifier, compact } from './utils';
 import type { Ingest } from './ingest';
 
@@ -20,7 +24,7 @@ export class Ecommerce {
     this.#ingest = ingest;
   }
 
-  async productViewed(options: LegacyIdentifiers & { productId: string }): Promise<void> {
+  async productViewed(options: Identifiers & { productId: string }): Promise<void> {
     if (!options?.productId) {
       throw new TypeError('productViewed: productId is required');
     }
@@ -30,7 +34,7 @@ export class Ecommerce {
   }
 
   async addedToCart(
-    options: LegacyIdentifiers & { productId: string; quantity: number },
+    options: Identifiers & { productId: string; quantity: number },
   ): Promise<void> {
     if (!options?.productId) {
       throw new TypeError('addedToCart: productId is required');
@@ -45,7 +49,7 @@ export class Ecommerce {
     ]);
   }
 
-  async ordered(options: LegacyIdentifiers & { products: ProductLine[] }): Promise<void> {
+  async ordered(options: Identifiers & { products: ProductLine[] }): Promise<void> {
     if (!Array.isArray(options?.products) || options.products.length === 0) {
       throw new TypeError('ordered: products must be a non-empty array');
     }

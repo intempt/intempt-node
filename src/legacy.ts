@@ -15,6 +15,19 @@ import type { Logger, ProductLine } from './types';
  *
  * Deprecated. Use `Intempt.init()`.
  */
+/**
+ * Attaches the 1.x `profileId` to a v2 options object.
+ *
+ * `profileId` is deliberately absent from the public option types, so this is the
+ * one place the 1.x surface bridges to them. The field is still honoured
+ * internally — see the `Internal*Options` intersections in ingest.ts — so the
+ * value reaches the wire; only the static type needs widening, and confining that
+ * to a single helper keeps it out of the public API.
+ */
+function withProfileId<T extends object>(profileId: string, options: T): T {
+  return { ...options, profileId } as T;
+}
+
 export class SDK {
   readonly #client: IntemptClient;
   static #warned = false;
@@ -70,12 +83,13 @@ export class SDK {
     eventTitle?: string,
     userAttributes?: object,
   ): Promise<void> {
-    await this.#client.identify({
-      profileId,
-      userId,
-      ...(eventTitle ? { event: eventTitle } : {}),
-      ...(userAttributes ? { traits: userAttributes as Record<string, unknown> } : {}),
-    });
+    await this.#client.identify(
+      withProfileId(profileId, {
+        userId,
+        ...(eventTitle ? { event: eventTitle } : {}),
+        ...(userAttributes ? { traits: userAttributes as Record<string, unknown> } : {}),
+      }),
+    );
   }
 
   async group(
@@ -84,21 +98,22 @@ export class SDK {
     eventTitle?: string,
     accountAttributes?: object,
   ): Promise<void> {
-    await this.#client.group({
-      profileId,
-      accountId,
-      ...(eventTitle ? { event: eventTitle } : {}),
-      ...(accountAttributes
-        ? { attributes: accountAttributes as Record<string, unknown> }
-        : {}),
-    });
+    await this.#client.group(
+      withProfileId(profileId, {
+        accountId,
+        ...(eventTitle ? { event: eventTitle } : {}),
+        ...(accountAttributes
+          ? { attributes: accountAttributes as Record<string, unknown> }
+          : {}),
+      }),
+    );
   }
 
   async track(profileId: string, eventTitle: string, data: object): Promise<void> {
-    await this.#client.track(eventTitle, {
-      profileId,
-      properties: data as Record<string, unknown>,
-    });
+    await this.#client.track(
+      eventTitle,
+      withProfileId(profileId, { properties: data as Record<string, unknown> }),
+    );
   }
 
   async record(
@@ -110,22 +125,26 @@ export class SDK {
     userAttributes?: object,
     accountAttributes?: object,
   ): Promise<void> {
-    await this.#client.track(eventTitle, {
-      profileId,
-      ...(userId ? { userId } : {}),
-      ...(accountId ? { accountId } : {}),
-      ...(data ? { properties: data as Record<string, unknown> } : {}),
-      ...(userAttributes
-        ? { userAttributes: userAttributes as Record<string, unknown> }
-        : {}),
-      ...(accountAttributes
-        ? { accountAttributes: accountAttributes as Record<string, unknown> }
-        : {}),
-    });
+    await this.#client.track(
+      eventTitle,
+      withProfileId(profileId, {
+        ...(userId ? { userId } : {}),
+        ...(accountId ? { accountId } : {}),
+        ...(data ? { properties: data as Record<string, unknown> } : {}),
+        ...(userAttributes
+          ? { userAttributes: userAttributes as Record<string, unknown> }
+          : {}),
+        ...(accountAttributes
+          ? { accountAttributes: accountAttributes as Record<string, unknown> }
+          : {}),
+      }),
+    );
   }
 
   async alias(profileId: string, userId: string, anotherUserId: string): Promise<void> {
-    await this.#client.alias({ profileId, userId, previousUserId: anotherUserId });
+    await this.#client.alias(
+      withProfileId(profileId, { userId, previousUserId: anotherUserId }),
+    );
   }
 
   async consents(
@@ -173,15 +192,17 @@ export class SDK {
     productId: string,
     quantity: number,
   ): Promise<void> {
-    await this.#client.ecommerce.addedToCart({ profileId, productId, quantity });
+    await this.#client.ecommerce.addedToCart(
+      withProfileId(profileId, { productId, quantity }),
+    );
   }
 
   async productView(profileId: string, productId: string): Promise<void> {
-    await this.#client.ecommerce.productViewed({ profileId, productId });
+    await this.#client.ecommerce.productViewed(withProfileId(profileId, { productId }));
   }
 
   async productOrdered(profileId: string, products: ProductLine[]): Promise<void> {
-    await this.#client.ecommerce.ordered({ profileId, products });
+    await this.#client.ecommerce.ordered(withProfileId(profileId, { products }));
   }
 
   async recommendation(
