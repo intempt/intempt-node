@@ -48,7 +48,7 @@ data in, decisions out: no admin or console operations.
   own receive time. Now sent in seconds, with client-side range validation.
 - **`profileId` was required where the API does not require it.** The server
   accepts any one of `userId`, `profileId` or `accountId` and copies `userId`
-  into `profileId`. Consent additionally accepts `masterId`.
+  into `profileId`.
 - Errors carry the HTTP status, response body and `Retry-After` instead of a
   generic `Failed to send request`.
 

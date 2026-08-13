@@ -442,7 +442,6 @@ with each call.
 **Do I need a `profileId`?**
 
 No. The API accepts `userId` on its own and links it to a profile for you.
-Consent additionally accepts `masterId`.
 
 **Where is `users.merge()` / profile merging?**
 

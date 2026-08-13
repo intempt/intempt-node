@@ -57,7 +57,7 @@ export class Consent {
     if (profileId && !sourceId) {
       throw new TypeError(
         'consent: sourceId must be configured to record consent by profileId; ' +
-          'pass userId or masterId instead, or set sourceId in Intempt.init',
+          'pass userId instead, or set sourceId in Intempt.init',
       );
     }
 

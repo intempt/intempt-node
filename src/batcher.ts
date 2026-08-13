@@ -225,10 +225,6 @@ export class Batcher {
     return this.#queue.length;
   }
 
-  get isStopped(): boolean {
-    return this.#stopped;
-  }
-
   async close(): Promise<void> {
     await this.flush();
     this.#stopped = true;

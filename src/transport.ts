@@ -110,8 +110,10 @@ export class Transport {
   async post<T = unknown>(path: string, body: unknown): Promise<TransportResponse<T>> {
     const payload = Buffer.from(JSON.stringify(body), 'utf8');
     const requestLib = this.#config.protocol === 'https' ? https : http;
-    const agent =
-      this.#config.agent ?? this.#proxyAgent ?? this.#agents?.[this.#config.protocol];
+    // Always defined: #agents is only null when config.agent was supplied, and a
+    // supplied agent takes precedence, so there is no case with neither.
+    const agent: http.Agent =
+      this.#config.agent ?? this.#proxyAgent ?? this.#agents![this.#config.protocol];
 
     if (this.#config.debug) {
       this.#config.logger.debug('[intempt] POST', path, body);
@@ -121,7 +123,7 @@ export class Transport {
       host: this.#config.host,
       method: 'POST',
       path,
-      ...(agent ? { agent } : {}),
+      agent,
       timeout: this.#config.timeout,
       headers: {
         'Content-Type': 'application/json',
