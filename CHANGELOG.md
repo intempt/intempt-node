@@ -64,7 +64,8 @@ data in, decisions out: no admin or console operations.
 - Optional buffering via `batch`, with a documented retry policy: 413 halves
   the batch, 429 honours `Retry-After`, 5xx and timeouts back off
   exponentially, other 4xx drop the batch, and five consecutive failures stop
-  the batcher rather than looping.
+  the batcher rather than looping. A run of single-event 413 drops narrows to one
+  event per request instead of stopping.
 - `flush()`, `close()`, `buffered`, `isOptedIn()`.
 - `timestamp` on `track()`, accepting a `Date` or epoch milliseconds.
   Note: whether the event store honours a client-supplied timestamp or stamps
@@ -88,14 +89,36 @@ data in, decisions out: no admin or console operations.
   `close()` or exit hook still transmitted events captured before the opt-out. A
   consent revocation between capture and flush was not honoured. The buffer is now
   discarded with a warning.
+- **`profileId` is no longer reachable from the v2 surface.** The option types
+  extended an internal interface that carried it, so `client.track('e', { profileId })`
+  compiled. It is now declared `profileId?: never` — omitting it was not enough,
+  because excess-property checks only fire on fresh object literals, so a variable
+  carrying the field still compiled. The 1.x `SDK` shim still sends it.
+- **`recommend()` is refused after `close()`,** like every other method. It was the
+  one ungated call, and since `close()` destroys the agents while `Agent.destroy()`
+  reaps only idle sockets, it opened a socket nothing would release.
+- **`setConfig()` rejects `keepAlive` and `agent` at compile time** rather than
+  throwing at runtime. Both are fixed at construction.
 - **A closed client throws instead of silently discarding writes.** Matches the
   promise that nothing is swallowed. Opting out remains a quiet no-op, which is
   intended; using a closed client is a programming error.
-- **413 no longer oscillates.** The halved batch width was restored after the next
-  success, so the following request was oversized again and the batcher alternated
-  413/200 indefinitely at double the request count — with the breaker never
-  tripping, because each success cleared the failure tally. The width is now only
-  restored once a full-width send succeeds.
+- **413 no longer oscillates, and no longer halves throughput permanently.** The
+  halved width was originally restored after the next success, so the following
+  request was oversized again and the batcher alternated 413/200 indefinitely at
+  double the request count, with the breaker never tripping because each success
+  cleared the failure tally. The first fix restored the width only once a
+  full-width send succeeded — but the batch is sliced to the current width, so that
+  comparison could never be true again and the reduction became permanent for the
+  life of the client. Mutation testing found it: the comparison was unkillable
+  because no input could reach it. The width now doubles back toward full after ten
+  consecutive successful sends that filled it.
+- **A gateway that rejects every single event no longer amplifies requests.** When
+  single-event 413 drops keep arriving with nothing accepted in between, the width
+  stops being reset to full and the SDK sends one event per request until something
+  succeeds, instead of replaying the whole halving chain per event. It does not stop
+  batching: an interim version did, and that was worse than the problem — five
+  genuinely-oversized events stranded the entire queue and discarded every later
+  event, where the previous behaviour lost only those five.
 - **A zero or past `Retry-After` no longer becomes a hot loop.** `0` is not
   nullish, so it was honoured literally: five attempts inside 50ms, then a
   stranded queue. Only a positive value is honoured, with a 100ms floor.

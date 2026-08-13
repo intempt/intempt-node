@@ -17,10 +17,17 @@ const MAX_RETRY_INTERVAL_MS = 10 * 60 * 1000;
 const MIN_RETRY_INTERVAL_MS = 100;
 const MAX_CONSECUTIVE_FAILURES = 5;
 /**
- * Consecutive single-event 413 drops, with no successful send in between, before
- * batching stops. Separate from the failure budget because a 413 never reaches it.
+ * Consecutive single-event 413 drops, with no successful send in between, after
+ * which the width stops being reset to full.
+ *
+ * This does NOT stop batching. An earlier version did, and it was worse than the
+ * problem: five genuinely-oversized events in a row stranded the entire queue and
+ * discarded every later event for the life of the client, where the old behaviour
+ * merely dropped those five. A drop budget cannot tell "the gateway limit is below
+ * one event" from "a burst of oversized events", so it must not be used to make a
+ * permanent decision.
  */
-const MAX_CONSECUTIVE_DROPS = 5;
+const DROPS_BEFORE_STAYING_NARROW = 3;
 /**
  * Successful sends at a reduced width before trying a wider one again.
  *
@@ -155,10 +162,14 @@ export class Batcher {
       // breaker never tripping because each success clears the counter. Hence
       // the run of successes and the doubling rather than a jump to full.
       //
-      // Only a send that filled the current width counts. A trickle producer
-      // flushing one event per timer tick would otherwise earn a widening from
-      // ten width-1 requests, none of which tested the width being left behind —
-      // so the batcher would widen on evidence it had not actually gathered.
+      // Only a send that filled the current width counts, so a trickle producer
+      // flushing two events per tick at a width of eight earns nothing.
+      //
+      // The one width this cannot filter is 1, where `batch.length >= 1` always
+      // holds — and 1 is exactly where a halving chain bottoms out. Ten successful
+      // single-event sends therefore do widen 1 to 2. That is the intended floor
+      // rather than an oversight: at a width of 1 no stronger evidence exists to
+      // wait for, and 2 is the smallest step that can gather any.
       const full = Math.min(this.#options.size, this.#maxRequestEvents);
       if (this.#batchSize < full && batch.length >= this.#batchSize) {
         this.#consecutiveSuccesses += 1;
@@ -182,12 +193,17 @@ export class Batcher {
     const apiError = error instanceof IntemptApiError ? error : undefined;
     const status = apiError?.status;
 
+    // Any failure ends the run of successes, whichever branch handles it. A
+    // widening decision should rest on an unbroken streak. This used to sit lower
+    // down, below the 413 and non-retryable branches, so it was reachable only for
+    // retryable errors: nine successes at a reduced width plus one 400 plus one
+    // success still widened, which is the exact case the comment claimed to
+    // prevent, one status class over.
+    this.#consecutiveSuccesses = 0;
+
     if (status === 413) {
       if (batch.length > 1) {
         this.#batchSize = Math.max(1, Math.floor(batch.length / 2));
-        // Start the run over, so a widening attempt that 413s does not leave a
-        // near-complete tally that widens again on the very next success.
-        this.#consecutiveSuccesses = 0;
         this.#logger.warn(
           `[intempt] 413 received; reducing batch size to ${this.#batchSize}`,
         );
@@ -198,32 +214,33 @@ export class Batcher {
       });
       this.#queue.splice(0, 1);
       this.#consecutiveFailures = 0;
-      // The offending event is gone, so the width was never the problem: go
-      // straight back to full rather than crawling up through the run counter.
-      this.#batchSize = Math.min(this.#options.size, this.#maxRequestEvents);
-      this.#consecutiveSuccesses = 0;
-
-      // Drops need their own budget, because none of the paths above can trip the
-      // breaker: a 413 returns before #consecutiveFailures is incremented, and
-      // this branch resets it outright so that one oversized event among many
-      // does not stop batching.
-      //
-      // A gateway whose body limit sits below a single event 413s everything, and
-      // the loop then became: halve to 1, drop, reset to full, halve again —
-      // every event discarded, forever, with the breaker never tripping. Counting
-      // consecutive drops bounds it. A successful send clears the tally, so an
-      // occasional oversized event still costs only that event.
       this.#consecutiveDrops += 1;
-      if (this.#consecutiveDrops >= MAX_CONSECUTIVE_DROPS) {
-        this.#logger.error(
-          `[intempt] ${this.#consecutiveDrops} consecutive events rejected as too large ` +
-            `with none accepted in between; stopping batching. ` +
-            `${this.#queue.length} event(s) remain buffered. ` +
-            `Check the gateway's request body limit.`,
-          error,
-        );
-        this.#stopped = true;
-        return 'stop';
+
+      // Width policy after a drop.
+      //
+      // Resetting to full is right for the common case: one oversized event among
+      // normal ones, where the width was never the problem. But the reset is also
+      // what makes repeated drops expensive — each one replays the entire halving
+      // chain (full, half, quarter, ... 1) before reaching a single event again,
+      // so a gateway whose body limit sits below one event costs about log2(full)
+      // requests per event rather than one.
+      //
+      // Once drops keep arriving with nothing accepted in between, stay narrow and
+      // let the widening ramp above restore the width when sends start succeeding.
+      // That bounds the request amplification without ever giving up: the queue
+      // still drains, and a client whose gateway is later reconfigured recovers on
+      // its own.
+      if (this.#consecutiveDrops < DROPS_BEFORE_STAYING_NARROW) {
+        this.#batchSize = Math.min(this.#options.size, this.#maxRequestEvents);
+      } else {
+        if (this.#consecutiveDrops === DROPS_BEFORE_STAYING_NARROW) {
+          this.#logger.error(
+            `[intempt] ${this.#consecutiveDrops} events rejected as too large with none ` +
+              `accepted in between; sending one event per request until one succeeds. ` +
+              `Check the gateway's request body limit.`,
+          );
+        }
+        this.#batchSize = 1;
       }
       return 'requeue';
     }
@@ -242,9 +259,6 @@ export class Batcher {
       return 'requeue';
     }
 
-    // Any failure ends the run of successes: a widening decision should rest on an
-    // unbroken streak, not on nine successes with a 500 in the middle.
-    this.#consecutiveSuccesses = 0;
     this.#consecutiveFailures += 1;
     if (this.#consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
       this.#logger.error(

@@ -1,5 +1,8 @@
 import type { Identifiers, ProductLine } from './types';
 
+/** Same hard block as the ingest option types; see NoProfileId in types.ts. */
+type NoProfileId = { profileId?: never };
+
 // `profileId` is deliberately absent from these public parameters. The 1.x shim
 // still sends one; it attaches it via withProfileId() in legacy.ts and it reaches
 // the wire through Ingest.trackLines, whose own parameter type still carries it.
@@ -24,7 +27,9 @@ export class Ecommerce {
     this.#ingest = ingest;
   }
 
-  async productViewed(options: Identifiers & { productId: string }): Promise<void> {
+  async productViewed(
+    options: Identifiers & NoProfileId & { productId: string },
+  ): Promise<void> {
     if (!options?.productId) {
       throw new TypeError('productViewed: productId is required');
     }
@@ -34,7 +39,7 @@ export class Ecommerce {
   }
 
   async addedToCart(
-    options: Identifiers & { productId: string; quantity: number },
+    options: Identifiers & NoProfileId & { productId: string; quantity: number },
   ): Promise<void> {
     if (!options?.productId) {
       throw new TypeError('addedToCart: productId is required');
@@ -49,7 +54,9 @@ export class Ecommerce {
     ]);
   }
 
-  async ordered(options: Identifiers & { products: ProductLine[] }): Promise<void> {
+  async ordered(
+    options: Identifiers & NoProfileId & { products: ProductLine[] },
+  ): Promise<void> {
     if (!Array.isArray(options?.products) || options.products.length === 0) {
       throw new TypeError('ordered: products must be a non-empty array');
     }

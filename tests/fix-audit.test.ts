@@ -4,6 +4,7 @@ import {
   ORIGIN,
   TRACK_PATH,
   client,
+  feedPath,
   nock,
   setupNock,
   testLogger,
@@ -84,11 +85,18 @@ describe('audit the closed-client throw', () => {
     // the documented close() contract. The gate is the consistent choice.
     const c = client();
     await c.close();
+    // An interceptor is registered on purpose: if the guard were missing, the call
+    // would consume it, and the assertion that it is still pending is what proves
+    // no request left the process. Asserting `pendingMocks()` is empty would have
+    // been vacuous here — no interceptor, and setupNock's afterEach cleans them
+    // anyway, so it reads as `[]` regardless of what the SDK does.
+    const scope = nock(ORIGIN).post(feedPath('f')).reply(200, {});
     await expect(
       c.recommend({ userId: 'u1', feedId: 'f', fields: ['id'] }),
     ).rejects.toThrow(/client is closed/);
-    // Nothing left the process.
-    expect(nock.pendingMocks()).toEqual([]);
+    expect(scope.isDone()).toBe(false);
+    expect(nock.pendingMocks()).toHaveLength(1);
+    nock.cleanAll();
   });
 
   it('throws synchronously enough to be catchable with await', async () => {

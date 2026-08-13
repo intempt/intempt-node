@@ -122,7 +122,9 @@ Intempt.init({
 API for consent records that identify a person by `profileId`.
 
 Call `setConfig()` to change any of these on a live client, except `org`,
-`project`, `apiKey`, `sourceId` and `batch`.
+`project`, `apiKey`, `sourceId`, `batch`, `keepAlive` and `agent`. The last two are
+fixed because the HTTP agents are built once at construction; the type rejects
+them, so it is a compile error rather than a runtime surprise.
 
 ### Identifiers
 
@@ -287,14 +289,32 @@ intempt.buffered; // events still queued
 
 Retry policy:
 
-| Response               | Behaviour                                          |
-| ---------------------- | -------------------------------------------------- |
-| 413, batch > 1         | halve the batch size, retry                        |
-| 413, batch = 1         | drop the event, log it                             |
-| 429                    | honour `Retry-After`, else exponential backoff     |
-| 5xx, 408, timeout      | exponential backoff, capped at 10 minutes          |
-| other 4xx              | drop the batch, log the status and body            |
-| 5 consecutive failures | stop batching and say how many events are stranded |
+| Response                | Behaviour                                               |
+| ----------------------- | ------------------------------------------------------- |
+| 413, batch > 1          | halve the batch size, retry                             |
+| 413, batch = 1          | drop the event, log it                                  |
+| 429                     | honour `Retry-After`, else exponential backoff          |
+| 5xx, 408, timeout       | exponential backoff, floored at 100ms, capped at 10 min |
+| other 4xx               | drop the batch, log the status and body                 |
+| 5 consecutive failures  | stop batching and say how many events are stranded      |
+| 3 consecutive 413 drops | keep going at one event per request, log once           |
+
+Two details worth knowing about the width, because both are visible in your
+request count.
+
+A 413 halves the width, and the width only widens again after ten consecutive
+successful sends that filled it, doubling each time. So one transient 413 costs
+throughput for a while rather than forever — an earlier version never recovered at
+all, and resetting to full immediately just alternates 413/200 at double the
+request count.
+
+A 413 on a single event drops that event. If that keeps happening with nothing
+accepted in between — a gateway whose body limit sits below one event — the SDK
+stops resetting the width to full and sends one event per request until something
+succeeds. That bounds the request amplification, which would otherwise replay the
+whole halving chain per event. It does **not** stop batching: doing so stranded the
+buffer and discarded every later event, which is worse than losing the events that
+were actually too large.
 
 The buffer is in memory. A hard crash loses it. Crash durability needs disk with
 fsync and boot-time recovery, which is a different design.

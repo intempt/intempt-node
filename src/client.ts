@@ -140,10 +140,14 @@ export class IntemptClient {
   // ---- config ----
 
   /**
-   * `keepAlive` and `agent` are omitted, matching `mergeConfig`, which throws on
+   * `keepAlive` and `agent` are refused, matching `mergeConfig`, which throws on
    * either. They were previously accepted by this type and rejected at runtime, so
    * `setConfig({ keepAlive: false })` compiled clean and then threw. A fixed option
    * belongs in the signature, not in an exception.
+   *
+   * Declared `never` rather than merely `Omit`ted, because excess-property checks
+   * only fire on fresh object literals: a `Partial<IntemptConfig>` variable
+   * carrying `keepAlive` still compiled and still threw.
    */
   setConfig(
     patch: Partial<
@@ -151,7 +155,7 @@ export class IntemptClient {
         IntemptConfig,
         'org' | 'project' | 'apiKey' | 'sourceId' | 'batch' | 'keepAlive' | 'agent'
       >
-    >,
+    > & { keepAlive?: never; agent?: never },
   ): void {
     this.#resolved = mergeConfig(this.#resolved, patch);
     this.#transport.setConfig(this.#resolved);

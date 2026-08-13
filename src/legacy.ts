@@ -25,7 +25,10 @@ import type { Logger, ProductLine } from './types';
  * to a single helper keeps it out of the public API.
  */
 function withProfileId<T extends object>(profileId: string, options: T): T {
-  return { ...options, profileId } as T;
+  // The public types declare `profileId?: never`, so the cast is what bridges the
+  // 1.x surface. Sound because the runtime path honours the field: see the
+  // `Internal*Options` intersections in ingest.ts, which Omit and re-add it.
+  return { ...options, profileId } as unknown as T;
 }
 
 export class SDK {

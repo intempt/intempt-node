@@ -5,11 +5,19 @@
   // Stryker's typescript checker points at the build config too. A type error in
   // any test file passed every CI leg unnoticed.
   //
-  // This config adds the tests without emitting, so `typecheck` covers both.
+  // This config adds them without emitting, so `typecheck` covers both.
+  //
+  // `scripts/` is deliberately absent. It holds only e2e.mjs and
+  // verify-consumer.sh, so with `allowJs` unset it contributed zero files —
+  // listing it claimed a coverage that did not exist (`tsc --listFiles | grep
+  // scripts/` returned 0). e2e.mjs is a hand-run script against production and is
+  // out of scope here; checking it would mean turning on `allowJs` for the whole
+  // project.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*", "tests/**/*", "scripts/**/*"]
+  "include": ["src/**/*", "tests/**/*", "vitest.config.ts", "stryker.config.json"],
+  "exclude": ["dist", "coverage", "reports"]
 }

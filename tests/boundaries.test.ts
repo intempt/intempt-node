@@ -328,34 +328,42 @@ describe('a reduced batch width recovers', () => {
     await c.close();
   }, 10_000);
 
-  it('returns to full width immediately once the oversized event is dropped', async () => {
-    // A 413 on a single event means the width was never the problem, so the
-    // width should reset rather than crawl back up.
+  it('returns to full width immediately after an isolated oversized event', async () => {
+    // One 413 on a single event means the width was never the problem, so the
+    // width resets rather than crawling back up. That reset only applies below the
+    // narrow-mode threshold — a run of drops deliberately stops resetting, which
+    // the "gateway that rejects every single event" block covers.
     const widths: number[] = [];
-    let rejectAll = true;
+    const big = 'too-big';
     nock(ORIGIN)
-      .post(TRACK_PATH, (b: { track: unknown[] }) => {
+      .post(TRACK_PATH, (b: { track: Array<{ name: string }> }) => {
         widths.push(b.track.length);
         return true;
       })
       .times(30)
-      .reply(function () {
-        return rejectAll ? [413, ''] : [200, ''];
+      .reply(function (_uri, body) {
+        const names = (body as { track: Array<{ name: string }> }).track.map(
+          (t) => t.name,
+        );
+        return names.includes(big) ? [413, ''] : [200, ''];
       });
 
     const { c, logger } = batched({
       batch: { size: 4, flushMs: 10_000, maxQueue: 100, flushOnExit: false },
     });
-    for (let i = 0; i < 4; i += 1) await c.track(`a${i}`, { userId: 'u1' });
+
+    // One oversized event at the head, three good ones behind it.
+    await c.track(big, { userId: 'u1' });
+    for (let i = 0; i < 3; i += 1) await c.track(`a${i}`, { userId: 'u1' });
     await c.flush();
 
-    // Every event was dropped one at a time; the width is back to full.
     expect(
       logger.calls.error.some((a) => /single event too large/.test(String(a[0]))),
     ).toBe(true);
     expect(c.buffered).toBe(0);
 
-    rejectAll = false;
+    // A single drop must not leave the width reduced: the next full buffer goes
+    // out at full width, not at the 1 the halving chain bottomed out on.
     const before = widths.length;
     for (let i = 0; i < 4; i += 1) await c.track(`b${i}`, { userId: 'u1' });
     await c.flush();
@@ -387,75 +395,145 @@ describe('the queue-full drop is reported with enough detail to act on', () => {
   }, 10_000);
 });
 
-describe('a gateway that rejects every single event does not loop forever', () => {
-  it('stops batching after a run of drops with nothing accepted in between', async () => {
-    // None of the other paths can trip the breaker here: a 413 returns before
-    // #consecutiveFailures is incremented, and the single-event drop resets it so
-    // that one oversized event does not stop batching. Without a drop budget a
-    // gateway whose body limit sits below one event discards the entire stream —
-    // halve to 1, drop, reset to full, halve again — forever.
-    let attempts = 0;
-    nock(ORIGIN)
-      .post(TRACK_PATH)
-      .times(60)
-      .reply(() => {
-        attempts += 1;
-        return [413, ''];
-      });
-
-    const { c, logger } = batched({
-      batch: { size: 2, flushMs: 10_000, maxQueue: 50, flushOnExit: false },
-    });
-    for (let i = 0; i < 12; i += 1) await c.track(`e${i}`, { userId: 'u1' });
-    await c.flush();
-
-    const stop = logger.calls.error.find((a) =>
-      /consecutive events rejected as too large/.test(String(a[0])),
-    );
-    expect(stop).toBeDefined();
-    expect(String(stop![0])).toMatch(/stopping batching/);
-    expect(String(stop![0])).toMatch(/gateway's request body limit/);
-
-    // It gave up rather than draining all 12 by dropping them one at a time.
-    expect(c.buffered).toBeGreaterThan(0);
-    const before = attempts;
-    await c.flush();
-    expect(attempts).toBe(before);
-  }, 20_000);
-
-  it('forgives an occasional oversized event when others do get through', async () => {
-    // A successful send clears the drop tally, so one bad event costs one event.
+describe('a gateway that rejects every single event', () => {
+  it('keeps draining at width 1 instead of stopping, and never strands the queue', async () => {
+    // The earlier version of this stopped batching after five drops. That was
+    // worse than the problem: five genuinely-oversized events stranded the whole
+    // queue and discarded every later event for the life of the client, where the
+    // behaviour before it merely dropped those five. A drop budget cannot tell
+    // "gateway limit below one event" from "a burst of oversized events", so it
+    // must not make a permanent decision.
     const widths: number[] = [];
-    let rejectNext = true;
     nock(ORIGIN)
       .post(TRACK_PATH, (b: { track: unknown[] }) => {
         widths.push(b.track.length);
         return true;
       })
-      .times(40)
-      .reply(function () {
-        if (rejectNext) {
-          rejectNext = false;
-          return [413, ''];
-        }
+      .times(200)
+      .reply(413, '');
+
+    const { c, logger } = batched({
+      batch: { size: 8, flushMs: 10_000, maxQueue: 50, flushOnExit: false },
+    });
+    for (let i = 0; i < 10; i += 1) await c.track(`e${i}`, { userId: 'u1' });
+    await c.flush();
+
+    // Everything was rejected, so everything is gone — but the queue drained
+    // rather than being abandoned, and batching is still alive.
+    expect(c.buffered).toBe(0);
+    expect(logger.calls.error.some((a) => /stopping batching/.test(String(a[0])))).toBe(
+      false,
+    );
+    expect(
+      logger.calls.error.some((a) =>
+        /sending one event per request until one succeeds/.test(String(a[0])),
+      ),
+    ).toBe(true);
+
+    // The point of staying narrow: once it has learned, each rejected event costs
+    // one request rather than replaying the halving chain (8, 4, 2, 1) every time.
+    const tail = widths.slice(-4);
+    expect(tail.every((w) => w === 1)).toBe(true);
+    await c.close();
+  }, 20_000);
+
+  it('recovers on its own once the gateway starts accepting again', async () => {
+    let reject = true;
+    nock(ORIGIN)
+      .post(TRACK_PATH)
+      .times(200)
+      .reply(() => (reject ? [413, ''] : [200, '']));
+
+    const { c } = batched({
+      batch: { size: 4, flushMs: 10_000, maxQueue: 50, flushOnExit: false },
+    });
+    for (let i = 0; i < 6; i += 1) await c.track(`bad${i}`, { userId: 'u1' });
+    await c.flush();
+    expect(c.buffered).toBe(0);
+
+    // Nothing was stopped, so later events still send.
+    reject = false;
+    for (let i = 0; i < 4; i += 1) await c.track(`good${i}`, { userId: 'u1' });
+    await c.flush();
+    expect(c.buffered).toBe(0);
+    await c.close();
+  }, 20_000);
+
+  it('does not punish a burst of oversized events among good ones', async () => {
+    // The regression this replaces: with a stop-after-5 breaker, five oversized
+    // events at the head of the queue stranded the twenty good events behind them
+    // and every event thereafter.
+    const big = new Set(['big0', 'big1', 'big2', 'big3', 'big4', 'big5']);
+    const sent: string[] = [];
+    nock(ORIGIN)
+      .post(TRACK_PATH, () => true)
+      .times(400)
+      .reply(function (_uri, body) {
+        const names = (body as { track: Array<{ name: string }> }).track.map(
+          (t) => t.name,
+        );
+        if (names.some((n) => big.has(n))) return [413, ''];
+        sent.push(...names);
         return [200, ''];
       });
 
     const { c, logger } = batched({
-      batch: { size: 1, flushMs: 10_000, maxQueue: 50, flushOnExit: false },
+      batch: { size: 8, flushMs: 10_000, maxQueue: 200, flushOnExit: false },
     });
-    for (let i = 0; i < 8; i += 1) {
-      await c.track(`e${i}`, { userId: 'u1' });
-      rejectNext = i % 3 === 0; // a bad one every third round
-      await c.flush();
-    }
+    for (const n of big) await c.track(n, { userId: 'u1' });
+    for (let i = 0; i < 20; i += 1) await c.track(`good${i}`, { userId: 'u1' });
+    await c.flush();
 
-    expect(
-      logger.calls.error.some((a) => /consecutive events rejected/.test(String(a[0]))),
-    ).toBe(false);
+    // Every good event got through; only the oversized ones were lost.
+    expect(sent.filter((n) => n.startsWith('good'))).toHaveLength(20);
     expect(c.buffered).toBe(0);
+    expect(logger.calls.error.some((a) => /stopping batching/.test(String(a[0])))).toBe(
+      false,
+    );
+
+    // And the client still works afterwards.
+    await c.track('after', { userId: 'u1' });
+    await c.flush();
+    expect(sent).toContain('after');
     await c.close();
-  }, 20_000);
+  }, 30_000);
+
+  it('resets the drop tally on a success, so the narrow-mode notice can fire twice', async () => {
+    // Pins the #consecutiveDrops reset. Without it the tally only ever climbs, so
+    // the one-time notice fires once for the life of the client; with it, a
+    // successful send in between makes a second run of drops a fresh run.
+    let reject = true;
+    nock(ORIGIN)
+      .post(TRACK_PATH)
+      .times(200)
+      .reply(() => (reject ? [413, ''] : [200, '']));
+
+    const { c, logger } = batched({
+      batch: { size: 4, flushMs: 10_000, maxQueue: 50, flushOnExit: false },
+    });
+
+    const notices = (): number =>
+      logger.calls.error.filter((a) =>
+        /sending one event per request until one succeeds/.test(String(a[0])),
+      ).length;
+
+    // First run of drops: reaches narrow mode and logs once.
+    for (let i = 0; i < 4; i += 1) await c.track(`a${i}`, { userId: 'u1' });
+    await c.flush();
+    expect(notices()).toBe(1);
+
+    // A success clears the tally.
+    reject = false;
+    await c.track('ok', { userId: 'u1' });
+    await c.flush();
+
+    // Second run of drops logs again, which is only possible if the tally reset.
+    reject = true;
+    for (let i = 0; i < 4; i += 1) await c.track(`b${i}`, { userId: 'u1' });
+    await c.flush();
+    expect(notices()).toBe(2);
+    await c.close();
+  }, 30_000);
 });
 
 describe('widening rests on evidence actually gathered', () => {

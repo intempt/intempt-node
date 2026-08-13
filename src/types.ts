@@ -129,9 +129,24 @@ export interface LegacyIdentifiers extends Identifiers {
   profileId?: string;
 }
 
+/**
+ * Refuses `profileId` outright rather than merely omitting it.
+ *
+ * Omitting was not enough: TypeScript's excess-property check only fires on fresh
+ * object literals, so `const o = { userId, profileId }; client.track('e', o)`
+ * compiled clean and put profileId on the wire from the pure v2 surface. `never`
+ * rejects it however it arrives.
+ *
+ * The internal types in ingest.ts `Omit` this key before re-adding it as a string,
+ * which is what keeps the 1.x shim working.
+ */
+interface NoProfileId {
+  profileId?: never;
+}
+
 export type Properties = Record<string, unknown>;
 
-export interface TrackOptions extends Identifiers {
+export interface TrackOptions extends Identifiers, NoProfileId {
   properties?: Properties;
   userAttributes?: Properties;
   accountAttributes?: Properties;
@@ -143,21 +158,21 @@ export interface TrackEvent extends TrackOptions {
   event: string;
 }
 
-export interface IdentifyOptions extends Identifiers {
+export interface IdentifyOptions extends Identifiers, NoProfileId {
   traits?: Properties;
   /** Override the reserved event name. */
   event?: string;
   timestamp?: Date | number;
 }
 
-export interface GroupOptions extends Identifiers {
+export interface GroupOptions extends Identifiers, NoProfileId {
   accountId: string;
   attributes?: Properties;
   event?: string;
   timestamp?: Date | number;
 }
 
-export interface AliasOptions extends Identifiers {
+export interface AliasOptions extends Identifiers, NoProfileId {
   userId: string;
   previousUserId: string;
   timestamp?: Date | number;

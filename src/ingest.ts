@@ -29,7 +29,7 @@ import type { Batcher } from './batcher';
  *
  * @internal
  */
-type WithProfileId<T> = T & { profileId?: string };
+type WithProfileId<T> = Omit<T, 'profileId'> & { profileId?: string };
 type InternalTrackOptions = WithProfileId<TrackOptions>;
 type InternalIdentifyOptions = WithProfileId<IdentifyOptions>;
 type InternalGroupOptions = WithProfileId<GroupOptions>;
