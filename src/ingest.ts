@@ -217,8 +217,11 @@ export class Ingest {
   }
 
   async group(options: GroupOptions): Promise<void> {
+    // No assertIdentifier here: accountId is required by the signature and is
+    // itself an identifier, so the check can never fail. Mutation testing found
+    // it — the string 'group' could be rewritten to anything and no test noticed,
+    // because the line is unreachable.
     assertNonBlank(options?.accountId, 'group', 'accountId');
-    assertIdentifier(options, 'group');
     const { attributes, event, ...ids } = options;
     await this.#submit([
       this.#buildEvent(reservedName(event, 'group'), {
