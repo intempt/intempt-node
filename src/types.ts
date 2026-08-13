@@ -178,7 +178,7 @@ export interface AliasOptions extends Identifiers, NoProfileId {
   timestamp?: Date | number;
 }
 
-export interface ConsentOptions {
+export interface ConsentOptions extends NoProfileId {
   userId?: string;
   category?: string;
   /** ISO date, epoch string, or `'unlimited'` (default). */

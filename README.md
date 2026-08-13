@@ -297,7 +297,7 @@ Retry policy:
 | 5xx, 408, timeout       | exponential backoff, floored at 100ms, capped at 10 min |
 | other 4xx               | drop the batch, log the status and body                 |
 | 5 consecutive failures  | stop batching and say how many events are stranded      |
-| 3 consecutive 413 drops | keep going at one event per request, log once           |
+| 3 consecutive 413 drops | say the gateway limit is the likely cause, once         |
 
 Two details worth knowing about the width, because both are visible in your
 request count.
@@ -308,13 +308,23 @@ throughput for a while rather than forever — an earlier version never recovere
 all, and resetting to full immediately just alternates 413/200 at double the
 request count.
 
-A 413 on a single event drops that event. If that keeps happening with nothing
-accepted in between — a gateway whose body limit sits below one event — the SDK
-stops resetting the width to full and sends one event per request until something
-succeeds. That bounds the request amplification, which would otherwise replay the
-whole halving chain per event. It does **not** stop batching: doing so stranded the
-buffer and discarded every later event, which is worse than losing the events that
-were actually too large.
+A 413 on a single event drops that event and returns the width to full, because the
+oversized event is gone and the width was never the problem. If drops keep coming
+with nothing accepted in between — a gateway whose body limit sits below one event
+— the SDK says so once and otherwise carries on unchanged.
+
+That tally is diagnostic only, and deliberately so. Two earlier versions used it to
+change behaviour and both were worse than what they fixed. Stopping batching
+stranded the buffer and discarded every later event, where the original merely lost
+the events that were genuinely too large. Pinning the width to 1 capped throughput
+to one event per round trip, and since the width then has to climb back through the
+widening ramp — 37 requests to deliver 120 events against 15 — a producer faster
+than that overflows `maxQueue` and good events are lost. Trading delivered events
+for a lower request count is the wrong direction.
+
+The cost that remains is about `log2(batch.size)` requests per dropped event, since
+the halving chain replays each time. It is only paid while events are being
+dropped, which is already logged on every occurrence.
 
 The buffer is in memory. A hard crash loses it. Crash durability needs disk with
 fsync and boot-time recovery, which is a different design.

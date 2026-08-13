@@ -1,7 +1,7 @@
 import type { ConsentOptions, ResolvedConfig } from './types';
 
 /** @internal — the 1.x shim identifies by profileId. */
-type InternalConsentOptions = ConsentOptions & { profileId?: string };
+type InternalConsentOptions = Omit<ConsentOptions, 'profileId'> & { profileId?: string };
 import { compact, ensureTimestamp } from './utils';
 import type { Transport } from './transport';
 

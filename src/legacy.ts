@@ -25,9 +25,16 @@ import type { Logger, ProductLine } from './types';
  * to a single helper keeps it out of the public API.
  */
 function withProfileId<T extends object>(profileId: string, options: T): T {
-  // The public types declare `profileId?: never`, so the cast is what bridges the
-  // 1.x surface. Sound because the runtime path honours the field: see the
-  // `Internal*Options` intersections in ingest.ts, which Omit and re-add it.
+  // This cast is the whole bridge. The public option types declare
+  // `profileId?: never`, so nothing else can hand the field across; the runtime
+  // path then honours it because the `Internal*Options` types in ingest.ts and
+  // consent.ts still declare it as a string.
+  //
+  // Worth being precise, because an earlier comment credited the wrong mechanism:
+  // those internal types `Omit` the key before re-adding it, but that Omit is
+  // hygiene rather than load-bearing — a plain intersection would collapse to
+  // `never & string`, which is `never`, and `never` is assignable everywhere. The
+  // cast is what makes this compile either way.
   return { ...options, profileId } as unknown as T;
 }
 
@@ -178,13 +185,12 @@ export class SDK {
     if (action !== 'accept' && action !== 'reject') {
       throw new TypeError("consent: action must be 'accept' or 'reject'");
     }
-    const options = {
-      profileId,
+    const options = withProfileId(profileId, {
       ...(category ? { category } : {}),
       ...(consentsExpirationTime ? { validUntil: consentsExpirationTime } : {}),
       ...(email ? { email } : {}),
       ...(message ? { message } : {}),
-    };
+    });
     await (action === 'accept'
       ? this.#client.consent.grant(options)
       : this.#client.consent.revoke(options));

@@ -64,8 +64,8 @@ data in, decisions out: no admin or console operations.
 - Optional buffering via `batch`, with a documented retry policy: 413 halves
   the batch, 429 honours `Retry-After`, 5xx and timeouts back off
   exponentially, other 4xx drop the batch, and five consecutive failures stop
-  the batcher rather than looping. A run of single-event 413 drops narrows to one
-  event per request instead of stopping.
+  the batcher rather than looping. A run of single-event 413 drops is reported once
+  as a likely gateway body-limit problem.
 - `flush()`, `close()`, `buffered`, `isOptedIn()`.
 - `timestamp` on `track()`, accepting a `Date` or epoch milliseconds.
   Note: whether the event store honours a client-supplied timestamp or stamps
@@ -112,13 +112,14 @@ data in, decisions out: no admin or console operations.
   life of the client. Mutation testing found it: the comparison was unkillable
   because no input could reach it. The width now doubles back toward full after ten
   consecutive successful sends that filled it.
-- **A gateway that rejects every single event no longer amplifies requests.** When
-  single-event 413 drops keep arriving with nothing accepted in between, the width
-  stops being reset to full and the SDK sends one event per request until something
-  succeeds, instead of replaying the whole halving chain per event. It does not stop
-  batching: an interim version did, and that was worse than the problem — five
-  genuinely-oversized events stranded the entire queue and discarded every later
-  event, where the previous behaviour lost only those five.
+- **A gateway that rejects every single event now says so.** After three
+  consecutive single-event 413 drops with nothing accepted in between, the SDK logs
+  once that the gateway's body limit is the likely cause. The tally is diagnostic
+  only. Two interim versions used it to change behaviour and both were worse than
+  what they fixed: stopping batching stranded the queue and discarded every later
+  event, and pinning the width to one event capped throughput to one event per round
+  trip, so the widening ramp had to climb back and any faster producer overflowed
+  `maxQueue`. The width still returns to full after a drop.
 - **A zero or past `Retry-After` no longer becomes a hot loop.** `0` is not
   nullish, so it was honoured literally: five attempts inside 50ms, then a
   stranded queue. Only a positive value is honoured, with a 100ms floor.

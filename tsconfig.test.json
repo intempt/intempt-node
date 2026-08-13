@@ -5,19 +5,26 @@
   // Stryker's typescript checker points at the build config too. A type error in
   // any test file passed every CI leg unnoticed.
   //
-  // This config adds them without emitting, so `typecheck` covers both.
+  // This config adds them without emitting, so `typecheck` covers both. It also
+  // picks up tests/surface.test-d.ts, whose `@ts-expect-error` lines are the only
+  // guard that the public surface has not widened — vitest never runs that file.
   //
-  // `scripts/` is deliberately absent. It holds only e2e.mjs and
-  // verify-consumer.sh, so with `allowJs` unset it contributed zero files —
-  // listing it claimed a coverage that did not exist (`tsc --listFiles | grep
-  // scripts/` returned 0). e2e.mjs is a hand-run script against production and is
-  // out of scope here; checking it would mean turning on `allowJs` for the whole
-  // project.
+  // Two things are deliberately NOT listed, because listing a path that
+  // contributes no files claims a coverage that does not exist:
+  //
+  //   scripts/  — holds only e2e.mjs and verify-consumer.sh, and `allowJs` is off,
+  //               so it contributed zero files. e2e.mjs is a hand-run script
+  //               against production; checking it means turning on allowJs
+  //               project-wide.
+  //   *.json    — stryker.config.json was listed here and also contributed
+  //               nothing: `resolveJsonModule` is off, and a config file is not
+  //               reachable from any import anyway.
+  //
+  // Verify with: npx tsc -p tsconfig.test.json --listFiles
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*", "tests/**/*", "vitest.config.ts", "stryker.config.json"],
-  "exclude": ["dist", "coverage", "reports"]
+  "include": ["src/**/*", "tests/**/*", "vitest.config.ts"]
 }

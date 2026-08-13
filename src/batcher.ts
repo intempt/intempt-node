@@ -17,17 +17,27 @@ const MAX_RETRY_INTERVAL_MS = 10 * 60 * 1000;
 const MIN_RETRY_INTERVAL_MS = 100;
 const MAX_CONSECUTIVE_FAILURES = 5;
 /**
- * Consecutive single-event 413 drops, with no successful send in between, after
- * which the width stops being reset to full.
+ * Consecutive single-event 413 drops, with no successful send in between, before
+ * saying so once.
  *
- * This does NOT stop batching. An earlier version did, and it was worse than the
- * problem: five genuinely-oversized events in a row stranded the entire queue and
- * discarded every later event for the life of the client, where the old behaviour
- * merely dropped those five. A drop budget cannot tell "the gateway limit is below
- * one event" from "a burst of oversized events", so it must not be used to make a
- * permanent decision.
+ * Diagnostic only. Two earlier versions used this tally to change behaviour and
+ * both were worse than what they fixed:
+ *
+ * - Stopping batching stranded the queue and discarded every later event, where
+ *   the original merely dropped the oversized ones.
+ * - Pinning the width to 1 capped throughput to one event per round trip. The
+ *   width then has to climb back through the widening ramp — measured at 37
+ *   requests to deliver 120 events instead of about 15 — and a producer faster
+ *   than that overflows maxQueue, so good events are lost. Trading data loss for
+ *   request count is the wrong direction.
+ *
+ * What the tally is actually good for is telling an operator to go and look at the
+ * gateway. The cost it was trying to avoid — about log2(size) requests per dropped
+ * event, because the width resets to full and the halving chain replays — is real
+ * but is only paid while events are being dropped, which is already an error
+ * condition logged on every occurrence.
  */
-const DROPS_BEFORE_STAYING_NARROW = 3;
+const DROPS_BEFORE_WARNING = 3;
 /**
  * Successful sends at a reduced width before trying a wider one again.
  *
@@ -216,31 +226,22 @@ export class Batcher {
       this.#consecutiveFailures = 0;
       this.#consecutiveDrops += 1;
 
-      // Width policy after a drop.
-      //
-      // Resetting to full is right for the common case: one oversized event among
-      // normal ones, where the width was never the problem. But the reset is also
-      // what makes repeated drops expensive — each one replays the entire halving
-      // chain (full, half, quarter, ... 1) before reaching a single event again,
-      // so a gateway whose body limit sits below one event costs about log2(full)
-      // requests per event rather than one.
-      //
-      // Once drops keep arriving with nothing accepted in between, stay narrow and
-      // let the widening ramp above restore the width when sends start succeeding.
-      // That bounds the request amplification without ever giving up: the queue
-      // still drains, and a client whose gateway is later reconfigured recovers on
-      // its own.
-      if (this.#consecutiveDrops < DROPS_BEFORE_STAYING_NARROW) {
-        this.#batchSize = Math.min(this.#options.size, this.#maxRequestEvents);
-      } else {
-        if (this.#consecutiveDrops === DROPS_BEFORE_STAYING_NARROW) {
-          this.#logger.error(
-            `[intempt] ${this.#consecutiveDrops} events rejected as too large with none ` +
-              `accepted in between; sending one event per request until one succeeds. ` +
-              `Check the gateway's request body limit.`,
-          );
-        }
-        this.#batchSize = 1;
+      // The offending event is gone, so the width was never the problem: go back to
+      // full rather than leaving the next batch narrowed. Anything that keeps the
+      // width down here costs delivered events, because the widening ramp then has
+      // to climb back one doubling per ten successes while the producer keeps
+      // filling the queue.
+      this.#batchSize = Math.min(this.#options.size, this.#maxRequestEvents);
+
+      // Say something once when drops keep coming with nothing accepted in
+      // between. That pattern means the gateway's body limit is below a single
+      // event, which no retry policy can work around — only a human can.
+      if (this.#consecutiveDrops === DROPS_BEFORE_WARNING) {
+        this.#logger.error(
+          `[intempt] ${this.#consecutiveDrops} events rejected as too large with none ` +
+            `accepted in between. The gateway's request body limit is likely below a ` +
+            `single event; every event will be dropped until it is raised.`,
+        );
       }
       return 'requeue';
     }
