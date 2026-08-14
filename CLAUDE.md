@@ -8,10 +8,10 @@ than obeyed blindly.
 
 `intempt` — the server-side Node SDK. **Data in, decisions out, nothing else.**
 
-| Direction | Surface |
-| --- | --- |
-| in | `track` `trackBatch` `identify` `group` `alias` `consent.*` `ecommerce.*` |
-| out | `recommend` |
+| Direction | Surface                                                                   |
+| --------- | ------------------------------------------------------------------------- |
+| in        | `track` `trackBatch` `identify` `group` `alias` `consent.*` `ecommerce.*` |
+| out       | `recommend`                                                               |
 
 Configuration and analysis operations belong to `@intempt/cli` and
 `@intempt/mcp-server`, which already carry ~202 of them. If an operation is not
@@ -63,7 +63,7 @@ recommendations never worked. `type` is `user`, `account` or `profile`.
 **Do not be stricter than the API without evidence.** A `groups` XOR `names` rule
 was invented for `choose-api`; the API marks both optional and accepts them
 together. Inventing a constraint removes capability for no reason. Where the API
-*does* constrain, mirror it: experience names must match `^[a-zA-Z0-9_-]+$`, and
+_does_ constrain, mirror it: experience names must match `^[a-zA-Z0-9_-]+$`, and
 checking that locally turns an opaque 400 into a message naming the bad value.
 
 ## TypeScript
@@ -89,14 +89,14 @@ absent — and apply it everywhere, not just the first call site found. `group`,
 Six layers, in increasing fidelity. Add to the layer that can actually catch the
 class of bug you are fixing.
 
-| Layer | Catches | Network |
-| --- | --- | --- |
-| `tests/*.test.ts` (nock) | intent, validation, retry branches | none |
-| `tests/integration.test.ts` | header framing, keep-alive, timeouts, dead sockets | loopback |
-| `tests/adversarial.test.ts` | hostile input, races, credential leaks | loopback |
-| `tests/fix-audit.test.ts` | over-correction in previous fixes | loopback |
-| `npm run verify:consumer` | packaging: `exports`, `files`, shipped `.d.ts` | loopback |
-| `npm run test:e2e` | whether the API accepts what we send | real project |
+| Layer                       | Catches                                            | Network      |
+| --------------------------- | -------------------------------------------------- | ------------ |
+| `tests/*.test.ts` (nock)    | intent, validation, retry branches                 | none         |
+| `tests/integration.test.ts` | header framing, keep-alive, timeouts, dead sockets | loopback     |
+| `tests/adversarial.test.ts` | hostile input, races, credential leaks             | loopback     |
+| `tests/fix-audit.test.ts`   | over-correction in previous fixes                  | loopback     |
+| `npm run verify:consumer`   | packaging: `exports`, `files`, shipped `.d.ts`     | loopback     |
+| `npm run test:e2e`          | whether the API accepts what we send               | real project |
 
 **`tests/integration.test.ts` must not import `tests/helpers.ts`.** That helper
 imports `nock`, and nock patches `http.ClientRequest` at import time, so every
