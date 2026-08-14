@@ -92,6 +92,40 @@ describe('close() is bounded', () => {
     expect(logger.calls.error.some((a) => /gave up/.test(String(a[0])))).toBe(false);
   }, 10_000);
 
+  it('stops on the deadline even when every send succeeds, just slowly', async () => {
+    // The other bound is the pre-backoff check, which only fires on failure. This
+    // is the case it cannot see: sends that all succeed but are slow enough that
+    // the budget expires between them. Without the drain-loop check, close() would
+    // keep going until the queue emptied — 20 sends at 60ms is 1.2s against a
+    // 150ms budget — and the ceiling would mean nothing for a large backlog.
+    //
+    // Found by mutation testing: making #outOfCloseBudget() always return false
+    // left every other test green.
+    const sent: string[] = [];
+    const logger = testLogger();
+    const b = new Batcher({
+      options: { ...OPTIONS, size: 1 },
+      maxRequestEvents: 50,
+      logger,
+      send: async (events) => {
+        await new Promise((r) => setTimeout(r, 60));
+        sent.push(...events.map((e) => e.name));
+      },
+      closeBudgetMs: 150,
+    });
+    for (let i = 0; i < 20; i += 1) b.enqueue(event(`e${i}`));
+
+    await b.close();
+
+    // Some got through, but not all: the deadline stopped an otherwise healthy drain.
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.length).toBeLessThan(20);
+    expect(b.size).toBeGreaterThan(0);
+    expect(logger.calls.error.some((a) => /close\(\) gave up/.test(String(a[0])))).toBe(
+      true,
+    );
+  }, 15_000);
+
   it('leaves a plain flush() unbounded', async () => {
     // Only close() gives up. A caller who is not shutting down has not asked to.
     let attempts = 0;
