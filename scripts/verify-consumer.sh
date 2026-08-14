@@ -34,7 +34,7 @@ npm install --silent --no-audit --no-fund
 npm install --silent --no-audit --no-fund "$ROOT/$TARBALL"
 
 echo "==> resolved version"
-node -e 'console.log("    intempt@" + require("intempt/package.json").version)'
+node -e 'console.log("    intempt-nodejs-sdk@" + require("intempt-nodejs-sdk/package.json").version)'
 
 echo "==> typechecking the sample app against the shipped types"
 npm run typecheck --silent
