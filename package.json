@@ -49,7 +49,7 @@
     "test:mutation": "stryker run"
   },
   "dependencies": {
-    "https-proxy-agent": "7.0.6"
+    "https-proxy-agent": "9.1.0"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^9.6.1",
