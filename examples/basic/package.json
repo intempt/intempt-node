@@ -1,0 +1,19 @@
+{
+  "name": "intempt-example-basic",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Runnable sample app for the Intempt Node SDK",
+  "type": "commonjs",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "start": "tsx index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "intempt": "file:../../intempt-2.0.0.tgz"
+  }
+}

@@ -1,0 +1,72 @@
+# Publishes only on a version tag.
+#
+# The old workflow ran `npm publish` on every push to main, which fails when the
+# version is unchanged. That failed silently for 21 months: the repo carried
+# RecommendationClient and the product methods while npm still served 1.0.1.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # generate-changelog.sh needs tag history
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run check-format
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      - run: npm run test:coverage
+
+      - run: npm run build
+
+      # A tag that disagrees with package.json means someone tagged the wrong
+      # commit. Publishing it would put a mislabelled artifact on npm forever.
+      - name: Verify tag matches package.json
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p 'require("./package.json").version')"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $PKG"
+            exit 1
+          fi
+          echo "version $PKG"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          .github/scripts/generate-changelog.sh "$GITHUB_REF_NAME" \
+            "https://github.com/${GITHUB_REPOSITORY}" > release-notes.md
+          cat release-notes.md
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md

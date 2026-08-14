@@ -1,0 +1,98 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Node 18 reached end of life in April 2025; 24 is the current LTS.
+        node: ['20', '22', '24']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # No continue-on-error: a lockfile that cannot install is a failure,
+      # not a warning.
+      - run: npm ci
+
+      - run: npm run check-format
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      - run: npm run test:coverage
+
+      - run: npm run build
+
+      # Proves the published artifact works for a consumer: packs the tarball,
+      # installs it into examples/basic, typechecks the sample app against the
+      # shipped .d.ts under stricter settings than the library uses, then runs it
+      # end to end against a local mock API. The unit suite cannot catch a broken
+      # `exports` map or a missing `files` entry, because it imports from src/.
+      - name: Verify consumer install and sample app
+        run: npm run verify:consumer
+
+      # The 1.x tarball shipped tests/ (with a live API key) and src/.
+      # Fail the build if anything outside dist/ and the docs sneaks back in.
+      - name: Verify package contents
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e '
+            const files = require("./pack.json")[0].files.map(f => f.path);
+            const allowed = /^(dist\/|README\.md$|LICENSE$|NOTICE$|CHANGELOG\.md$|SECURITY\.md$|package\.json$)/;
+            const bad = files.filter(f => !allowed.test(f));
+            if (bad.length) {
+              console.error("Unexpected files in package tarball:\n  " + bad.join("\n  "));
+              process.exit(1);
+            }
+            if (!files.some(f => f === "dist/index.js")) {
+              console.error("dist/index.js missing from tarball");
+              process.exit(1);
+            }
+            console.log("tarball contents OK (" + files.length + " files)");
+          '
+
+  # Deliberately its own job on a single Node version. Coverage says which lines
+  # ran; mutation says whether the assertions would notice if those lines were
+  # wrong. Running it across the matrix would triple the time for no extra signal.
+  mutation:
+    name: Mutation score
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # stryker.config.json sets thresholds.break to 85, so this fails the job
+      # when the score drops below it. No credentials needed: every mutant runs
+      # against the offline suite.
+      - run: npm run test:mutation
+
+      - name: Upload the mutation report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          retention-days: 14
+          if-no-files-found: ignore

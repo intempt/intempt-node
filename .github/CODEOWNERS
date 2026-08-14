@@ -1,0 +1,8 @@
+# Default owner for everything in this repository.
+*                       @sidchaudhary
+
+# Release and supply-chain surface: changes here affect what gets published.
+/.github/workflows/     @sidchaudhary
+/.npmrc                 @sidchaudhary
+/package.json           @sidchaudhary
+/SECURITY.md            @sidchaudhary

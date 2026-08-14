@@ -1,0 +1,30 @@
+{
+  // `npm run typecheck` uses tsconfig.json, whose `include` is src/** only —
+  // correct for the build, since tests must never reach dist. The effect was that
+  // nothing typechecked the tests: vitest transpiles without checking, and
+  // Stryker's typescript checker points at the build config too. A type error in
+  // any test file passed every CI leg unnoticed.
+  //
+  // This config adds them without emitting, so `typecheck` covers both. It also
+  // picks up tests/surface.test-d.ts, whose `@ts-expect-error` lines are the only
+  // guard that the public surface has not widened — vitest never runs that file.
+  //
+  // Two things are deliberately NOT listed, because listing a path that
+  // contributes no files claims a coverage that does not exist:
+  //
+  //   scripts/  — holds only e2e.mjs and verify-consumer.sh, and `allowJs` is off,
+  //               so it contributed zero files. e2e.mjs is a hand-run script
+  //               against production; checking it means turning on allowJs
+  //               project-wide.
+  //   *.json    — stryker.config.json was listed here and also contributed
+  //               nothing: `resolveJsonModule` is off, and a config file is not
+  //               reachable from any import anyway.
+  //
+  // Verify with: npx tsc -p tsconfig.test.json --listFiles
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*", "tests/**/*", "vitest.config.ts"]
+}

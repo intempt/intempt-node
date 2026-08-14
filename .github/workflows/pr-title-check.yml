@@ -1,0 +1,31 @@
+# Keeps PR titles in Conventional Commits form so the release notes can be
+# generated from the log rather than typed by hand.
+name: PR Title Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check-title:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          PATTERN='^(feat|fix|chore|docs|test|refactor|perf|ci)(\([a-z0-9-]+\))?!?: .+'
+          RELEASE_PATTERN='^release: .+'
+          if [[ "$PR_TITLE" =~ $PATTERN ]] || [[ "$PR_TITLE" =~ $RELEASE_PATTERN ]]; then
+            echo "PR title is valid: $PR_TITLE"
+          else
+            echo "::error::Invalid PR title: $PR_TITLE"
+            echo "Expected: <type>[(scope)][!]: <description>"
+            echo "Types: feat fix chore docs test refactor perf ci"
+            echo "Or a release PR: 'release: <description>'"
+            exit 1
+          fi
