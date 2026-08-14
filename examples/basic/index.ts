@@ -18,7 +18,7 @@
  * Against a real project, supply the object ids: a fabricated productId is
  * accepted with a 201 and proves nothing about your catalog.
  */
-import { Intempt, IntemptApiError, type IntemptClient } from 'intempt';
+import { Intempt, IntemptApiError, type IntemptClient } from 'intempt-nodejs-sdk';
 import { startMockApi } from './mock-api';
 
 const useMock = !process.env.INTEMPT_API_KEY;

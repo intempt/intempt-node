@@ -19,7 +19,7 @@ Console and configuration operations are deliberately not here — see
 [Not in this SDK](#not-in-this-sdk).
 
 ```bash
-npm install intempt
+npm install intempt-nodejs-sdk
 ```
 
 Requires Node 20 or newer. Written in TypeScript; types ship with the package.
@@ -43,7 +43,7 @@ customer request path, it belongs in the CLI or MCP server, not here.
 ## Quick start
 
 ```ts
-import { Intempt } from 'intempt';
+import { Intempt } from 'intempt-nodejs-sdk';
 
 const intempt = Intempt.init({
   org: 'my-org',
@@ -378,7 +378,7 @@ request fails; use `https.Agent` unless you set `protocol: 'http'`.
 Every method returns a promise that rejects on failure. Nothing is swallowed.
 
 ```ts
-import { IntemptApiError } from 'intempt';
+import { IntemptApiError } from 'intempt-nodejs-sdk';
 
 try {
   await intempt.track('purchase', { userId: 'u1' });

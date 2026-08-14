@@ -14,6 +14,6 @@
     "typescript": "^5.5.4"
   },
   "dependencies": {
-    "intempt": "file:../../intempt-2.0.0.tgz"
+    "intempt-nodejs-sdk": "file:../../intempt-nodejs-sdk-2.0.0.tgz"
   }
 }
