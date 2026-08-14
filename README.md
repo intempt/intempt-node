@@ -338,6 +338,14 @@ dropped, which is already logged on every occurrence.
 The buffer is in memory. A hard crash loses it. Crash durability needs disk with
 fsync and boot-time recovery, which is a different design.
 
+**Delivery is at-least-once, not exactly-once.** A retry after a lost response
+re-sends events the server may already have stored, and ingestion has no
+idempotency key — `eventId` travels in the payload but is not a column in the
+events table, and the table is a plain `MergeTree`, so nothing collapses duplicates.
+A 5xx or timeout that the server actually processed therefore produces duplicate
+rows. Set `batch: false` if you would rather a failure surface to your code than be
+retried, and de-duplicate downstream if exact counts matter.
+
 ## TLS, proxies and private CAs
 
 Keep-alive agents are created for you, and `HTTPS_PROXY` / `HTTP_PROXY` are
@@ -508,9 +516,22 @@ Lambda and anything that can exit at any moment. See [Batching](#batching).
 
 **Is `timestamp` a backfill mechanism?**
 
-Treat it as unconfirmed. The ingestion API forwards a client timestamp, but
-whether the event store honours it or stamps arrival time is not yet verified.
-Do not build a historical import on it without checking.
+Yes, between 2010 and 2040. The event store keeps your value in its `timestamp`
+column and records arrival separately in `insertTime`, so the two never overwrite
+each other.
+
+Both ends of that window behave differently, and the upper one is worth knowing:
+
+| Your timestamp    | What happens                                         |
+| ----------------- | ---------------------------------------------------- |
+| before 2010-01-01 | request rejected with an error naming the threshold  |
+| 2010 to 2040      | stored as given                                      |
+| after 2040-01-18  | **silently replaced with the server's current time** |
+
+So a timestamp in seconds where milliseconds were meant lands in the far future,
+sails past the upper bound, and is quietly rewritten to now — no error, and the
+event looks like it just happened. The reverse mistake (milliseconds where seconds
+were meant) lands before 2010 and fails loudly instead.
 
 ## Support
 
