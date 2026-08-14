@@ -287,6 +287,15 @@ intempt.buffered; // events still queued
 
 `flush()` and `close()` are safe to call when batching is off; they do nothing.
 
+`close()` drains for at most 30 seconds. Past that it stops retrying and logs how
+many events it gave up on. Without a ceiling a shutdown hook can block for minutes
+against a failing endpoint — backoff is `flushMs * 2 ** failures`, so `flushMs:
+60000` works out at roughly 24 minutes — and the retry timer is deliberately not
+`unref`'d, so it holds the event loop open the whole time. Those events are lost
+either way once the process is going down; the ceiling makes the loss counted and
+loud instead of silent and slow. `flush()` is **not** bounded: a caller who is not
+shutting down has not asked to give up.
+
 Retry policy:
 
 | Response                | Behaviour                                               |

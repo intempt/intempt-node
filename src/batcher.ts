@@ -47,9 +47,33 @@ const DROPS_BEFORE_WARNING = 3;
  * oversized attempt in eleven while still letting throughput recover.
  */
 const SUCCESSES_BEFORE_WIDENING = 10;
+/**
+ * How long `close()` will keep draining before it gives up and says what it lost.
+ *
+ * `close()` used to await a full drain with no bound. Backoff is
+ * `flushMs * 2 ** failures`, so with `flushMs: 60000` a shutdown hook could block
+ * for roughly 24 minutes against a failing endpoint, and the retry timer is
+ * deliberately not unref'd, so it holds the event loop open the whole time.
+ *
+ * A ceiling makes shutdown predictable. Events still buffered when it expires are
+ * lost either way — the process is going down — so the thing that matters is that
+ * the loss is counted and logged rather than silent.
+ *
+ * Only `close()` is bounded. A plain `flush()` stays unbounded: the caller is not
+ * shutting down and has not asked to give up.
+ */
+const CLOSE_DRAIN_BUDGET_MS = 30_000;
 
 export interface BatcherOptions {
   options: ResolvedBatchOptions;
+  /**
+   * Overrides CLOSE_DRAIN_BUDGET_MS. Internal, and not reachable from
+   * `IntemptConfig` on purpose — it exists so tests can drive the deadline
+   * without waiting 30 seconds of real time.
+   *
+   * @internal
+   */
+  closeBudgetMs?: number;
   /** Hard ceiling on events per request; caps the flush width. */
   maxRequestEvents: number;
   logger: Logger;
@@ -72,10 +96,20 @@ export class Batcher {
   #consecutiveSuccesses = 0;
   #consecutiveDrops = 0;
   #stopped = false;
+  readonly #closeBudgetMs: number;
+  /** Epoch ms after which a close-initiated drain gives up. Unset outside close. */
+  #closeDeadline: number | undefined;
   #exitHook: (() => void) | undefined;
 
-  constructor({ options, maxRequestEvents, logger, send }: BatcherOptions) {
+  constructor({
+    options,
+    maxRequestEvents,
+    logger,
+    send,
+    closeBudgetMs,
+  }: BatcherOptions) {
     this.#options = options;
+    this.#closeBudgetMs = closeBudgetMs ?? CLOSE_DRAIN_BUDGET_MS;
     this.#maxRequestEvents = maxRequestEvents;
     this.#logger = logger;
     this.#send = send;
@@ -141,6 +175,8 @@ export class Batcher {
     this.#clearTimer();
 
     while (this.#queue.length > 0 && !this.#stopped) {
+      if (this.#outOfCloseBudget()) return;
+
       // Take a slice rather than the whole array: events appended during the
       // await stay queued instead of being cleared out from under the send.
       const batch = this.#queue.slice(0, this.#batchSize);
@@ -294,9 +330,22 @@ export class Batcher {
         advised ?? this.#options.flushMs * 2 ** this.#consecutiveFailures,
       ),
     );
+    // Starting a wait that outlives the close budget just burns the remaining
+    // time and gives up anyway, so stop now and let close() report the loss.
+    if (
+      this.#closeDeadline !== undefined &&
+      Date.now() + backoff >= this.#closeDeadline
+    ) {
+      return 'stop';
+    }
     this.#logger.warn(`[intempt] send failed; retrying in ${backoff}ms`, error);
     await delay(backoff);
     return 'requeue';
+  }
+
+  /** True once a close-initiated drain has run past its budget. */
+  #outOfCloseBudget(): boolean {
+    return this.#closeDeadline !== undefined && Date.now() >= this.#closeDeadline;
   }
 
   #scheduleFlush(ms: number): void {
@@ -322,7 +371,21 @@ export class Batcher {
   }
 
   async close(): Promise<void> {
-    await this.flush();
+    this.#closeDeadline = Date.now() + this.#closeBudgetMs;
+    try {
+      await this.flush();
+    } finally {
+      this.#closeDeadline = undefined;
+    }
+
+    // Say what was lost. The process is going down either way; the difference
+    // between this and the old unbounded wait is that the loss is counted.
+    if (this.#queue.length > 0) {
+      this.#logger.error(
+        `[intempt] close() gave up after ${this.#closeBudgetMs}ms with ` +
+          `${this.#queue.length} event(s) unsent.`,
+      );
+    }
     this.#stopped = true;
     this.#clearTimer();
     if (this.#exitHook) {
@@ -333,7 +396,9 @@ export class Batcher {
 }
 
 // Not unref'd: a retry is work in progress, and abandoning it at exit would
-// silently lose the batch. Backoff is bounded by MAX_CONSECUTIVE_FAILURES.
+// silently lose the batch. Backoff is bounded by MAX_CONSECUTIVE_FAILURES, and a
+// close-initiated drain is bounded again by CLOSE_DRAIN_BUDGET_MS, so this cannot
+// hold the event loop open indefinitely.
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);

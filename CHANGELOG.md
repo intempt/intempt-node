@@ -112,6 +112,11 @@ data in, decisions out: no admin or console operations.
   life of the client. Mutation testing found it: the comparison was unkillable
   because no input could reach it. The width now doubles back toward full after ten
   consecutive successful sends that filled it.
+- **`close()` is bounded at 30 seconds** and reports how many events it abandoned.
+  It used to await a full drain with no ceiling, so with `flushMs: 60000` a shutdown
+  hook could block for roughly 24 minutes against a failing endpoint while an
+  un-`unref`'d retry timer held the event loop open. `flush()` is unchanged and
+  stays unbounded.
 - **A gateway that rejects every single event now says so.** After three
   consecutive single-event 413 drops with nothing accepted in between, the SDK logs
   once that the gateway's body limit is the likely cause. The tally is diagnostic
