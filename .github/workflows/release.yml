@@ -30,6 +30,14 @@ jobs:
 
       - run: npm ci
 
+      # OIDC trusted publishing needs a recent npm CLI (support landed in
+      # npm 11.5+); the version bundled with setup-node's node-version: '22'
+      # predates that. Same fix as packages/mcp in the cli repo, same reason:
+      # npm's bypass-2FA-token deprecation (gh.io/npm-gat-bypass2fa-deprecation)
+      # closed the token-based path for CI publishing entirely.
+      - run: npm install -g npm@latest
+      - run: npm --version
+
       - run: npm run check-format
 
       - run: npm run lint
@@ -59,9 +67,11 @@ jobs:
             "https://github.com/${GITHUB_REPOSITORY}" > release-notes.md
           cat release-notes.md
 
+      # No NODE_AUTH_TOKEN / NPM_TOKEN -- OIDC trusted publishing, registered
+      # on npm as: GitHub Actions, intempt/intempt-node, workflow release.yml,
+      # action "npm publish". --provenance now rides the same OIDC token this
+      # job already requests via `id-token: write` above.
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         env:
