@@ -1,9 +1,9 @@
 # Intempt Node.js SDK
 
 [![Tests](https://github.com/intempt/intempt-node/actions/workflows/tests.yml/badge.svg)](https://github.com/intempt/intempt-node/actions/workflows/tests.yml)
-[![npm](https://img.shields.io/npm/v/intempt.svg)](https://www.npmjs.com/package/intempt)
-[![node](https://img.shields.io/node/v/intempt.svg)](https://nodejs.org)
-[![license](https://img.shields.io/npm/l/intempt.svg)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/intempt-nodejs-sdk.svg)](https://www.npmjs.com/package/intempt-nodejs-sdk)
+[![node](https://img.shields.io/node/v/intempt-nodejs-sdk.svg)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/intempt-nodejs-sdk.svg)](./LICENSE)
 
 Server-side client for [Intempt](https://intempt.com). **Data in, decisions out.**
 
