@@ -233,17 +233,23 @@ export class SDK {
   }
 
   /**
-   * Experiments and personalizations resolve a web experience against a page and
-   * are served by the browser SDK. A server has no page to modify, so these four
-   * 1.x helpers cannot be honoured. They throw rather than returning an empty
-   * array: [] would read as "no variant assigned" and quietly disable a caller's
-   * experiment instead of telling them it moved.
+   * These four 1.x helpers put the MODE in the method name, which forced a caller to know whether a
+   * key was an experiment before reading it and grew combinatorially with every new mode. They are
+   * superseded by `variation()`, which asks for a key and lets the platform resolve the rest.
+   *
+   * They still throw rather than returning an empty array: [] would read as "no variant assigned"
+   * and quietly disable a caller's experiment instead of telling them where it went.
+   *
+   * The previous message said assignment was unavailable in a server SDK at all. That was true of
+   * the wire as it stood - an unanswered request and a deliberate off state were the same absent
+   * entry, so a caller could never branch safely. The serving contract now carries a reason, so the
+   * capability is available and the message points at it.
    */
   static #experiencesRemoved(method: string): never {
     throw new Error(
-      `${method} is not available in a server SDK. Experiments and ` +
-        'personalizations are resolved per page by the browser SDK. ' +
-        'See https://github.com/intempt/intempt-js',
+      `${method} was removed in 2.0. Use variation(key, context, defaultValue) - ` +
+        'it asks for a flag key instead of a mode, and returns your default when the ' +
+        'service cannot answer. See variationDetail() for the reason behind a value.',
     );
   }
 

@@ -25,6 +25,16 @@ const PUBLIC_METHODS = [
   'close',
   'setConfig',
   'recommend',
+  // The cross-SDK flag surface. Listed one by one on purpose: this gate exists so a new public
+  // method cannot appear without someone deciding it should be public.
+  'variation',
+  'variationDetail',
+  'allFlags',
+  'boolVariation',
+  'stringVariation',
+  'numberVariation',
+  'jsonVariation',
+  'waitForInitialization',
 ];
 const PUBLIC_GETTERS = ['config', 'buffered'];
 const PUBLIC_NAMESPACES = ['consent', 'ecommerce'];

@@ -155,9 +155,14 @@ describe('legacy SDK: forwarding', () => {
     );
   });
 
-  it('refuses the four choose helpers, which are browser-only', () => {
-    // Returning [] would read as "no variant assigned" and silently disable a
-    // caller's experiment. Throwing tells them where it went.
+  it('refuses the four choose helpers and points at variation()', () => {
+    // Returning [] would read as "no variant assigned" and silently disable a caller's experiment.
+    // Throwing tells them where it went.
+    //
+    // The message used to say assignment was unavailable in a server SDK at all. That was true of
+    // the wire as it stood - an unanswered request and a deliberate off state were the same absent
+    // entry. The serving contract now carries a reason, so the capability exists and the message
+    // names its replacement instead of a dead end.
     const sdk = legacy();
     for (const method of [
       'chooseExperimentsByGroups',
@@ -165,8 +170,8 @@ describe('legacy SDK: forwarding', () => {
       'choosePersonalizationsByGroups',
       'choosePersonalizationsByNames',
     ] as const) {
-      expect(() => sdk[method]()).toThrow(/not available in a server SDK/);
-      expect(() => sdk[method]()).toThrow(/intempt-js/);
+      expect(() => sdk[method]()).toThrow(/was removed in 2\.0/);
+      expect(() => sdk[method]()).toThrow(/variation\(key, context, defaultValue\)/);
     }
     expect(nock.pendingMocks()).toEqual([]);
   });

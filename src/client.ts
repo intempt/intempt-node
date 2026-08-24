@@ -6,6 +6,8 @@ import { Ingest } from './ingest';
 import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
 import { Recommend } from './recommend';
+import { Flags } from './flags';
+import type { FlagContext, FlagDetail } from './flags';
 import type {
   AliasOptions,
   GroupOptions,
@@ -28,6 +30,7 @@ export class IntemptClient {
   readonly consent: Consent;
   readonly ecommerce: Ecommerce;
   readonly #recommend: Recommend;
+  readonly #flags: Flags;
 
   constructor(config: IntemptConfig) {
     this.#resolved = resolveConfig(config);
@@ -65,6 +68,7 @@ export class IntemptClient {
     });
     this.ecommerce = new Ecommerce(this.#ingest);
     this.#recommend = new Recommend({ transport: this.#transport, config: configRef });
+    this.#flags = new Flags({ transport: this.#transport, config: configRef });
   }
 
   // ---- ingest, lifted to the top level so the common calls stay short ----
@@ -110,6 +114,88 @@ export class IntemptClient {
     // a caller's `.catch()` and land as an uncaught exception instead.
     this.#assertOpen();
     return this.#recommend.fetch(options);
+  }
+
+  // ---- flags ----
+
+  /**
+   * The value assigned to this person for `key`, or `defaultValue` if the service did not answer.
+   *
+   * Ask for a key, never a mode. Whether the key names an experiment, a personalization or a flag
+   * is the platform's business - its serving query filters on channel and status and never on mode.
+   */
+  async variation<T>(key: string, context: FlagContext, defaultValue: T): Promise<T> {
+    this.#assertOpen();
+    return this.#flags.value<T>(key, context, defaultValue);
+  }
+
+  /**
+   * As `variation`, plus WHY. The reason is what lets a caller tell a deliberate off state from a
+   * request the service never answered - the two used to be the same absent entry.
+   */
+  async variationDetail<T>(
+    key: string,
+    context: FlagContext,
+    defaultValue: T,
+  ): Promise<FlagDetail<T>> {
+    this.#assertOpen();
+    return this.#flags.detail<T>(key, context, defaultValue);
+  }
+
+  /** Every key assigned to this person, in one call. */
+  async allFlags(context: FlagContext): Promise<Record<string, unknown>> {
+    this.#assertOpen();
+    return this.#flags.all(context);
+  }
+
+  async boolVariation(
+    key: string,
+    context: FlagContext,
+    defaultValue: boolean,
+  ): Promise<boolean> {
+    const value = await this.variation<unknown>(key, context, defaultValue);
+    // A served value of the wrong type is a misconfiguration, not something to coerce: `!!"false"`
+    // is true, and a silent coercion would be indistinguishable from a correct answer.
+    return typeof value === 'boolean' ? value : defaultValue;
+  }
+
+  async stringVariation(
+    key: string,
+    context: FlagContext,
+    defaultValue: string,
+  ): Promise<string> {
+    const value = await this.variation<unknown>(key, context, defaultValue);
+    return typeof value === 'string' ? value : defaultValue;
+  }
+
+  async numberVariation(
+    key: string,
+    context: FlagContext,
+    defaultValue: number,
+  ): Promise<number> {
+    const value = await this.variation<unknown>(key, context, defaultValue);
+    return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue;
+  }
+
+  async jsonVariation<T extends object>(
+    key: string,
+    context: FlagContext,
+    defaultValue: T,
+  ): Promise<T> {
+    const value = await this.variation<unknown>(key, context, defaultValue);
+    return value !== null && typeof value === 'object' ? (value as T) : defaultValue;
+  }
+
+  /**
+   * Resolves immediately.
+   *
+   * Present so the cross-SDK surface is the same everywhere, and so a caller porting from an SDK
+   * that polls a local flag store does not have to remove the call. Evaluation here is remote: each
+   * `variation()` is a request, so there is no local state to wait for. It is deliberately not a
+   * no-op that swallows a timeout argument silently - the doc says why there is nothing to wait for.
+   */
+  async waitForInitialization(_timeoutMs?: number): Promise<void> {
+    this.#assertOpen();
   }
 
   // ---- privacy ----
