@@ -24,11 +24,15 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = process.env.GUARD_ROOT ?? join(here, '..');
-const roots = (process.env.GUARD_SRC ?? 'src').split(',').map((d) => d.trim()).filter(Boolean);
+const roots = (process.env.GUARD_SRC ?? 'src')
+  .split(',')
+  .map((d) => d.trim())
+  .filter(Boolean);
 const allowPath = join(here, 'no-local-bucketing-allow.json');
 
 const SOURCE = /\.(ts|tsx|js|mjs|cjs|py|php|kt|java|swift)$/;
-const SKIP_DIR = /^(node_modules|\.git|dist|build|vendor|target|__pycache__|\.venv|Pods|DerivedData)$/;
+const SKIP_DIR =
+  /^(node_modules|\.git|dist|build|vendor|target|__pycache__|\.venv|Pods|DerivedData)$/;
 
 /** Hashing primitives, and the bucket arithmetic itself. */
 const PATTERNS = [
@@ -56,16 +60,21 @@ const hits = [];
 for (const r of roots) {
   for (const file of walk(join(root, r))) {
     const rel = relative(root, file);
-    readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
-      if (/^\s*(\/\/|#|\*|--)/.test(line)) return; // a comment explaining the rule is not a breach
-      for (const [re, what] of PATTERNS) {
-        if (!re.test(line)) continue;
-        const key = `${rel}:${i + 1}`;
-        if (allow[key] || allow[rel]) { seen.add(allow[key] ? key : rel); return; }
-        hits.push(`${key}  ${what}\n      ${line.trim().slice(0, 100)}`);
-        return;
-      }
-    });
+    readFileSync(file, 'utf8')
+      .split('\n')
+      .forEach((line, i) => {
+        if (/^\s*(\/\/|#|\*|--)/.test(line)) return; // a comment explaining the rule is not a breach
+        for (const [re, what] of PATTERNS) {
+          if (!re.test(line)) continue;
+          const key = `${rel}:${i + 1}`;
+          if (allow[key] || allow[rel]) {
+            seen.add(allow[key] ? key : rel);
+            return;
+          }
+          hits.push(`${key}  ${what}\n      ${line.trim().slice(0, 100)}`);
+          return;
+        }
+      });
   }
 }
 
@@ -73,7 +82,7 @@ const problems = [];
 if (hits.length) {
   problems.push(
     `bucket derivation must be server-only (R36) — ${hits.length} occurrence(s):\n    ` +
-      hits.join('\n    ')
+      hits.join('\n    '),
   );
 }
 
@@ -85,7 +94,9 @@ if (stale.length) {
 }
 const unexplained = Object.entries(allow).filter(([, v]) => !String(v ?? '').trim());
 if (unexplained.length) {
-  problems.push(`allowlist entries with no reason: ${unexplained.map(([k]) => k).join(', ')}`);
+  problems.push(
+    `allowlist entries with no reason: ${unexplained.map(([k]) => k).join(', ')}`,
+  );
 }
 
 if (problems.length) {
@@ -94,5 +105,5 @@ if (problems.length) {
   process.exit(1);
 }
 console.log(
-  `no-local-bucketing OK — scanned ${roots.join(', ')}, ${Object.keys(allow).length} documented allowance(s)`
+  `no-local-bucketing OK — scanned ${roots.join(', ')}, ${Object.keys(allow).length} documented allowance(s)`,
 );
