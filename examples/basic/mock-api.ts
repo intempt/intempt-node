@@ -31,9 +31,18 @@ export async function startMockApi(): Promise<MockApi> {
 
       let body: string = '{}';
       if (url.includes('/optimization/choose-api')) {
+        // The real wire shape: name / group / body / reason. This fixture previously said
+        // `variant` and `payload`, which no serving response has ever sent — the sample would have
+        // looked like it worked while variation() returned the caller's default every time.
         body = JSON.stringify({
           choices: [
-            { name: 'pricing-test', variant: 'b', payload: { cta: 'Start free' } },
+            {
+              name: 'pricing_cta',
+              group: 'b',
+              body: 'Start free',
+              reason: 'targeted',
+            },
+            { name: 'new_checkout', group: 'control', body: null, reason: 'holdout' },
           ],
         });
       } else if (url.includes('/feeds/')) {
