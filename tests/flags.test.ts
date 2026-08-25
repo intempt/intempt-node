@@ -194,7 +194,9 @@ describe('the choose request body', () => {
   });
 
   it('asks for exactly the keys requested', async () => {
-    const body = await bodySentBy((c) => c.variationDetail('checkout_v2', { userId: 'u' }, 'd'));
+    const body = await bodySentBy((c) =>
+      c.variationDetail('checkout_v2', { userId: 'u' }, 'd'),
+    );
 
     // Kills the ArrayDeclaration mutant: [key] emptied to [] asks the service for every flag,
     // which still answers, and the caller still gets its default.
