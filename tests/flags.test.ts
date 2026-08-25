@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { CHOOSE_PATH, ORIGIN, client, nock, setupNock } from './helpers';
+import { CHOOSE_PATH, ORIGIN, client, nock, setupNock, testLogger } from './helpers';
 
 setupNock();
 
@@ -128,6 +128,117 @@ describe('waitForInitialization', () => {
   it('resolves immediately because evaluation is remote', async () => {
     const c = client();
     await expect(c.waitForInitialization(5000)).resolves.toBeUndefined();
+    await c.close();
+  });
+});
+
+/**
+ * The request body, pinned field by field.
+ *
+ * Added after a mutation run scored flags.ts at 58.33 with ten survivors. Every test above asserts
+ * what comes BACK; none asserted what goes OUT, so a mutant could empty the identification object,
+ * drop the names array, or change the device literal and every one of them still passed. What the
+ * SDK sends is half of a wire contract, and it was the unasserted half.
+ */
+describe('the choose request body', () => {
+  afterEach(() => nock.cleanAll());
+
+  /** Captures the body nock received, so each assertion below names one field. */
+  async function bodySentBy(
+    call: (c: ReturnType<typeof client>) => Promise<unknown>,
+  ): Promise<Record<string, unknown>> {
+    let sent: Record<string, unknown> = {};
+    nock(ORIGIN)
+      .post(CHOOSE_PATH, (b) => {
+        sent = b as Record<string, unknown>;
+        return true;
+      })
+      .reply(200, { choices: [] });
+
+    const c = client();
+    await call(c);
+    await c.close();
+    return sent;
+  }
+
+  it('sends both identifiers and the configured source', async () => {
+    const body = await bodySentBy((c) =>
+      c.variationDetail('k', { userId: 'u-1', profileId: 'p-1' }, 'd'),
+    );
+
+    // Kills the ObjectLiteral mutants on the identification block: an emptied object still
+    // produced a 200 and the same default, so nothing noticed.
+    expect(body.identification).toEqual({
+      userId: 'u-1',
+      profileId: 'p-1',
+      sourceId: expect.any(String),
+    });
+  });
+
+  it('omits an identifier the caller did not supply rather than sending null', async () => {
+    const body = await bodySentBy((c) => c.variationDetail('k', { userId: 'u-1' }, 'd'));
+
+    // Kills the OptionalChaining mutants: context?.profileId returning undefined must drop the
+    // key, not send it as null, which the service reads as an explicit anonymous identity.
+    expect(body.identification).toEqual({ userId: 'u-1', sourceId: expect.any(String) });
+    expect(Object.keys(body.identification as object)).not.toContain('profileId');
+  });
+
+  it('survives a call with no context at all', async () => {
+    const body = await bodySentBy((c) =>
+      c.variationDetail('k', undefined as unknown as { userId: string }, 'd'),
+    );
+
+    // The other half of the optional chaining: context itself absent, not just a field.
+    expect(body.identification).toEqual({ sourceId: expect.any(String) });
+  });
+
+  it('asks for exactly the keys requested', async () => {
+    const body = await bodySentBy((c) => c.variationDetail('checkout_v2', { userId: 'u' }, 'd'));
+
+    // Kills the ArrayDeclaration mutant: [key] emptied to [] asks the service for every flag,
+    // which still answers, and the caller still gets its default.
+    expect(body.names).toEqual(['checkout_v2']);
+  });
+
+  it('requests every flag by omitting names, not by sending an empty list', async () => {
+    const body = await bodySentBy((c) => c.allFlags({ userId: 'u' }));
+
+    expect(body.names).toBeUndefined();
+  });
+
+  it("sends device 'all'", async () => {
+    const body = await bodySentBy((c) => c.variationDetail('k', { userId: 'u' }, 'd'));
+
+    // Kills the StringLiteral mutant on line 142. A mutated device value changes which
+    // experiences the service considers eligible — silently, and only in production.
+    expect(body.device).toBe('all');
+  });
+});
+
+describe('when the service cannot be reached', () => {
+  afterEach(() => nock.cleanAll());
+
+  it('warns through the configured logger and still returns the default', async () => {
+    nock(ORIGIN).post(CHOOSE_PATH).reply(503, {});
+
+    const logger = testLogger();
+    const c = client({ logger });
+    await expect(c.variation('k', { userId: 'u' }, 'fallback')).resolves.toBe('fallback');
+
+    // Kills the StringLiteral mutant on the warning: the catch returning [] was asserted, the
+    // fact that anything is logged at all was not, so a silenced SDK looked identical.
+    expect(logger.calls.warn.length).toBeGreaterThan(0);
+    expect(String(logger.calls.warn[0]?.[0])).toContain('flag evaluation failed');
+    await c.close();
+  });
+
+  it('treats a response with no choices array as no answer', async () => {
+    nock(ORIGIN).post(CHOOSE_PATH).reply(200, {});
+
+    // Kills the OptionalChaining mutant on line 149: response.body?.choices ?? [].
+    const c = client();
+    await expect(c.variation('k', { userId: 'u' }, 7)).resolves.toBe(7);
     await c.close();
   });
 });
