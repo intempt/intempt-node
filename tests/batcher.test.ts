@@ -271,4 +271,24 @@ describe('batcher: exit hook', () => {
     client();
     expect(process.listenerCount('beforeExit')).toBe(before);
   });
+
+  // Every other test in this file passes flushOnExit: false and none asserted what that DOES, so
+  // mutating `if (options.flushOnExit)` to `if (true)` survived: the option could be ignored
+  // entirely and the suite stayed green. The failure that hides behind it is a process that will
+  // not exit, because a hook nobody asked for keeps flushing on beforeExit.
+  it('registers the exit hook only when flushOnExit is on', () => {
+    const before = process.listenerCount('beforeExit');
+
+    client({
+      logger: testLogger(),
+      batch: { size: 4, flushMs: 1, maxQueue: 100, flushOnExit: false },
+    });
+    expect(process.listenerCount('beforeExit')).toBe(before);
+
+    client({
+      logger: testLogger(),
+      batch: { size: 4, flushMs: 1, maxQueue: 100, flushOnExit: true },
+    });
+    expect(process.listenerCount('beforeExit')).toBe(before + 1);
+  });
 });
