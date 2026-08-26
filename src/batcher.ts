@@ -186,7 +186,13 @@ export class Batcher {
       } catch (error) {
         const handled = await this.#handleFailure(error, batch);
         if (handled === 'requeue') continue;
-        if (handled === 'stop') return;
+        // #handleFailure returns 'requeue' | 'stop' and nothing else, so past the line above
+        // 'stop' is the only value left. Written as a second comparison it was an EQUIVALENT
+        // MUTANT - Stryker rewrites it to `if (true) return` and no test can tell the difference,
+        // because no input reaches it with a third value. That cost a real point of mutation score
+        // for a branch that cannot be wrong. If a third outcome is ever added, the union type
+        // changes and this comment is the thing to revisit.
+        return;
       }
 
       this.#queue.splice(0, batch.length);
