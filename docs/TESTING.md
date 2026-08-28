@@ -2,9 +2,9 @@
 
 ## Gates, as CI actually runs them
 
-| Gate | Command |
-|---|---|
-| Tests | `npm run test:coverage` |
+| Gate     | Command                                                      |
+| -------- | ------------------------------------------------------------ |
+| Tests    | `npm run test:coverage`                                      |
 | Mutation | `npm run test:mutation` — **Stryker, thresholds.break = 85** |
 
 **The mutation gate is the real bar, not coverage.** Coverage says a line executed; mutation says an
