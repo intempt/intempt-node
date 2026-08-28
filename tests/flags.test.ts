@@ -21,25 +21,24 @@ describe('variation', () => {
         choices: [{ name: 'checkout_v2', group: 'B', body: true, reason: 'targeted' }],
       });
 
+    // `variation`, not `variationDetail` -- the detail method is internal until the platform sends
+    // a reason. Note this mock supplies `group` and `reason`, and the serving response carries
+    // NEITHER today, which is exactly why asserting on them here proved nothing.
     const c = client();
-    const detail = await c.variationDetail('checkout_v2', ctx, false);
-
-    expect(detail).toEqual({ value: true, variant: 'B', reason: 'targeted' });
+    await expect(c.variation('checkout_v2', ctx, false)).resolves.toBe(true);
     await c.close();
   });
 
-  it('reports a holdout as a holdout rather than as an absent answer', async () => {
-    // The whole reason a reason exists: before it, a held-back person and a failed request were
-    // both an absent entry, so a caller could not tell them apart.
+  it('returns the default when the served body is null', async () => {
+    // NOT the holdout case, which cannot be asserted: a held-back person's experience is absent
+    // from the response entirely rather than present with a cause. Telling a holdout from an
+    // outage needs a reason the platform does not send, so neither is claimed here.
     nock(ORIGIN)
       .post(CHOOSE_PATH)
-      .reply(200, { choices: [{ name: 'checkout_v2', body: null, reason: 'holdout' }] });
+      .reply(200, { choices: [{ name: 'checkout_v2', body: null }] });
 
     const c = client();
-    const detail = await c.variationDetail('checkout_v2', ctx, 'fallback');
-
-    expect(detail.reason).toBe('holdout');
-    expect(detail.value).toBe('fallback');
+    await expect(c.variation('checkout_v2', ctx, 'fallback')).resolves.toBe('fallback');
     await c.close();
   });
 
@@ -55,10 +54,7 @@ describe('variation', () => {
     nock(ORIGIN).post(CHOOSE_PATH).reply(200, { choices: [] });
 
     const c = client();
-    const detail = await c.variationDetail('never_created', ctx, 'safe');
-
-    expect(detail.value).toBe('safe');
-    expect(detail.reason).toBe('off');
+    await expect(c.variation('never_created', ctx, 'safe')).resolves.toBe('safe');
     await c.close();
   });
 
@@ -163,7 +159,7 @@ describe('the choose request body', () => {
 
   it('sends both identifiers and the configured source', async () => {
     const body = await bodySentBy((c) =>
-      c.variationDetail('k', { userId: 'u-1', profileId: 'p-1' }, 'd'),
+      c.variation('k', { userId: 'u-1', profileId: 'p-1' }, 'd'),
     );
 
     // Kills the ObjectLiteral mutants on the identification block: an emptied object still
@@ -176,7 +172,7 @@ describe('the choose request body', () => {
   });
 
   it('omits an identifier the caller did not supply rather than sending null', async () => {
-    const body = await bodySentBy((c) => c.variationDetail('k', { userId: 'u-1' }, 'd'));
+    const body = await bodySentBy((c) => c.variation('k', { userId: 'u-1' }, 'd'));
 
     // Kills the OptionalChaining mutants: context?.profileId returning undefined must drop the
     // key, not send it as null, which the service reads as an explicit anonymous identity.
@@ -186,7 +182,7 @@ describe('the choose request body', () => {
 
   it('survives a call with no context at all', async () => {
     const body = await bodySentBy((c) =>
-      c.variationDetail('k', undefined as unknown as { userId: string }, 'd'),
+      c.variation('k', undefined as unknown as { userId: string }, 'd'),
     );
 
     // The other half of the optional chaining: context itself absent, not just a field.
@@ -195,7 +191,7 @@ describe('the choose request body', () => {
 
   it('asks for exactly the keys requested', async () => {
     const body = await bodySentBy((c) =>
-      c.variationDetail('checkout_v2', { userId: 'u' }, 'd'),
+      c.variation('checkout_v2', { userId: 'u' }, 'd'),
     );
 
     // Kills the ArrayDeclaration mutant: [key] emptied to [] asks the service for every flag,
@@ -210,7 +206,7 @@ describe('the choose request body', () => {
   });
 
   it("sends device 'all'", async () => {
-    const body = await bodySentBy((c) => c.variationDetail('k', { userId: 'u' }, 'd'));
+    const body = await bodySentBy((c) => c.variation('k', { userId: 'u' }, 'd'));
 
     // Kills the StringLiteral mutant on line 142. A mutated device value changes which
     // experiences the service considers eligible — silently, and only in production.

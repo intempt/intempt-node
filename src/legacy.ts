@@ -249,7 +249,7 @@ export class SDK {
     throw new Error(
       `${method} was removed in 2.0. Use variation(key, context, defaultValue) - ` +
         'it asks for a flag key instead of a mode, and returns your default when the ' +
-        'service cannot answer. See variationDetail() for the reason behind a value.',
+        'service cannot answer.',
     );
   }
 

@@ -7,7 +7,7 @@ import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
 import { Recommend } from './recommend';
 import { Flags } from './flags';
-import type { FlagContext, FlagDetail } from './flags';
+import type { FlagContext } from './flags';
 import type {
   AliasOptions,
   GroupOptions,
@@ -127,19 +127,6 @@ export class IntemptClient {
   async variation<T>(key: string, context: FlagContext, defaultValue: T): Promise<T> {
     this.#assertOpen();
     return this.#flags.value<T>(key, context, defaultValue);
-  }
-
-  /**
-   * As `variation`, plus WHY. The reason is what lets a caller tell a deliberate off state from a
-   * request the service never answered - the two used to be the same absent entry.
-   */
-  async variationDetail<T>(
-    key: string,
-    context: FlagContext,
-    defaultValue: T,
-  ): Promise<FlagDetail<T>> {
-    this.#assertOpen();
-    return this.#flags.detail<T>(key, context, defaultValue);
   }
 
   /** Every key assigned to this person, in one call. */

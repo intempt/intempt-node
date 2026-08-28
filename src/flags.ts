@@ -16,9 +16,10 @@ import type { Transport } from './transport';
  *  2. `defaultValue` is REQUIRED. It is what a caller receives on a network failure, a timeout, an
  *     unknown key or a malformed response. Optional is how `undefined` reaches production during an
  *     outage.
- *  3. `variationDetail` carries a `reason`. Without it a caller cannot tell a deliberate off state
- *     from a request the service never answered - an objection that was, correctly, why no SDK
- *     exposed assignment until the serving contract could distinguish the two.
+ *  3. `variationDetail` is NOT exposed. It would carry a `reason`, and the platform does not send
+ *     one -- so it could not tell a deliberate off state from a request the service never
+ *     answered, which is the only thing it exists to do. It returns when the serving contract
+ *     carries a reason.
  *  4. Evaluation is REMOTE only. There is no local rule engine and no flag store to poll.
  *
  * A server SDK is an `api`-channel consumer: it receives a value and branches on it in code. The
@@ -38,10 +39,9 @@ export interface FlagContext extends Identifiers {
   profileId?: string;
 }
 
-export interface FlagDetail<T> {
+/** Internal only -- see the note on `#detail`. Not exported from the package. */
+interface FlagDetail<T> {
   value: T;
-  /** The variant name the platform selected, absent when nothing was served. */
-  variant?: string;
   reason: FlagReason;
 }
 
@@ -67,7 +67,18 @@ export class Flags {
     this.#deps = deps;
   }
 
-  async detail<T>(
+  /**
+   * Internal. NOT public, deliberately.
+   *
+   * It returns a `reason`, and the platform does not send one: a held-back person's experience is
+   * absent from the evaluation response entirely rather than present with a cause. So every reason
+   * would read `off` -- including for someone who WAS targeted and did receive the variant. That is
+   * a wrong answer, not a missing one, and a method whose only job is explaining why must not guess.
+   *
+   * `value` uses it for the value, which is correct either way. It becomes public when the serving
+   * contract carries a reason.
+   */
+  async #detail<T>(
     key: string,
     context: FlagContext,
     defaultValue: T,
@@ -88,13 +99,12 @@ export class Flags {
     }
     return {
       value: (choice.body ?? defaultValue) as T,
-      variant: choice.group,
       reason: choice.reason ?? UNANSWERED,
     };
   }
 
   async value<T>(key: string, context: FlagContext, defaultValue: T): Promise<T> {
-    const { value } = await this.detail<T>(key, context, defaultValue);
+    const { value } = await this.#detail<T>(key, context, defaultValue);
     return value;
   }
 

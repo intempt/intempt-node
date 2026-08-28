@@ -28,7 +28,6 @@ const PUBLIC_METHODS = [
   // The cross-SDK flag surface. Listed one by one on purpose: this gate exists so a new public
   // method cannot appear without someone deciding it should be public.
   'variation',
-  'variationDetail',
   'allFlags',
   'boolVariation',
   'stringVariation',
