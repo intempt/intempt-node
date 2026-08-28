@@ -123,13 +123,8 @@ async function main(): Promise<void> {
     const cta = await intempt.stringVariation('pricing_cta', context, 'Get started');
     log(`stringVariation pricing_cta -> ${cta}`);
 
-    // The reason separates a deliberate holdout from an outage. Without it both are the same
-    // absent value and you cannot tell a rollout decision from a failure.
-    const checkout = await intempt.variationDetail('new_checkout', context, false);
-    log(
-      `variationDetail new_checkout -> ${checkout.value} ` +
-        `(reason=${checkout.reason}, variant=${checkout.variant ?? 'none'})`,
-    );
+    const checkout = await intempt.boolVariation('new_checkout', context, false);
+    log(`boolVariation new_checkout -> ${checkout}`);
 
     const all = await intempt.allFlags(context);
     log(`allFlags -> ${Object.keys(all).length} key(s): ${Object.keys(all).join(', ')}`);
