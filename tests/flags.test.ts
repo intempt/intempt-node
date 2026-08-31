@@ -209,13 +209,81 @@ describe('the choose request body', () => {
     expect(Object.keys(body.identification as object)).not.toContain('profileId');
   });
 
-  it('survives a call with no context at all', async () => {
-    const body = await bodySentBy((c) =>
-      c.variation('k', undefined as unknown as { userId: string }, 'd'),
-    );
+  it('refuses a call with no context at all, rather than defaulting forever', async () => {
+    // This used to assert the opposite -- that the call "survives" and sends
+    // `identification: {sourceId}` alone. That shape is one the serving endpoint cannot resolve:
+    // `buildAudienceRequest` matches neither its PROFILE nor its USER branch and throws, and
+    // `#chooseOrEmpty` absorbs a service failure by design, so the caller received their default
+    // for every key, forever, behind one warn line. The old test was locking in the bug.
+    const c = client();
 
-    // The other half of the optional chaining: context itself absent, not just a field.
-    expect(body.identification).toEqual({ sourceId: expect.any(String) });
+    await expect(
+      c.variation('k', undefined as unknown as { userId: string }, 'd'),
+    ).rejects.toThrow(TypeError);
+    await c.close();
+  });
+
+  // -- the identity the serving endpoint can actually resolve -------------------------------
+  //
+  // `buildAudienceRequest` resolves a PROFILE entity from a non-blank profileId plus a configured
+  // sourceId, falls through to a USER entity from userId, and throws when neither matches. Since
+  // `#chooseOrEmpty` absorbs a service failure by design, an unresolvable context used to come back
+  // as the caller's default -- for every key, forever, behind one warn line.
+  //
+  // Measured on this branch before the guard existed: all four shapes below returned "THE-DEFAULT"
+  // and threw nothing. Both directions are asserted, because a guard that also rejected a LEGAL
+  // context would be invisible from the refusal tests alone.
+
+  it('refuses an empty context', async () => {
+    const c = client();
+    await expect(c.variation('k', {}, 'd')).rejects.toThrow(/userId/);
+    await c.close();
+  });
+
+  it('refuses a blank userId rather than sending whitespace as an identity', async () => {
+    // Truthiness is not identity: '   ' is truthy and the service tests isBlank().
+    const c = client();
+    await expect(c.variation('k', { userId: '   ' }, 'd')).rejects.toThrow(TypeError);
+    await c.close();
+  });
+
+  it('refuses accountId, which the serving endpoint never receives', async () => {
+    // `FlagContext extends Identifiers`, so accountId type-checks -- and `#choose` sends only
+    // userId/profileId/sourceId, so it was dropped in silence. The message says so explicitly.
+    const c = client();
+    await expect(c.variation('k', { accountId: 'acme' } as never, 'd')).rejects.toThrow(
+      /accountId is not an identifier/,
+    );
+    await c.close();
+  });
+
+  it('accepts a userId alone', async () => {
+    // The reverse check for the USER branch. A guard demanding a sourceId unconditionally would
+    // break every caller who identifies by user, and no refusal test above could see it.
+    const body = await bodySentBy((c) => c.variation('k', { userId: 'u-1' }, 'd'));
+
+    expect(body.identification).toMatchObject({ userId: 'u-1' });
+  });
+
+  it('refuses a profileId when the client has no sourceId configured', async () => {
+    // The PROFILE branch needs BOTH halves. Without a configured sourceId this context satisfies
+    // neither branch, so the service throws and every read would silently default.
+    //
+    // This test exists because a planted mutation survived without it: dropping `&& present(
+    // sourceId)` from the guard left all 410 other tests green, since every other case either
+    // carries a userId or runs against a client that happens to configure a source.
+    const c = client({ sourceId: undefined });
+
+    await expect(c.variation('k', { profileId: 'p-1' }, 'd')).rejects.toThrow(/sourceId/);
+    await c.close();
+  });
+
+  it('accepts a profileId when a sourceId is configured', async () => {
+    // The reverse check for the PROFILE branch: the same context is legal once the client can
+    // supply the other half of the pair.
+    const body = await bodySentBy((c) => c.variation('k', { profileId: 'p-1' }, 'd'));
+
+    expect(body.identification).toMatchObject({ profileId: 'p-1' });
   });
 
   it('asks for exactly the keys requested', async () => {

@@ -132,6 +132,7 @@ export class Flags {
       // failure surfaces far from here as an undefined branch.
       throw new TypeError('variation: defaultValue is required');
     }
+    this.#assertAnswerable(context);
 
     const choices = await this.#chooseOrEmpty(context, [key]);
     const choice = choices.find((c) => c.name === key);
@@ -147,6 +148,43 @@ export class Flags {
   async value<T>(key: string, context: FlagContext, defaultValue: T): Promise<T> {
     const { value } = await this.#detail<T>(key, context, defaultValue);
     return value;
+  }
+
+  /**
+   * A context the service cannot resolve is a caller mistake, so it throws here.
+   *
+   * `ExperienceChooserService.buildAudienceRequest` resolves a PROFILE entity from a non-blank
+   * `profileId` plus a configured `sourceId`, falls through to a USER entity from `userId`, and
+   * throws when neither matches. `#chooseOrEmpty` absorbs a service failure by design -- so without
+   * this check an unresolvable context returns the caller's default for every key, forever, behind
+   * one warn line, and the integration looks healthy while nothing is ever personalized.
+   *
+   * Deliberately NOT absorbed the way a transport failure is. A 5xx is a runtime condition that
+   * must resolve to the default; an unanswerable identity is a programming error that never
+   * recovers. This is the same rule the key-pattern check above already applies.
+   *
+   * `accountId` is the trap worth naming: `FlagContext extends Identifiers`, so TypeScript accepts
+   * it, and `#choose` sends only `userId`/`profileId`/`sourceId` -- an account-only caller was
+   * type-checked, silently dropped, and served defaults forever.
+   */
+  #assertAnswerable(context: FlagContext): void {
+    const present = (v: unknown): boolean => typeof v === 'string' && v.trim() !== '';
+    const { sourceId } = this.#deps.config();
+
+    if (present(context?.userId)) return;
+    if (present(context?.profileId) && present(sourceId)) return;
+
+    const hadAccountOnly = present(
+      (context as { accountId?: string } | undefined)?.accountId,
+    );
+    throw new TypeError(
+      'variation: context needs either userId, or profileId together with a sourceId configured ' +
+        'on the client — the serving endpoint resolves an entity by one or the other and rejects ' +
+        'anything else' +
+        (hadAccountOnly
+          ? '. accountId is not an identifier the serving endpoint accepts; it is dropped from the request'
+          : ''),
+    );
   }
 
   /**
@@ -196,14 +234,17 @@ export class Flags {
   async #choose(context: FlagContext, names: string[]): Promise<RawChoice[]> {
     const { sourceId } = this.#deps.config();
     const body = compact({
+      // No optional chaining on `context`: `#assertAnswerable` has already rejected an absent or
+      // unresolvable one, so a `context?.` here would be a branch no test could ever take -- an
+      // unkillable mutant paid for out of the mutation budget.
       identification: compact({
-        userId: context?.userId,
-        profileId: context?.profileId,
+        userId: context.userId,
+        profileId: context.profileId,
         sourceId,
       }),
       names,
       device: 'all',
-      sessionId: context?.sessionId,
+      sessionId: context.sessionId,
     });
 
     const response = await this.#deps.transport.post<{ choices?: RawChoice[] }>(
