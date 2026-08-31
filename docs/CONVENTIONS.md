@@ -32,16 +32,24 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
   send one — so it could only report "off" for a person who was in fact targeted and served, which
   is the single thing such a method exists to tell you. It stays internal until the platform sends
   a reason. Do not re-add it, and do not document it.
-- **Every read names its keys. There is no `allFlags()`.** On this endpoint an evaluation _is_ an
-  exposure: `POST /optimization/choose-api` publishes a Kafka event per experience it evaluates, and
-  omitting `names` makes it evaluate every experience the person is eligible for. So a
-  read-everything call marks one person exposed to every running server experiment in the project —
-  inflating each denominator uniformly, which shows up as an experiment that stopped detecting
-  rather than one that broke — and, for a `once` display, spends their display budget on keys nobody
-  rendered, after which `variation()` on those keys returns the caller's default permanently. The
-  request has no exposure-suppression field, so this cannot be fixed here. **It becomes possible
-  when the platform can evaluate without publishing** — an `exposure: false` on the choose request,
-  or a separate non-recording route. Read the keys you use, one call per key.
+- **On a request path, every read names its keys. `allFlags()` exists, and it is a hazard.** On this
+  endpoint an evaluation _is_ an exposure: `POST /optimization/choose-api` publishes a Kafka event
+  per experience it evaluates, and omitting `names` makes it evaluate every experience the person is
+  eligible for. So a read-everything call marks one person exposed to every running server
+  experiment in the project — inflating each denominator uniformly, which shows up as an experiment
+  that stopped detecting rather than one that broke — and, for a `once` display, spends their
+  display budget on keys nobody rendered, after which `variation()` on those keys returns the
+  caller's default permanently. The request has no exposure-suppression field, so **this cannot be
+  fixed here**; it becomes safe when the platform can evaluate without publishing — an
+  `exposure: false` on the choose request, or a separate non-recording route.
+
+  `allFlags()` is nevertheless part of this SDK's surface, by ruling (Beso, 2026-09-01): php,
+  python, swift, java and reactnative all ship it, and a method that exists in five SDKs and not the
+  sixth is its own defect — a customer switching languages should not find the surface changed
+  underneath them. It is documented as a hazard rather than withheld. **Use it to enumerate — a
+  debug endpoint, an admin view, a one-off audit. Two keys on a request path is two `variation()`
+  calls, not one `allFlags()`.**
+
 - **`profileId` outranks `userId`, and callers must be told so.** The platform resolves a PROFILE
   entity keyed on `profileId` whenever it is non-blank and only falls through to `userId` when it is
   not, so passing both means assignment is device-scoped and `userId` is ignored. Pass one

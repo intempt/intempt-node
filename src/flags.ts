@@ -21,13 +21,18 @@ import type { Transport } from './transport';
  *     answered, which is the only thing it exists to do. It returns when the serving contract
  *     carries a reason.
  *  4. Evaluation is REMOTE only. There is no local rule engine and no flag store to poll.
- *  5. Every evaluation names the keys it wants. There is no "read everything" call. `POST
- *     /optimization/choose-api` records a Kafka exposure for each experience it evaluates, and it
- *     evaluates EVERY eligible experience when `names` is omitted -- so an unbounded read marks a
- *     person exposed to every running server experiment in the project, and (for a `once` display)
- *     permanently consumes their display budget for experiences nobody rendered. Requesting keys
- *     the caller actually reads is what keeps an evaluation and an exposure the same event. See
- *     `#choose` for the platform change that would let a read-everything call return.
+ *  5. On a request path, every evaluation names the keys it wants. `POST /optimization/choose-api`
+ *     records a Kafka exposure for each experience it evaluates, and it evaluates EVERY eligible
+ *     experience when `names` is omitted -- so an unbounded read marks a person exposed to every
+ *     running server experiment in the project, and (for a `once` display) permanently consumes
+ *     their display budget for experiences nobody rendered. Requesting keys the caller actually
+ *     reads is what keeps an evaluation and an exposure the same event.
+ *
+ *     `allFlags` is the one call that omits `names`, and it is documented as a hazard rather than
+ *     withheld -- by ruling (Beso, 2026-09-01), because php, python, swift, java and reactnative
+ *     all ship it and a surface present in five SDKs and absent from the sixth is its own defect.
+ *     It is for enumerating, not for serving. See `#choose` for the platform change that would
+ *     make it safe.
  *
  * A server SDK is an `api`-channel consumer: it receives a value and branches on it in code. The
  * `web` channel, where a change is applied against the DOM without the caller branching, is
@@ -151,6 +156,39 @@ export class Flags {
   }
 
   /**
+   * Every key assigned to this person, in one call, as a name -> value map.
+   *
+   * ⚠ **This is not a free convenience, and it does not belong on a request path.** It sends no
+   * `names`, so the service evaluates every api-channel experience the person is eligible for, and
+   * on this endpoint an evaluation IS an exposure — see `#choose` for the full trace. Two costs,
+   * both silent:
+   *
+   *  - the denominator of every running server experiment fills with people who were never shown
+   *    anything, uniformly across arms, so it reads as an experiment that stopped detecting; and
+   *  - a `once` / `once_per_visit` experience is marked displayed for keys nobody rendered, after
+   *    which `variation()` on those keys returns the caller's default forever, indistinguishably
+   *    from an outage.
+   *
+   * Use it to enumerate — a debug endpoint, an admin view, a one-off audit. **Two keys on a request
+   * path means two `variation()` calls, not one `allFlags()`.** The request carries no
+   * exposure-suppression field, so no SDK can make this safe; that needs an `exposure: false` on
+   * `POST /optimization/choose-api` or a separate non-recording route.
+   *
+   * Matches `allFlags` in php, swift, java and reactnative and `all_flags` in python.
+   */
+  async all(context: FlagContext): Promise<Record<string, unknown>> {
+    this.#assertAnswerable(context);
+
+    const out: Record<string, unknown> = {};
+    for (const choice of await this.#chooseOrEmpty(context, undefined)) {
+      if (typeof choice.name === 'string' && choice.name !== '') {
+        out[choice.name] = choice.body ?? null;
+      }
+    }
+    return out;
+  }
+
+  /**
    * A context the service cannot resolve is a caller mistake, so it throws here.
    *
    * `ExperienceChooserService.buildAudienceRequest` resolves a PROFILE entity from a non-blank
@@ -196,7 +234,10 @@ export class Flags {
    * is for. A validation mistake (missing key, missing default) still throws, because that is a
    * programming error the caller can fix and not a runtime condition to absorb.
    */
-  async #chooseOrEmpty(context: FlagContext, names: string[]): Promise<RawChoice[]> {
+  async #chooseOrEmpty(
+    context: FlagContext,
+    names: string[] | undefined,
+  ): Promise<RawChoice[]> {
     try {
       return await this.#choose(context, names);
     } catch (error) {
@@ -208,7 +249,7 @@ export class Flags {
   }
 
   /**
-   * `names` is REQUIRED and is never omitted.
+   * `names` is omitted ONLY by `allFlags`, and that is not a free convenience.
    *
    * Omitting it is not "ask for everything" -- it is "evaluate everything", and on this endpoint an
    * evaluation IS an exposure. `ExperienceChooserService.chooseApi` passes a null `names` straight
@@ -228,10 +269,15 @@ export class Flags {
    * The request carries no exposure-suppression field -- `ExperienceApiChooseRequest` is
    * `{identification, names, groups, device, sessionId, productId, timestamp}` -- so the SDK cannot
    * opt out of recording, only decline to evaluate what nobody asked for. **A read-everything call
-   * becomes possible when the platform can evaluate without publishing** (an `exposure: false` on
-   * this request, or a separate non-recording route). Until then, every read names its keys.
+   * becomes safe when the platform can evaluate without publishing** (an `exposure: false` on this
+   * request, or a separate non-recording route).
+   *
+   * `allFlags` is kept anyway, by ruling (Beso, 2026-09-01), because php, python, swift, java and
+   * reactnative all ship it and a surface that exists in five SDKs and not the sixth is its own
+   * kind of defect. It is documented as a hazard rather than removed. Prefer `variation` per key on
+   * anything that runs per request.
    */
-  async #choose(context: FlagContext, names: string[]): Promise<RawChoice[]> {
+  async #choose(context: FlagContext, names: string[] | undefined): Promise<RawChoice[]> {
     const { sourceId } = this.#deps.config();
     const body = compact({
       // No optional chaining on `context`: `#assertAnswerable` has already rejected an absent or

@@ -36,6 +36,9 @@ const PUBLIC_METHODS = [
   'stringVariation',
   'numberVariation',
   'jsonVariation',
+  // Present by ruling (Beso, 2026-09-01) so the surface matches php, python, swift, java and
+  // reactnative. It is a documented hazard, not a convenience -- see docs/CONVENTIONS.md.
+  'allFlags',
   'waitForInitialization',
 ];
 const PUBLIC_GETTERS = ['config', 'buffered'];

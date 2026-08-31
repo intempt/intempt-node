@@ -185,6 +185,23 @@ export class IntemptClient {
   }
 
   /**
+   * Every key assigned to this person, in one call.
+   *
+   * ⚠ **Not for a request path.** It names no keys, so the service evaluates every experience the
+   * person is eligible for — and on this endpoint an evaluation is an **exposure**. That inflates
+   * the denominator of every running server experiment with people who saw nothing, and spends the
+   * `once` display budget for keys nobody rendered, after which `variation()` on those keys returns
+   * your default forever. Two keys on a request path is two `variation()` calls, not one
+   * `allFlags()`. Use this to enumerate: a debug endpoint, an admin view, a one-off audit.
+   *
+   * See `docs/CONVENTIONS.md` for the full trace and the platform change that would make it safe.
+   */
+  async allFlags(context: FlagContext): Promise<Record<string, unknown>> {
+    this.#assertOpen();
+    return this.#flags.all(context);
+  }
+
+  /**
    * Resolves immediately.
    *
    * Present so the cross-SDK surface is the same everywhere, and so a caller porting from an SDK

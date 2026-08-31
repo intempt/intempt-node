@@ -18,18 +18,25 @@ Every read returns the caller's default when the service cannot answer, in the c
 `defaultValue` is required for exactly that reason: a flag read sits on the request path, and a
 personalization outage must not become an outage of the thing being personalized.
 
+`allFlags(context)` returns every key assigned to that person as a name -> value map, matching
+`allFlags` in php, swift, java and reactnative and `all_flags` in python.
+
+> ⚠ **`allFlags()` is a hazard, not a convenience, and it does not belong on a request path.** It
+> sends no `names`, so the service evaluates every experience the person is eligible for — and on
+> this endpoint an evaluation **is an exposure**. Two costs, both silent: the denominator of every
+> running server experiment fills with people who were never shown anything (uniformly across arms,
+> so it reads as an experiment that stopped detecting rather than a broken one), and a `once` /
+> `once_per_visit` experience is marked displayed for keys nobody rendered, after which
+> `variation()` on those keys returns your default **forever**, indistinguishably from an outage.
+>
+> Use it to enumerate — a debug endpoint, an admin view, a one-off audit. **Two keys on a request
+> path is two `variation()` calls, not one `allFlags()`.** The request carries no
+> exposure-suppression field (`ExperienceApiChooseRequest` is `{identification, names, groups,
+device, sessionId, productId, timestamp}`), so no SDK can make this safe; that needs an
+> `exposure: false` on `POST /optimization/choose-api`, or a separate non-recording route.
+
 ### Deliberately absent
 
-- **`allFlags()`.** A read-everything call sends no `names`, so the service evaluates every eligible
-  experience and publishes a Kafka exposure **per experience, per call** — contaminating the
-  denominator of every running server experiment, and burning the `ONCE` display budget
-  project-wide, after which `variation(key)` returns the caller's default forever. The endpoint has
-  no suppress field (`ExperienceApiChooseRequest` is `{identification, names, groups, device,
-sessionId, productId, timestamp}`), so no SDK can make it exposure-free. `names` is a required
-  argument here instead.
-  ⚠ **This is a knowing divergence: php, python, swift, java and reactnative all still ship
-  `allFlags`.** Closing it needs a platform change — an `exposure: false` on the request, or a
-  separate non-recording route.
 - **`variationDetail()` as a public method.** It would carry a `reason`, and the serving response
   does not send one, so the only honest reason this SDK could return is "unknown" for every call.
 

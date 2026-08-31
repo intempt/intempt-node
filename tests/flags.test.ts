@@ -137,15 +137,82 @@ describe('typed helpers', () => {
  * the caller's default forever. The request carries no exposure-suppression field, so the only
  * lever the SDK has is declining to evaluate what nobody asked for.
  */
-describe('there is no unbounded read', () => {
+describe('allFlags', () => {
   afterEach(() => nock.cleanAll());
 
-  it('does not expose allFlags', () => {
+  const ctx = { userId: 'u-1' };
+
+  it('returns every served key as a name -> value map', async () => {
+    nock(ORIGIN)
+      .post(CHOOSE_PATH)
+      .reply(200, {
+        choices: [
+          { name: 'pricing_cta', body: 'Get started' },
+          { name: 'rate_limits', body: { perMinute: 60 } },
+        ],
+      });
+
     const c = client();
-    expect((c as unknown as Record<string, unknown>).allFlags).toBeUndefined();
-    expect(Object.getOwnPropertyNames(Object.getPrototypeOf(c))).not.toContain(
-      'allFlags',
-    );
+    await expect(c.allFlags(ctx)).resolves.toEqual({
+      pricing_cta: 'Get started',
+      rate_limits: { perMinute: 60 },
+    });
+    await c.close();
+  });
+
+  it('omits names entirely, which is what makes it evaluate everything', async () => {
+    // The one field that distinguishes this call from variation(), and the reason it is a hazard.
+    // Sending `names: []` instead would be a different request the service reads differently, and
+    // sending `names: null` would be an explicit null rather than an absent key.
+    let sent: Record<string, unknown> = {};
+    nock(ORIGIN)
+      .post(CHOOSE_PATH, (b) => {
+        sent = b as Record<string, unknown>;
+        return true;
+      })
+      .reply(200, { choices: [] });
+
+    const c = client();
+    await c.allFlags(ctx);
+    await c.close();
+
+    expect(Object.keys(sent)).not.toContain('names');
+    expect(sent.device).toBe('all');
+  });
+
+  it('maps a key with no body to null rather than dropping it', async () => {
+    nock(ORIGIN)
+      .post(CHOOSE_PATH)
+      .reply(200, { choices: [{ name: 'held_back' }] });
+
+    const c = client();
+    await expect(c.allFlags(ctx)).resolves.toEqual({ held_back: null });
+    await c.close();
+  });
+
+  it('skips a choice with no usable name rather than keying on undefined', async () => {
+    nock(ORIGIN)
+      .post(CHOOSE_PATH)
+      .reply(200, { choices: [{ body: 'orphan' }, { name: '', body: 'blank' }] });
+
+    const c = client();
+    await expect(c.allFlags(ctx)).resolves.toEqual({});
+    await c.close();
+  });
+
+  it('returns an empty map when the service is unreachable', async () => {
+    // Same discipline as variation(): a personalization outage is not an application outage.
+    nock(ORIGIN).post(CHOOSE_PATH).reply(500, {});
+
+    const c = client();
+    await expect(c.allFlags(ctx)).resolves.toEqual({});
+    await c.close();
+  });
+
+  it('applies the same identity guard as variation', async () => {
+    const c = client();
+    await expect(c.allFlags({})).rejects.toThrow(/context needs either userId/);
+    await c.close();
   });
 });
 
