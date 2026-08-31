@@ -217,9 +217,14 @@ describe('the choose request body', () => {
     // for every key, forever, behind one warn line. The old test was locking in the bug.
     const c = client();
 
+    // The message matters, not just the type. `Cannot read properties of undefined` is ALSO a
+    // TypeError, so asserting the class alone would let the optional chaining in
+    // `#assertAnswerable` be deleted -- the guard would still "throw", for entirely the wrong
+    // reason, and a caller would get a stack trace instead of an explanation. Stryker survived
+    // exactly that mutant until this assertion named the text.
     await expect(
       c.variation('k', undefined as unknown as { userId: string }, 'd'),
-    ).rejects.toThrow(TypeError);
+    ).rejects.toThrow(/context needs either userId/);
     await c.close();
   });
 
@@ -234,9 +239,27 @@ describe('the choose request body', () => {
   // and threw nothing. Both directions are asserted, because a guard that also rejected a LEGAL
   // context would be invisible from the refusal tests alone.
 
-  it('refuses an empty context', async () => {
+  it('refuses an empty context, and says what a usable one needs', async () => {
+    // The whole message is asserted, not just that something threw. This error is the only thing
+    // a caller sees at the moment they are stuck, so its text is behaviour: it has to name both
+    // acceptable shapes and say why the service rejects anything else. Asserting only /userId/
+    // left three string mutants alive that blanked the explanation and kept the test green.
     const c = client();
-    await expect(c.variation('k', {}, 'd')).rejects.toThrow(/userId/);
+    await expect(c.variation('k', {}, 'd')).rejects.toThrow(
+      /context needs either userId, or profileId together with a sourceId configured on the client/,
+    );
+    await expect(c.variation('k', {}, 'd')).rejects.toThrow(
+      /resolves an entity by one or the other and rejects anything else/,
+    );
+    await c.close();
+  });
+
+  it('does not mention accountId when the caller never passed one', async () => {
+    // The other half of the accountId branch. Without this, appending the accountId sentence
+    // unconditionally would pass every other test -- the message would simply be wrong for the
+    // common case, telling a caller about a field they never used.
+    const c = client();
+    await expect(c.variation('k', {}, 'd')).rejects.toThrow(/rejects anything else$/);
     await c.close();
   });
 
