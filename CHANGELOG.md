@@ -3,6 +3,62 @@
 All notable changes to this package are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] — 2026-09-01
+
+### Added — reading flags
+
+`variation` and `variationDetail`'s value half, reached through `client.variation(key, context,
+defaultValue)`, plus the `FlagContext` type. Evaluation is server-side: the SDK sends an identity
+and the keys it wants to `/optimization/choose-api` and returns what comes back. It derives nothing
+locally, which is enforced by a CI guard rather than by convention — an SDK cannot re-derive a draw
+it did not witness, so any client-side bucket arithmetic would disagree with the platform for some
+people, silently.
+
+Every read returns the caller's default when the service cannot answer, in the caller's own type.
+`defaultValue` is required for exactly that reason: a flag read sits on the request path, and a
+personalization outage must not become an outage of the thing being personalized.
+
+### Deliberately absent
+
+- **`allFlags()`.** A read-everything call sends no `names`, so the service evaluates every eligible
+  experience and publishes a Kafka exposure **per experience, per call** — contaminating the
+  denominator of every running server experiment, and burning the `ONCE` display budget
+  project-wide, after which `variation(key)` returns the caller's default forever. The endpoint has
+  no suppress field (`ExperienceApiChooseRequest` is `{identification, names, groups, device,
+sessionId, productId, timestamp}`), so no SDK can make it exposure-free. `names` is a required
+  argument here instead.
+  ⚠ **This is a knowing divergence: php, python, swift, java and reactnative all still ship
+  `allFlags`.** Closing it needs a platform change — an `exposure: false` on the request, or a
+  separate non-recording route.
+- **`variationDetail()` as a public method.** It would carry a `reason`, and the serving response
+  does not send one, so the only honest reason this SDK could return is "unknown" for every call.
+
+### Validated at the call site, not absorbed
+
+A flag read returns your default when Intempt cannot answer. It does **not** do that for a mistake
+you can fix, because absorbing one produces an integration that looks healthy while every key reads
+its default forever:
+
+- **A context the service cannot resolve now throws.** It needs either a `userId`, or a `profileId`
+  together with a `sourceId` configured on the client. An empty context, a blank `userId`, a
+  `profileId` with no configured `sourceId`, and an absent context all used to reach the service, be
+  rejected there, and come back as a silent default.
+- **`accountId` is refused explicitly.** `FlagContext extends Identifiers`, so TypeScript accepted
+  it while `#choose` sent only `userId`/`profileId`/`sourceId` — an account-only caller was
+  type-checked, silently dropped, and served defaults forever. The error now says so by name.
+- **A key must match the platform's own pattern**, so a key the service would answer with a 400
+  fails at the call site instead.
+
+### Fixed
+
+- `scripts/check-no-local-bucketing.mjs` reported success on a tree it had never read: a missing
+  source root produced zero files, zero breaches and exit 0, so a `src/` rename or a typo in the
+  workflow's own `GUARD_SRC` would have turned the guard job green while it checked nothing. A
+  missing root and a zero-file scan are both errors now, reported before the allowlist checks, and
+  the pass line states the file count.
+- The guard's failure message cited **`R36`**, which does not resolve in `brain` — the only `R36`
+  there is an unrelated i18n rule. Corrected to `EXP-ASSIGN-001..005`, which do resolve.
+
 ## [2.0.0] — 2026-08-12
 
 Rebuilt on a Mixpanel-derived core (see `NOTICE`). The surface is now
