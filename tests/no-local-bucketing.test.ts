@@ -32,19 +32,37 @@ function fixture(contents: string): string {
   return dir;
 }
 
-/** Returns the exit code and stderr, without throwing on a non-zero exit. */
-function runGuard(root: string): { status: number; stderr: string } {
+/**
+ * Returns the exit code, stdout and stderr, without throwing on a non-zero exit.
+ *
+ * `stdout` is captured because the pass line is itself an assertion target: the guard used to print
+ * "OK" identically whether it had read every source file or none.
+ */
+function runGuard(
+  root: string,
+  guardSrc = 'src',
+): { status: number; stdout: string; stderr: string } {
   try {
-    execFileSync(process.execPath, [SCRIPT], {
-      env: { ...process.env, GUARD_ROOT: root, GUARD_SRC: 'src' },
+    const stdout = execFileSync(process.execPath, [SCRIPT], {
+      env: { ...process.env, GUARD_ROOT: root, GUARD_SRC: guardSrc },
       encoding: 'utf8',
       stdio: 'pipe',
     });
-    return { status: 0, stderr: '' };
+    return { status: 0, stdout: String(stdout), stderr: '' };
   } catch (error) {
-    const e = error as { status?: number; stderr?: string };
-    return { status: e.status ?? -1, stderr: String(e.stderr ?? '') };
+    const e = error as { status?: number; stdout?: string; stderr?: string };
+    return {
+      status: e.status ?? -1,
+      stdout: String(e.stdout ?? ''),
+      stderr: String(e.stderr ?? ''),
+    };
   }
+}
+
+/** A root with no source tree at all — the shape that used to pass. */
+function emptyRoot(): string {
+  dir = mkdtempSync(join(tmpdir(), 'r36-empty-'));
+  return dir;
 }
 
 describe('the no-local-bucketing guard', () => {
@@ -79,7 +97,7 @@ describe('the no-local-bucketing guard', () => {
   it('passes on a file that does no bucketing', () => {
     const root = fixture('export const answer = 42;');
 
-    expect(runGuard(root)).toEqual({ status: 0, stderr: '' });
+    expect(runGuard(root)).toMatchObject({ status: 0, stderr: '' });
   });
 
   it('does not count a comment explaining the rule as a breach', () => {
@@ -92,5 +110,42 @@ describe('the no-local-bucketing guard', () => {
 
   it('passes on this repo, which is what CI asserts', () => {
     expect(runGuard(REPO_ROOT).status).toBe(0);
+  });
+
+  // A guard that reports success on a tree it never opened is worse than no guard: it is a green
+  // CI job asserting nothing. Measured before this was fixed — with no src/ directory, and with
+  // GUARD_SRC pointing at a name that does not exist, the guard printed
+  // "no-local-bucketing OK" and exited 0 having read zero files.
+
+  it('fails when the source root does not exist, rather than scanning nothing', () => {
+    const result = runGuard(emptyRoot());
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('source root(s) not found');
+  });
+
+  it('fails when GUARD_SRC names a directory that is not there', () => {
+    const result = runGuard(REPO_ROOT, 'definitely-not-a-directory');
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('scanned 0 source files');
+  });
+
+  it('blames the missing tree, not the allowlist, when it scans nothing', () => {
+    // Ordering matters. With zero files read, every allowlist entry also "matches nothing", so the
+    // stale-entry check would fire and send the reader to fix a file that is not the problem.
+    const result = runGuard(emptyRoot());
+
+    expect(result.stderr).toContain('source root(s) not found');
+    expect(result.stderr).not.toContain('allowlist entries that no longer match');
+  });
+
+  it('states how many files it read, so a pass can be told from a vacuous one', () => {
+    const result = runGuard(REPO_ROOT);
+
+    expect(result.status).toBe(0);
+    const match = /scanned (\d+) file\(s\)/.exec(result.stdout);
+    expect(match).not.toBeNull();
+    expect(Number(match?.[1])).toBeGreaterThan(0);
   });
 });

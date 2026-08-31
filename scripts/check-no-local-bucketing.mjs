@@ -43,7 +43,6 @@ const PATTERNS = [
 ];
 
 function walk(dir, out = []) {
-  if (!existsSync(dir)) return out;
   for (const name of readdirSync(dir)) {
     if (SKIP_DIR.test(name)) continue;
     const p = join(dir, name);
@@ -57,8 +56,21 @@ const allow = existsSync(allowPath) ? JSON.parse(readFileSync(allowPath, 'utf8')
 const seen = new Set();
 const hits = [];
 
+const missing = [];
+let scanned = 0;
+
 for (const r of roots) {
-  for (const file of walk(join(root, r))) {
+  const dir = join(root, r);
+  // A root that is not there is an error, not an empty scan. Without this the guard walks nothing,
+  // finds nothing and exits 0 — the loudest possible way to say "clean" about a tree it never
+  // opened. A `src/` rename, a wrong GUARD_ROOT, or a typo in the workflow's own GUARD_SRC all land
+  // here, and all of them used to pass.
+  if (!existsSync(dir)) {
+    missing.push(r);
+    continue;
+  }
+  for (const file of walk(dir)) {
+    scanned++;
     const rel = relative(root, file);
     readFileSync(file, 'utf8')
       .split('\n')
@@ -79,9 +91,29 @@ for (const r of roots) {
 }
 
 const problems = [];
+
+// Reported BEFORE the allowlist checks and before the hits. With nothing scanned, every allowance
+// also "matches nothing", so the stale-entry message below would fire and blame the allowlist for a
+// failure that is really a missing tree.
+if (missing.length) {
+  problems.push(`source root(s) not found under ${root}: ${missing.join(', ')}`);
+}
+if (!scanned) {
+  problems.push(
+    `scanned 0 source files under ${roots.join(', ')} — the guard proves nothing about a tree it ` +
+      'never read',
+  );
+}
+
+if (problems.length) {
+  console.error('no-local-bucketing FAILED');
+  for (const p of problems) console.error(`  - ${p}`);
+  process.exit(1);
+}
+
 if (hits.length) {
   problems.push(
-    `bucket derivation must be server-only (R36) — ${hits.length} occurrence(s):\n    ` +
+    `bucket derivation must be server-only (EXP-ASSIGN-001..005) — ${hits.length} occurrence(s):\n    ` +
       hits.join('\n    '),
   );
 }
@@ -104,6 +136,9 @@ if (problems.length) {
   for (const p of problems) console.error(`  - ${p}`);
   process.exit(1);
 }
+// The count is part of the pass line on purpose: "OK" alone reads the same whether the guard read
+// every source file or none, and a reader scanning a CI log has no other way to tell.
 console.log(
-  `no-local-bucketing OK — scanned ${roots.join(', ')}, ${Object.keys(allow).length} documented allowance(s)`,
+  `no-local-bucketing OK — scanned ${scanned} file(s) under ${roots.join(', ')}, ` +
+    `${Object.keys(allow).length} documented allowance(s)`,
 );
