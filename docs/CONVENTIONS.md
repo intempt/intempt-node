@@ -5,6 +5,15 @@
 order, defaults and what is deliberately withheld. This file covers what is specific to Node and TypeScript and
 to this repo. Where the two disagree, the contract wins and this file is the bug.
 
+> **Pending contract revision: `intempt-swift` [#8](https://github.com/intempt/intempt-swift/pull/8), still open.**
+> The contract as it stands on `intempt-swift` `main` carries a section headed _"`experiments()` is
+> deliberately NOT in any SDK"_, whose action table tells `node` / `python` / `php` they _must not
+> be written with it_. #8 is the change that supersedes that decision and permits the `variation()`
+> surface described here; it must land before or with this PR. (An earlier revision, #7, is
+> **closed** — folded into #8 — so any reference to #7 is stale.) Until #8 merges, a reader who
+> follows the citation above reaches a document that contradicts this file; that is the ordering,
+> not a disagreement about the surface.
+
 ## The rules that come from the contract
 
 - **A caller asks for a KEY, never a mode.** There is no `flagVariation` / `experimentVariation`
@@ -23,6 +32,25 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
   send one — so it could only report "off" for a person who was in fact targeted and served, which
   is the single thing such a method exists to tell you. It stays internal until the platform sends
   a reason. Do not re-add it, and do not document it.
+- **Every read names its keys. There is no `allFlags()`.** On this endpoint an evaluation _is_ an
+  exposure: `POST /optimization/choose-api` publishes a Kafka event per experience it evaluates, and
+  omitting `names` makes it evaluate every experience the person is eligible for. So a
+  read-everything call marks one person exposed to every running server experiment in the project —
+  inflating each denominator uniformly, which shows up as an experiment that stopped detecting
+  rather than one that broke — and, for a `once` display, spends their display budget on keys nobody
+  rendered, after which `variation()` on those keys returns the caller's default permanently. The
+  request has no exposure-suppression field, so this cannot be fixed here. **It becomes possible
+  when the platform can evaluate without publishing** — an `exposure: false` on the choose request,
+  or a separate non-recording route. Read the keys you use, one call per key.
+- **`profileId` outranks `userId`, and callers must be told so.** The platform resolves a PROFILE
+  entity keyed on `profileId` whenever it is non-blank and only falls through to `userId` when it is
+  not, so passing both means assignment is device-scoped and `userId` is ignored. Pass one
+  identifier and hold it constant; the sample models exactly one.
+- **`sessionId` is what makes `once_per_visit` per-visit.** Unset, the platform stores the literal
+  `"default"`, which never differs from itself — so the experience serves once and never again, and
+  every exposure event is stamped `"default"`. A caller with no session concept may leave it unset,
+  in which case `once_per_visit` degrades to `once` on this channel. That is a choice to make
+  knowingly, not a default to inherit.
 - **Evaluation is REMOTE only.** No local rule engine, no flag store to poll, and no hashing
   utility: the server buckets, so no second implementation can disagree with it. `check-no-local-bucketing.mjs`
   enforces this in CI and a new bucketing helper will fail the build.

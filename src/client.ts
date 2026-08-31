@@ -129,11 +129,22 @@ export class IntemptClient {
     return this.#flags.value<T>(key, context, defaultValue);
   }
 
-  /** Every key assigned to this person, in one call. */
-  async allFlags(context: FlagContext): Promise<Record<string, unknown>> {
-    this.#assertOpen();
-    return this.#flags.all(context);
-  }
+  // `allFlags()` is deliberately NOT exposed.
+  //
+  // It reads like a read and behaves like a write. `POST /optimization/choose-api` records a Kafka
+  // exposure per experience it evaluates, and omitting `names` makes it evaluate every experience
+  // the person is eligible for - so one convenience call marks them exposed to every running
+  // server experiment in the project, and permanently spends the `once` display budget for keys
+  // nobody rendered. Both effects are silent: the experiments keep running and simply stop
+  // detecting, and the later `variation('that_key', ...)` returns the caller's default forever.
+  //
+  // There is no request field that suppresses recording, so this cannot be fixed in the SDK. It
+  // returns when the platform can evaluate without publishing an exposure - an `exposure: false`
+  // on the choose request, or a separate non-recording route. Until then, read the keys you use:
+  // `variation(key, context, defaultValue)`, one call per key.
+  //
+  // Do not re-add it, and do not document it as available. `tests/encapsulation.test.ts` and
+  // `tests/flags.test.ts` both fail if it comes back.
 
   async boolVariation(
     key: string,

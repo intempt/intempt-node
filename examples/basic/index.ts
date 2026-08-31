@@ -116,7 +116,11 @@ async function main(): Promise<void> {
     // ---- flags ----
     // Ask for a KEY. Whether it names an experiment, a personalization or a flag is the
     // platform's business, and the method name does not change when that changes.
-    const context = { userId, profileId: 'device-abc' };
+    //
+    // ONE identifier, held constant. `profileId` outranks `userId` on the platform, so passing
+    // both means assignment is device-scoped and `userId` is ignored — and the day you stop
+    // passing it, every person re-buckets in a single deploy. Pick the one you can keep stable.
+    const context = { userId };
 
     // The default is not optional, and it is a real decision: it is what runs when Intempt cannot
     // be reached. Choose the behaviour you already have.
@@ -126,8 +130,9 @@ async function main(): Promise<void> {
     const checkout = await intempt.boolVariation('new_checkout', context, false);
     log(`boolVariation new_checkout -> ${checkout}`);
 
-    const all = await intempt.allFlags(context);
-    log(`allFlags -> ${Object.keys(all).length} key(s): ${Object.keys(all).join(', ')}`);
+    // Read the keys you use, one call per key. There is no read-everything call: evaluating a
+    // key records an exposure against it, so asking for every key marks this person exposed to
+    // every running experiment in the project.
 
     // What happens when Intempt is unreachable. No throw, no null — the value you chose.
     const offline = Intempt.init({ ...baseConfig('127.0.0.1:1'), timeout: 200 });

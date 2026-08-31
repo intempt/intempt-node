@@ -27,8 +27,11 @@ const PUBLIC_METHODS = [
   'recommend',
   // The cross-SDK flag surface. Listed one by one on purpose: this gate exists so a new public
   // method cannot appear without someone deciding it should be public.
+  //
+  // `allFlags` is absent deliberately and this list is what enforces it: evaluating without
+  // `names` records a Kafka exposure against every eligible experience, so a read-everything call
+  // is a project-wide write. Re-adding it fails here.
   'variation',
-  'allFlags',
   'boolVariation',
   'stringVariation',
   'numberVariation',

@@ -22,8 +22,9 @@ describe('variation', () => {
       });
 
     // `variation`, not `variationDetail` -- the detail method is internal until the platform sends
-    // a reason. Note this mock supplies `group` and `reason`, and the serving response carries
-    // NEITHER today, which is exactly why asserting on them here proved nothing.
+    // a reason. `group` IS on the wire (`ExperienceApiChoose` declares name, group, body); `reason`
+    // is not, on any merged branch. So asserting on the reason here would prove nothing, and the
+    // mock carries it only to show that an unknown field is ignored rather than trusted.
     const c = client();
     await expect(c.variation('checkout_v2', ctx, false)).resolves.toBe(true);
     await c.close();
@@ -55,6 +56,30 @@ describe('variation', () => {
 
     const c = client();
     await expect(c.variation('never_created', ctx, 'safe')).resolves.toBe('safe');
+    await c.close();
+  });
+
+  it('throws on a key the service would reject rather than returning the default', async () => {
+    // L2. The service declares `Set<@Pattern("^[a-zA-Z0-9_-]*$") String> names`, so a key with a
+    // dot, colon or space comes back a validation error — which `#chooseOrEmpty` absorbs into a
+    // warn and the caller's default, making a typo indistinguishable from an outage. No nock
+    // interceptor is registered here on purpose: if the SDK let one of these reach the wire,
+    // `disableNetConnect` would fail the test rather than let it pass quietly.
+    const c = client();
+    for (const bad of ['has.dot', 'has:colon', 'has space', 'has/slash']) {
+      await expect(c.variation(bad, ctx, 'd')).rejects.toThrow(TypeError);
+      await expect(c.variation(bad, ctx, 'd')).rejects.toThrow(/\^\[a-zA-Z0-9_-\]\+\$/);
+    }
+    await c.close();
+  });
+
+  it('accepts the characters the pattern allows', async () => {
+    nock(ORIGIN)
+      .post(CHOOSE_PATH)
+      .reply(200, { choices: [{ name: 'New_checkout-v2', body: 'yes' }] });
+
+    const c = client();
+    await expect(c.variation('New_checkout-v2', ctx, 'd')).resolves.toBe('yes');
     await c.close();
   });
 
@@ -101,22 +126,26 @@ describe('typed helpers', () => {
   });
 });
 
-describe('allFlags', () => {
+/**
+ * There is no read-everything call, and this is the test that keeps it that way.
+ *
+ * `POST /optimization/choose-api` publishes a Kafka exposure per experience it evaluates, and it
+ * evaluates EVERY eligible experience when `names` is omitted. So a convenience `allFlags()` marks
+ * the person exposed to every running server experiment (inflating every denominator uniformly,
+ * which reads as an experiment that stopped detecting rather than a broken one) and spends the
+ * `once` display budget for keys nobody rendered, after which `variation()` on those keys returns
+ * the caller's default forever. The request carries no exposure-suppression field, so the only
+ * lever the SDK has is declining to evaluate what nobody asked for.
+ */
+describe('there is no unbounded read', () => {
   afterEach(() => nock.cleanAll());
 
-  it('returns every key in one call', async () => {
-    nock(ORIGIN)
-      .post(CHOOSE_PATH)
-      .reply(200, {
-        choices: [
-          { name: 'a', body: 1, reason: 'targeted' },
-          { name: 'b', body: 2, reason: 'targeted' },
-        ],
-      });
-
+  it('does not expose allFlags', () => {
     const c = client();
-    await expect(c.allFlags({ userId: 'u-1' })).resolves.toEqual({ a: 1, b: 2 });
-    await c.close();
+    expect((c as unknown as Record<string, unknown>).allFlags).toBeUndefined();
+    expect(Object.getOwnPropertyNames(Object.getPrototypeOf(c))).not.toContain(
+      'allFlags',
+    );
   });
 });
 
@@ -199,10 +228,35 @@ describe('the choose request body', () => {
     expect(body.names).toEqual(['checkout_v2']);
   });
 
-  it('requests every flag by omitting names, not by sending an empty list', async () => {
-    const body = await bodySentBy((c) => c.allFlags({ userId: 'u' }));
+  it('always names the keys it evaluates, and never omits names', async () => {
+    // The C1/H1 guard on the wire itself. An omitted or emptied `names` makes the service
+    // evaluate — and record an exposure against — every eligible experience, so the assertion is
+    // that a bounded, non-empty list goes out on every evaluation. Kills a mutant that drops the
+    // field or empties the array: the service answers either way and the caller still gets a
+    // value, so nothing else in this suite would notice.
+    const body = await bodySentBy((c) =>
+      c.variation('checkout_v2', { userId: 'u' }, 'd'),
+    );
 
-    expect(body.names).toBeUndefined();
+    expect(body.names).toBeDefined();
+    expect(Array.isArray(body.names)).toBe(true);
+    expect((body.names as string[]).length).toBeGreaterThan(0);
+  });
+
+  it('sends sessionId when the caller supplies one', async () => {
+    // H2: without it the platform stores the literal "default", so `once_per_visit` degrades to
+    // "once, then never" and every exposure event is stamped "default".
+    const body = await bodySentBy((c) =>
+      c.variation('k', { userId: 'u', sessionId: 's-42' }, 'd'),
+    );
+
+    expect(body.sessionId).toBe('s-42');
+  });
+
+  it('omits sessionId rather than sending null when the caller has none', async () => {
+    const body = await bodySentBy((c) => c.variation('k', { userId: 'u' }, 'd'));
+
+    expect(Object.keys(body)).not.toContain('sessionId');
   });
 
   it("sends device 'all'", async () => {

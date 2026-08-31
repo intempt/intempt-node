@@ -25,7 +25,11 @@ jobs:
       - name: No SDK derives buckets locally (R36)
         run: node scripts/check-no-local-bucketing.mjs
         env:
-          GUARD_SRC: src
+          # `examples` too: a sample is the strongest recommendation an SDK makes, so a bucketing
+          # helper demonstrated there spreads further than one in `src`. `scripts` is deliberately
+          # NOT scanned -- the guard's own PATTERNS array names every primitive it looks for, so it
+          # would always match itself.
+          GUARD_SRC: src,examples
 
   test:
     runs-on: ubuntu-latest

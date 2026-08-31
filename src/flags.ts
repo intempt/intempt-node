@@ -21,6 +21,13 @@ import type { Transport } from './transport';
  *     answered, which is the only thing it exists to do. It returns when the serving contract
  *     carries a reason.
  *  4. Evaluation is REMOTE only. There is no local rule engine and no flag store to poll.
+ *  5. Every evaluation names the keys it wants. There is no "read everything" call. `POST
+ *     /optimization/choose-api` records a Kafka exposure for each experience it evaluates, and it
+ *     evaluates EVERY eligible experience when `names` is omitted -- so an unbounded read marks a
+ *     person exposed to every running server experiment in the project, and (for a `once` display)
+ *     permanently consumes their display budget for experiences nobody rendered. Requesting keys
+ *     the caller actually reads is what keeps an evaluation and an exposure the same event. See
+ *     `#choose` for the platform change that would let a read-everything call return.
  *
  * A server SDK is an `api`-channel consumer: it receives a value and branches on it in code. The
  * `web` channel, where a change is applied against the DOM without the caller branching, is
@@ -35,8 +42,27 @@ export interface FlagContext extends Identifiers {
   /**
    * The anonymous/device identifier, when the caller has one. Supplying the same value before and
    * after a person signs in is what keeps their assignment stable across the transition.
+   *
+   * **When supplied, this is the identifier the platform buckets on and `userId` is ignored.**
+   * `ExperienceChooserService.buildAudienceRequest` resolves a PROFILE entity keyed on `profileId`
+   * whenever it is non-blank, and only falls through to a USER entity keyed on `userId` when it is
+   * not. So this is a precedence, not a hint: pass both and assignment is device-scoped, and the
+   * day the caller stops passing it every person re-buckets in one deploy. Pass ONE identifier and
+   * hold it constant.
    */
   profileId?: string;
+
+  /**
+   * The caller's session identifier.
+   *
+   * **Required for `once_per_visit` experiences to behave per-session.** The platform stores the
+   * session a variant was displayed in and re-serves only when a later call carries a different
+   * one; with no `sessionId` it stores the literal `"default"`, which never differs from itself, so
+   * `once_per_visit` collapses to "once, then never" and every Kafka exposure is stamped
+   * `"default"`. A server SDK may genuinely have no session concept -- in that case leave it unset
+   * and know that `once_per_visit` degrades to `once` on this channel, rather than inheriting it.
+   */
+  sessionId?: string;
 }
 
 /** Internal only -- see the note on `#detail`. Not exported from the package. */
@@ -59,6 +85,13 @@ export interface FlagsDeps {
 
 /** A response the service did not answer is reported as such rather than guessed at. */
 const UNANSWERED: FlagReason = 'off';
+
+/**
+ * The platform's own key pattern, from `ExperienceApiChooseRequest`:
+ * `Set<@Pattern(regexp = "^[a-zA-Z0-9_-]*$") String> names`. Tightened to `+` here because a blank
+ * key is already rejected above.
+ */
+const KEY_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 export class Flags {
   readonly #deps: FlagsDeps;
@@ -86,6 +119,14 @@ export class Flags {
     if (typeof key !== 'string' || !key.trim()) {
       throw new TypeError('variation: key is required');
     }
+    if (!KEY_PATTERN.test(key)) {
+      // A key the service will reject is a programming error, and it must fail here rather than
+      // 400 downstream: `#chooseOrEmpty` absorbs a validation error into a warn and the caller's
+      // default, which makes a typo'd key indistinguishable from an outage.
+      throw new TypeError(
+        `variation: key must match ${KEY_PATTERN.source} (the platform's own pattern); got "${key}"`,
+      );
+    }
     if (defaultValue === undefined) {
       // Required, not optional. A caller who omits it has no answer during an outage, and the
       // failure surfaces far from here as an undefined branch.
@@ -108,15 +149,6 @@ export class Flags {
     return value;
   }
 
-  async all(context: FlagContext): Promise<Record<string, unknown>> {
-    const choices = await this.#chooseOrEmpty(context, undefined);
-    const out: Record<string, unknown> = {};
-    for (const choice of choices) {
-      if (choice.name) out[choice.name] = choice.body;
-    }
-    return out;
-  }
-
   /**
    * A transport failure returns no choices rather than throwing.
    *
@@ -126,10 +158,7 @@ export class Flags {
    * is for. A validation mistake (missing key, missing default) still throws, because that is a
    * programming error the caller can fix and not a runtime condition to absorb.
    */
-  async #chooseOrEmpty(
-    context: FlagContext,
-    names: string[] | undefined,
-  ): Promise<RawChoice[]> {
+  async #chooseOrEmpty(context: FlagContext, names: string[]): Promise<RawChoice[]> {
     try {
       return await this.#choose(context, names);
     } catch (error) {
@@ -140,7 +169,31 @@ export class Flags {
     }
   }
 
-  async #choose(context: FlagContext, names: string[] | undefined): Promise<RawChoice[]> {
+  /**
+   * `names` is REQUIRED and is never omitted.
+   *
+   * Omitting it is not "ask for everything" -- it is "evaluate everything", and on this endpoint an
+   * evaluation IS an exposure. `ExperienceChooserService.chooseApi` passes a null `names` straight
+   * into `retrieveApiExperiences`, which returns every api-channel experience the person is
+   * eligible for; each one flows through `VariantChooserService.chooseVariants` -> `choose` ->
+   * `publishAndParse` -> `ChooserHelper.publishEvent` -> `kafkaPublisher.publishExperienceChoose`
+   * on EVERY call, not only on first assignment. Two things break at once:
+   *
+   *  - every running server experiment's denominator fills with people who never saw the variant,
+   *    uniformly across arms, so it reads as an experiment that stopped detecting rather than as a
+   *    broken one; and
+   *  - `ChooserHelper.display` calls `saveSession` for each variant, so a `once` experience is
+   *    marked displayed for keys nobody rendered, `allowOnce` is false from then on, the experience
+   *    drops out of `choices` forever, and the caller gets their default indistinguishably from an
+   *    outage.
+   *
+   * The request carries no exposure-suppression field -- `ExperienceApiChooseRequest` is
+   * `{identification, names, groups, device, sessionId, productId, timestamp}` -- so the SDK cannot
+   * opt out of recording, only decline to evaluate what nobody asked for. **A read-everything call
+   * becomes possible when the platform can evaluate without publishing** (an `exposure: false` on
+   * this request, or a separate non-recording route). Until then, every read names its keys.
+   */
+  async #choose(context: FlagContext, names: string[]): Promise<RawChoice[]> {
     const { sourceId } = this.#deps.config();
     const body = compact({
       identification: compact({
@@ -150,6 +203,7 @@ export class Flags {
       }),
       names,
       device: 'all',
+      sessionId: context?.sessionId,
     });
 
     const response = await this.#deps.transport.post<{ choices?: RawChoice[] }>(

@@ -240,10 +240,16 @@ export class SDK {
    * They still throw rather than returning an empty array: [] would read as "no variant assigned"
    * and quietly disable a caller's experiment instead of telling them where it went.
    *
-   * The previous message said assignment was unavailable in a server SDK at all. That was true of
-   * the wire as it stood - an unanswered request and a deliberate off state were the same absent
-   * entry, so a caller could never branch safely. The serving contract now carries a reason, so the
-   * capability is available and the message points at it.
+   * The previous message said assignment was unavailable in a server SDK at all. That is no longer
+   * true: `POST /optimization/choose-api` serves a body by key on the `api` channel, and
+   * `{name, group, body}` is everything `variation()` needs, so the capability is available and the
+   * message points at it.
+   *
+   * What is still NOT available is the ability to explain an absence. The serving response carries
+   * no `reason` field - `ExperienceApiChoose` on `audience-service` main is `name`, `group`, `body`
+   * and nothing more - so an unanswered request and a deliberate off state remain the same absent
+   * entry. That is why `variationDetail` stays internal (see `flags.ts`), and it is not why these
+   * four were superseded.
    */
   static #experiencesRemoved(method: string): never {
     throw new Error(

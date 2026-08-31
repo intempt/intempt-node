@@ -159,10 +159,10 @@ describe('legacy SDK: forwarding', () => {
     // Returning [] would read as "no variant assigned" and silently disable a caller's experiment.
     // Throwing tells them where it went.
     //
-    // The message used to say assignment was unavailable in a server SDK at all. That was true of
-    // the wire as it stood - an unanswered request and a deliberate off state were the same absent
-    // entry. The serving contract now carries a reason, so the capability exists and the message
-    // names its replacement instead of a dead end.
+    // The message used to say assignment was unavailable in a server SDK at all. It is available:
+    // the endpoint serves a body by key, and {name, group, body} is everything variation() needs.
+    // That - not a reason field - is why the message names its replacement instead of a dead end.
+    // The serving response still carries NO reason, which is why variationDetail stays internal.
     const sdk = legacy();
     for (const method of [
       'chooseExperimentsByGroups',
