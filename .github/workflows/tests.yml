@@ -10,6 +10,27 @@ permissions:
   contents: read
 
 jobs:
+  # R36: the platform decides which variant a person gets. An SDK that derives its own
+  # bucket can disagree with the server, and the same person is then served differently
+  # depending on the channel they arrive through — silently, because each side is
+  # internally consistent. Runs without install so it cannot be skipped.
+  bucketing:
+    name: Server-only bucketing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: No SDK derives buckets locally (R36)
+        run: node scripts/check-no-local-bucketing.mjs
+        env:
+          # `examples` too: a sample is the strongest recommendation an SDK makes, so a bucketing
+          # helper demonstrated there spreads further than one in `src`. `scripts` is deliberately
+          # NOT scanned -- the guard's own PATTERNS array names every primitive it looks for, so it
+          # would always match itself.
+          GUARD_SRC: src,examples
+
   test:
     runs-on: ubuntu-latest
     strategy:

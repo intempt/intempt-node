@@ -174,9 +174,7 @@ describe('the legacy shim names the exact helper that moved', () => {
     // would point a caller at a function they never called.
     const sdk = new SDK(ORG, PROJECT, API_KEY, SOURCE);
     sdk.v2.setConfig({ host: HOST });
-    expect(() => sdk[method]()).toThrow(
-      new RegExp(`^${method} is not available in a server SDK\\.`),
-    );
+    expect(() => sdk[method]()).toThrow(new RegExp(`^${method} was removed in 2\\.0\\.`));
     void sdk.close();
   });
 

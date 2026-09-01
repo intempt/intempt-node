@@ -113,6 +113,33 @@ async function main(): Promise<void> {
         `${JSON.stringify(feed).slice(0, 50)}`,
     );
 
+    // ---- flags ----
+    // Ask for a KEY. Whether it names an experiment, a personalization or a flag is the
+    // platform's business, and the method name does not change when that changes.
+    //
+    // ONE identifier, held constant. `profileId` outranks `userId` on the platform, so passing
+    // both means assignment is device-scoped and `userId` is ignored — and the day you stop
+    // passing it, every person re-buckets in a single deploy. Pick the one you can keep stable.
+    const context = { userId };
+
+    // The default is not optional, and it is a real decision: it is what runs when Intempt cannot
+    // be reached. Choose the behaviour you already have.
+    const cta = await intempt.stringVariation('pricing_cta', context, 'Get started');
+    log(`stringVariation pricing_cta -> ${cta}`);
+
+    const checkout = await intempt.boolVariation('new_checkout', context, false);
+    log(`boolVariation new_checkout -> ${checkout}`);
+
+    // Read the keys you use, one call per key. There is no read-everything call: evaluating a
+    // key records an exposure against it, so asking for every key marks this person exposed to
+    // every running experiment in the project.
+
+    // What happens when Intempt is unreachable. No throw, no null — the value you chose.
+    const offline = Intempt.init({ ...baseConfig('127.0.0.1:1'), timeout: 200 });
+    const fallback = await offline.stringVariation('pricing_cta', context, 'Get started');
+    log(`during an outage -> ${fallback} (your default, no throw)`);
+    await offline.close();
+
     // ---- privacy ----
     intempt.optOut();
     await intempt.track('should_not_send', { userId });

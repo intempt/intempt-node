@@ -27,6 +27,24 @@ rm -f intempt-*.tgz
 TARBALL="$(npm pack --silent)"
 echo "    $TARBALL"
 
+# The sample pins the tarball BY FILENAME, which carries the version, so a version bump silently
+# points it at a file that no longer exists and the first `npm install` below dies with a bare
+# exit 254. That is exactly what happened on the 2.0.0 -> 2.1.0 bump: unit tests, typecheck, lint
+# and the build all passed and this step failed alone. Keeping the pin in step with what was just
+# packed makes the bump a one-file change again.
+echo "==> pointing the sample at the tarball just packed"
+node -e '
+  const fs = require("fs");
+  const path = process.argv[1];
+  const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+  const want = "file:../../" + process.argv[2];
+  if (pkg.dependencies["intempt-nodejs-sdk"] !== want) {
+    pkg.dependencies["intempt-nodejs-sdk"] = want;
+    fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+    console.log("    updated the pin to " + want);
+  }
+' "$EXAMPLE/package.json" "$TARBALL"
+
 echo "==> installing the tarball into examples/basic"
 cd "$EXAMPLE"
 rm -rf node_modules package-lock.json

@@ -25,6 +25,21 @@ const PUBLIC_METHODS = [
   'close',
   'setConfig',
   'recommend',
+  // The cross-SDK flag surface. Listed one by one on purpose: this gate exists so a new public
+  // method cannot appear without someone deciding it should be public.
+  //
+  // `allFlags` is absent deliberately and this list is what enforces it: evaluating without
+  // `names` records a Kafka exposure against every eligible experience, so a read-everything call
+  // is a project-wide write. Re-adding it fails here.
+  'variation',
+  'boolVariation',
+  'stringVariation',
+  'numberVariation',
+  'jsonVariation',
+  // Present by ruling (Beso, 2026-09-01) so the surface matches php, python, swift, java and
+  // reactnative. It is a documented hazard, not a convenience -- see docs/CONVENTIONS.md.
+  'allFlags',
+  'waitForInitialization',
 ];
 const PUBLIC_GETTERS = ['config', 'buffered'];
 const PUBLIC_NAMESPACES = ['consent', 'ecommerce'];

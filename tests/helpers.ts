@@ -16,6 +16,7 @@ export const BASIC = Buffer.from('pfx0123456789abcdef:sec0123456789abcdef').toSt
 export const TRACK_PATH = `/v1/${ORG}/projects/${PROJECT}/sources/${SOURCE}/track`;
 export const TRACK_PATH_NO_SOURCE = `/v1/${ORG}/projects/${PROJECT}/track`;
 export const CONSENT_PATH = `/v1/${ORG}/projects/${PROJECT}/consents/data`;
+export const CHOOSE_PATH = `/v1/${ORG}/projects/${PROJECT}/optimization/choose-api`;
 
 export function feedPath(id: string): string {
   return `/v1/${ORG}/projects/${PROJECT}/feeds/${id}/data`;

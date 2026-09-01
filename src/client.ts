@@ -6,6 +6,8 @@ import { Ingest } from './ingest';
 import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
 import { Recommend } from './recommend';
+import { Flags } from './flags';
+import type { FlagContext } from './flags';
 import type {
   AliasOptions,
   GroupOptions,
@@ -28,6 +30,7 @@ export class IntemptClient {
   readonly consent: Consent;
   readonly ecommerce: Ecommerce;
   readonly #recommend: Recommend;
+  readonly #flags: Flags;
 
   constructor(config: IntemptConfig) {
     this.#resolved = resolveConfig(config);
@@ -65,6 +68,7 @@ export class IntemptClient {
     });
     this.ecommerce = new Ecommerce(this.#ingest);
     this.#recommend = new Recommend({ transport: this.#transport, config: configRef });
+    this.#flags = new Flags({ transport: this.#transport, config: configRef });
   }
 
   // ---- ingest, lifted to the top level so the common calls stay short ----
@@ -110,6 +114,103 @@ export class IntemptClient {
     // a caller's `.catch()` and land as an uncaught exception instead.
     this.#assertOpen();
     return this.#recommend.fetch(options);
+  }
+
+  // ---- flags ----
+
+  /**
+   * The value assigned to this person for `key`, or `defaultValue` if the service did not answer.
+   *
+   * Ask for a key, never a mode. Whether the key names an experiment, a personalization or a flag
+   * is the platform's business - its serving query filters on channel and status and never on mode.
+   */
+  async variation<T>(key: string, context: FlagContext, defaultValue: T): Promise<T> {
+    this.#assertOpen();
+    return this.#flags.value<T>(key, context, defaultValue);
+  }
+
+  // `allFlags()` is deliberately NOT exposed.
+  //
+  // It reads like a read and behaves like a write. `POST /optimization/choose-api` records a Kafka
+  // exposure per experience it evaluates, and omitting `names` makes it evaluate every experience
+  // the person is eligible for - so one convenience call marks them exposed to every running
+  // server experiment in the project, and permanently spends the `once` display budget for keys
+  // nobody rendered. Both effects are silent: the experiments keep running and simply stop
+  // detecting, and the later `variation('that_key', ...)` returns the caller's default forever.
+  //
+  // There is no request field that suppresses recording, so this cannot be fixed in the SDK. It
+  // returns when the platform can evaluate without publishing an exposure - an `exposure: false`
+  // on the choose request, or a separate non-recording route. Until then, read the keys you use:
+  // `variation(key, context, defaultValue)`, one call per key.
+  //
+  // Do not re-add it, and do not document it as available. `tests/encapsulation.test.ts` and
+  // `tests/flags.test.ts` both fail if it comes back.
+
+  async boolVariation(
+    key: string,
+    context: FlagContext,
+    defaultValue: boolean,
+  ): Promise<boolean> {
+    const value = await this.variation<unknown>(key, context, defaultValue);
+    // A served value of the wrong type is a misconfiguration, not something to coerce: `!!"false"`
+    // is true, and a silent coercion would be indistinguishable from a correct answer.
+    return typeof value === 'boolean' ? value : defaultValue;
+  }
+
+  async stringVariation(
+    key: string,
+    context: FlagContext,
+    defaultValue: string,
+  ): Promise<string> {
+    const value = await this.variation<unknown>(key, context, defaultValue);
+    return typeof value === 'string' ? value : defaultValue;
+  }
+
+  async numberVariation(
+    key: string,
+    context: FlagContext,
+    defaultValue: number,
+  ): Promise<number> {
+    const value = await this.variation<unknown>(key, context, defaultValue);
+    return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue;
+  }
+
+  async jsonVariation<T extends object>(
+    key: string,
+    context: FlagContext,
+    defaultValue: T,
+  ): Promise<T> {
+    const value = await this.variation<unknown>(key, context, defaultValue);
+    return value !== null && typeof value === 'object' ? (value as T) : defaultValue;
+  }
+
+  /**
+   * Every key assigned to this person, in one call.
+   *
+   * ⚠ **Not for a request path.** It names no keys, so the service evaluates every experience the
+   * person is eligible for — and on this endpoint an evaluation is an **exposure**. That inflates
+   * the denominator of every running server experiment with people who saw nothing, and spends the
+   * `once` display budget for keys nobody rendered, after which `variation()` on those keys returns
+   * your default forever. Two keys on a request path is two `variation()` calls, not one
+   * `allFlags()`. Use this to enumerate: a debug endpoint, an admin view, a one-off audit.
+   *
+   * See `docs/CONVENTIONS.md` for the full trace and the platform change that would make it safe.
+   */
+  async allFlags(context: FlagContext): Promise<Record<string, unknown>> {
+    this.#assertOpen();
+    return this.#flags.all(context);
+  }
+
+  /**
+   * Resolves immediately.
+   *
+   * Present so the cross-SDK surface is the same everywhere, and so a caller porting from an SDK
+   * that polls a local flag store does not have to remove the call. Evaluation here is remote: each
+   * `variation()` is a request, so there is no local state to wait for. It is deliberately not a
+   * no-op that swallows a timeout argument silently - the doc says why there is nothing to wait for.
+   */
+  async waitForInitialization(_timeoutMs?: number): Promise<void> {
+    this.#assertOpen();
   }
 
   // ---- privacy ----

@@ -3,6 +3,69 @@
 All notable changes to this package are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] — 2026-09-01
+
+### Added — reading flags
+
+`variation` and `variationDetail`'s value half, reached through `client.variation(key, context,
+defaultValue)`, plus the `FlagContext` type. Evaluation is server-side: the SDK sends an identity
+and the keys it wants to `/optimization/choose-api` and returns what comes back. It derives nothing
+locally, which is enforced by a CI guard rather than by convention — an SDK cannot re-derive a draw
+it did not witness, so any client-side bucket arithmetic would disagree with the platform for some
+people, silently.
+
+Every read returns the caller's default when the service cannot answer, in the caller's own type.
+`defaultValue` is required for exactly that reason: a flag read sits on the request path, and a
+personalization outage must not become an outage of the thing being personalized.
+
+`allFlags(context)` returns every key assigned to that person as a name -> value map, matching
+`allFlags` in php, swift, java and reactnative and `all_flags` in python.
+
+> ⚠ **`allFlags()` is a hazard, not a convenience, and it does not belong on a request path.** It
+> sends no `names`, so the service evaluates every experience the person is eligible for — and on
+> this endpoint an evaluation **is an exposure**. Two costs, both silent: the denominator of every
+> running server experiment fills with people who were never shown anything (uniformly across arms,
+> so it reads as an experiment that stopped detecting rather than a broken one), and a `once` /
+> `once_per_visit` experience is marked displayed for keys nobody rendered, after which
+> `variation()` on those keys returns your default **forever**, indistinguishably from an outage.
+>
+> Use it to enumerate — a debug endpoint, an admin view, a one-off audit. **Two keys on a request
+> path is two `variation()` calls, not one `allFlags()`.** The request carries no
+> exposure-suppression field (`ExperienceApiChooseRequest` is `{identification, names, groups,
+device, sessionId, productId, timestamp}`), so no SDK can make this safe; that needs an
+> `exposure: false` on `POST /optimization/choose-api`, or a separate non-recording route.
+
+### Deliberately absent
+
+- **`variationDetail()` as a public method.** It would carry a `reason`, and the serving response
+  does not send one, so the only honest reason this SDK could return is "unknown" for every call.
+
+### Validated at the call site, not absorbed
+
+A flag read returns your default when Intempt cannot answer. It does **not** do that for a mistake
+you can fix, because absorbing one produces an integration that looks healthy while every key reads
+its default forever:
+
+- **A context the service cannot resolve now throws.** It needs either a `userId`, or a `profileId`
+  together with a `sourceId` configured on the client. An empty context, a blank `userId`, a
+  `profileId` with no configured `sourceId`, and an absent context all used to reach the service, be
+  rejected there, and come back as a silent default.
+- **`accountId` is refused explicitly.** `FlagContext extends Identifiers`, so TypeScript accepted
+  it while `#choose` sent only `userId`/`profileId`/`sourceId` — an account-only caller was
+  type-checked, silently dropped, and served defaults forever. The error now says so by name.
+- **A key must match the platform's own pattern**, so a key the service would answer with a 400
+  fails at the call site instead.
+
+### Fixed
+
+- `scripts/check-no-local-bucketing.mjs` reported success on a tree it had never read: a missing
+  source root produced zero files, zero breaches and exit 0, so a `src/` rename or a typo in the
+  workflow's own `GUARD_SRC` would have turned the guard job green while it checked nothing. A
+  missing root and a zero-file scan are both errors now, reported before the allowlist checks, and
+  the pass line states the file count.
+- The guard's failure message cited **`R36`**, which does not resolve in `brain` — the only `R36`
+  there is an unrelated i18n rule. Corrected to `EXP-ASSIGN-001..005`, which do resolve.
+
 ## [2.0.0] — 2026-08-12
 
 Rebuilt on a Mixpanel-derived core (see `NOTICE`). The surface is now
