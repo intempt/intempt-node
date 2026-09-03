@@ -172,12 +172,6 @@ export interface GroupOptions extends Identifiers, NoProfileId {
   timestamp?: Date | number;
 }
 
-export interface AliasOptions extends Identifiers, NoProfileId {
-  userId: string;
-  previousUserId: string;
-  timestamp?: Date | number;
-}
-
 export interface ConsentOptions extends NoProfileId {
   userId?: string;
   category?: string;
@@ -220,7 +214,6 @@ export interface WirePayloadItem {
   data?: Properties;
   userAttributes?: Properties;
   accountAttributes?: Properties;
-  anotherUserId?: string;
 }
 
 export interface WireEvent {

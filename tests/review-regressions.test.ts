@@ -148,8 +148,6 @@ describe('regression: recommend must not let an empty userId beat accountId', ()
 describe('regression: blank identifiers never reach the wire', () => {
   it.each([
     ['group accountId', () => client().group({ userId: 'u', accountId: '   ' })],
-    ['alias userId', () => client().alias({ userId: '  ', previousUserId: 'p' })],
-    ['alias previousUserId', () => client().alias({ userId: 'u', previousUserId: ' ' })],
     ['consent userId', () => client().consent.grant({ userId: '   ' })],
   ])('%s', async (_label, call) => {
     await expect(call()).rejects.toThrow(/non-empty string/);

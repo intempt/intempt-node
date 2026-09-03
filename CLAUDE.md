@@ -8,10 +8,10 @@ than obeyed blindly.
 
 `intempt` — the server-side Node SDK. **Data in, decisions out, nothing else.**
 
-| Direction | Surface                                                                   |
-| --------- | ------------------------------------------------------------------------- |
-| in        | `track` `trackBatch` `identify` `group` `alias` `consent.*` `ecommerce.*` |
-| out       | `recommend`                                                               |
+| Direction | Surface                                                           |
+| --------- | ----------------------------------------------------------------- |
+| in        | `track` `trackBatch` `identify` `group` `consent.*` `ecommerce.*` |
+| out       | `recommend`                                                       |
 
 Configuration and analysis operations belong to `@intempt/cli` and
 `@intempt/mcp-server`, which already carry ~202 of them. If an operation is not
@@ -38,8 +38,9 @@ identifiers are deliberately absent:
   profiles merge.
 
 Identity merge is not exposed for the same reason, plus it is irreversible and
-has no inverse endpoint anywhere in the platform. `alias()` is the declarative
-path: declare identity, let the platform resolve it.
+has no inverse endpoint anywhere in the platform. There is no alias surface
+either: declare identity with `identify()` and let the platform resolve it from
+shared identifiers.
 
 ## Wire-format rules that have already caused bugs
 

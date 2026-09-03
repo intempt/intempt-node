@@ -156,18 +156,13 @@ describe('ingest: reserved names', () => {
     );
   });
 
-  it('uses Identify for identify, group and alias', async () => {
-    const bodies = capture(TRACK_PATH, 3);
+  it('uses Identify for identify and group', async () => {
+    const bodies = capture(TRACK_PATH, 2);
     const c = client();
     await c.identify({ userId: 'u1' });
     await c.group({ userId: 'u1', accountId: 'a1' });
-    await c.alias({ userId: 'u1', previousUserId: 'u0' });
 
-    expect(bodies.map((b) => b.track[0]!.name)).toEqual([
-      'Identify',
-      'Identify',
-      'Identify',
-    ]);
+    expect(bodies.map((b) => b.track[0]!.name)).toEqual(['Identify', 'Identify']);
   });
 
   it('allows an explicit event name on identify and group', async () => {
@@ -177,23 +172,6 @@ describe('ingest: reserved names', () => {
     await c.group({ userId: 'u1', accountId: 'a1', event: 'joined org' });
 
     expect(bodies.map((b) => b.track[0]!.name)).toEqual(['signed up', 'joined org']);
-  });
-});
-
-describe('ingest: alias', () => {
-  it('sends previousUserId as anotherUserId', async () => {
-    const bodies = capture();
-    await client().alias({ userId: 'u-new', previousUserId: 'u-old' });
-
-    const item = bodies[0]!.track[0]!.payload[0]!;
-    expect(item.userId).toBe('u-new');
-    expect(item.anotherUserId).toBe('u-old');
-  });
-
-  it('requires both identities', async () => {
-    await expect(client().alias({ userId: 'u1', previousUserId: '' })).rejects.toThrow(
-      /previousUserId must be a non-empty string/,
-    );
   });
 });
 

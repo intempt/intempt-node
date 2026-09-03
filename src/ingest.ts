@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type {
-  AliasOptions,
   GroupOptions,
   IdentifyOptions,
   ResolvedConfig,
@@ -33,7 +32,6 @@ type WithProfileId<T> = Omit<T, 'profileId'> & { profileId?: string };
 type InternalTrackOptions = WithProfileId<TrackOptions>;
 type InternalIdentifyOptions = WithProfileId<IdentifyOptions>;
 type InternalGroupOptions = WithProfileId<GroupOptions>;
-type InternalAliasOptions = WithProfileId<AliasOptions>;
 
 /** Reserved event name the platform interprets as an identity write. */
 export const IDENTIFY_EVENT = 'Identify';
@@ -246,23 +244,6 @@ export class Ingest {
       }),
     ]);
   }
-
-  /**
-   * Declares two user identities as the same person and lets the platform
-   * resolve them. This is the supported path; the destructive
-   * `/users/merge` endpoint is deliberately not exposed here.
-   */
-  async alias(options: InternalAliasOptions): Promise<void> {
-    assertNonBlank(options?.userId, 'alias', 'userId');
-    assertNonBlank(options?.previousUserId, 'alias', 'previousUserId');
-    const { previousUserId, ...ids } = options;
-    const event = this.#buildEvent(IDENTIFY_EVENT, ids);
-    const item = event.payload[0];
-    if (item) {
-      item.anotherUserId = previousUserId;
-    }
-    await this.#submit([event]);
-  }
 }
 
 function assertEventName(event: unknown, method: string): void {
@@ -271,7 +252,7 @@ function assertEventName(event: unknown, method: string): void {
   }
   if (event === IDENTIFY_EVENT) {
     throw new TypeError(
-      `${method}: "${IDENTIFY_EVENT}" is reserved; use identify(), group() or alias()`,
+      `${method}: "${IDENTIFY_EVENT}" is reserved; use identify() or group()`,
     );
   }
 }

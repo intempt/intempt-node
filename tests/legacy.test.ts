@@ -108,12 +108,6 @@ describe('legacy SDK: forwarding', () => {
     expect(bodies[3]!.track[0]!.payload[0]!.data).toEqual({ winner: 'Stark' });
   });
 
-  it('maps alias onto anotherUserId', async () => {
-    const bodies = capture();
-    await legacy().alias('p1', 'john', 'aegon');
-    expect(bodies[0]!.track[0]!.payload[0]!.anotherUserId).toBe('aegon');
-  });
-
   it('maps the product helpers', async () => {
     const bodies = capture(3);
     const sdk = legacy();

@@ -10,7 +10,6 @@ export type { FlagContext } from './flags';
 export { SDK } from './legacy';
 
 export type {
-  AliasOptions,
   BatchOptions,
   ConsentOptions,
   GroupOptions,

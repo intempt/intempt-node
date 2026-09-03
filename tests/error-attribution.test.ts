@@ -90,15 +90,6 @@ describe('ingest reports the method the caller actually invoked', () => {
     scope.done();
   });
 
-  it('alias names alias, and says which of the two identities is blank', async () => {
-    await expect(client().alias({ userId: ' ', previousUserId: 'p' })).rejects.toThrow(
-      /^alias: userId must be a non-empty string$/,
-    );
-    await expect(client().alias({ userId: 'u', previousUserId: ' ' })).rejects.toThrow(
-      /^alias: previousUserId must be a non-empty string$/,
-    );
-  });
-
   it.each([
     [
       'identify',
@@ -130,7 +121,7 @@ describe('ingest reports the method the caller actually invoked', () => {
 
   it('track names the reserved event it refused', async () => {
     await expect(client().track('Identify', { userId: 'u' })).rejects.toThrow(
-      /^track: "Identify" is reserved; use identify\(\), group\(\) or alias\(\)$/,
+      /^track: "Identify" is reserved; use identify\(\) or group\(\)$/,
     );
   });
 });
