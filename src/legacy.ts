@@ -151,11 +151,6 @@ export class SDK {
     );
   }
 
-  async alias(profileId: string, userId: string, anotherUserId: string): Promise<void> {
-    await this.#client.alias(
-      withProfileId(profileId, { userId, previousUserId: anotherUserId }),
-    );
-  }
 
   async consents(
     profileId: string,

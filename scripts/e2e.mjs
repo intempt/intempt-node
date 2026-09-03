@@ -104,7 +104,7 @@ const intempt = Intempt.init(clientConfig);
 
 // --- readiness --------------------------------------------------------------
 const inputs = [
-  ['stable userId', USER_ID, 'identify, track, group, alias, consent'],
+  ['stable userId', USER_ID, 'identify, track, group, consent'],
   ['accountId (optional)', ACCOUNT_ID, 'group — created automatically if absent'],
   ['feed id', FEED_ID, 'recommend'],
   ['productId', PRODUCT_ID, 'ecommerce.*'],
@@ -180,7 +180,6 @@ await step('group (creates the account if absent)', () =>
   intempt.group({ userId, accountId }),
 );
 
-await step('alias', () => intempt.alias({ userId, previousUserId: `${userId}-anon` }));
 
 if (PRODUCT_ID) {
   await step('ecommerce.productViewed (catalog product)', () =>

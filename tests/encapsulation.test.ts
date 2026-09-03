@@ -17,7 +17,6 @@ const PUBLIC_METHODS = [
   'trackBatch',
   'identify',
   'group',
-  'alias',
   'optIn',
   'optOut',
   'isOptedIn',

@@ -9,7 +9,6 @@ import { Recommend } from './recommend';
 import { Flags } from './flags';
 import type { FlagContext } from './flags';
 import type {
-  AliasOptions,
   GroupOptions,
   IdentifyOptions,
   IntemptConfig,
@@ -89,9 +88,6 @@ export class IntemptClient {
     return this.#ingest.group(options);
   }
 
-  alias(options: AliasOptions): Promise<void> {
-    return this.#ingest.alias(options);
-  }
 
   // ---- decisions out ----
 

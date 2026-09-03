@@ -12,7 +12,7 @@ import {
 setupNock();
 
 describe('optOut gates every write path', () => {
-  it('suppresses track, trackBatch, identify, group and alias', async () => {
+  it('suppresses track, trackBatch, identify and group', async () => {
     const c = client();
     c.optOut();
 
@@ -20,7 +20,6 @@ describe('optOut gates every write path', () => {
     await c.trackBatch([{ event: 'a', userId: 'u1' }]);
     await c.identify({ userId: 'u1' });
     await c.group({ userId: 'u1', accountId: 'a1' });
-    await c.alias({ userId: 'u1', previousUserId: 'u0' });
 
     // nock.disableNetConnect means any real request would have thrown.
     expect(nock.pendingMocks()).toEqual([]);

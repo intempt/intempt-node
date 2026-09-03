@@ -10,7 +10,7 @@ than obeyed blindly.
 
 | Direction | Surface                                                                   |
 | --------- | ------------------------------------------------------------------------- |
-| in        | `track` `trackBatch` `identify` `group` `alias` `consent.*` `ecommerce.*` |
+| in        | `track` `trackBatch` `identify` `group` `consent.*` `ecommerce.*` |
 | out       | `recommend`                                                               |
 
 Configuration and analysis operations belong to `@intempt/cli` and
@@ -38,8 +38,9 @@ identifiers are deliberately absent:
   profiles merge.
 
 Identity merge is not exposed for the same reason, plus it is irreversible and
-has no inverse endpoint anywhere in the platform. `alias()` is the declarative
-path: declare identity, let the platform resolve it.
+has no inverse endpoint anywhere in the platform. There is no alias surface
+either: declare identity with `identify()` and let the platform resolve it from
+shared identifiers.
 
 ## Wire-format rules that have already caused bugs
 

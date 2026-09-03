@@ -3,6 +3,32 @@
 All notable changes to this package are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Removed — BREAKING
+
+- **`alias()` is gone**, along with the `AliasOptions` type and its
+  `previousUserId` option, the `anotherUserId` field on `WirePayloadItem`, and
+  `SDK.alias()` on the 1.x shim. Calling any of them is now a `TypeError`.
+
+  Linking two user identities is the platform's job, not the caller's, and the
+  platform already does it: two identities that ever share an identifier — the
+  same device, the same email, the same phone — converge on one profile with
+  nobody declaring the link. `alias()` only ever added reach for two user ids
+  that share nothing at all, which is an id-scheme migration and belongs in a
+  server-side backfill rather than in a method any integration can call by
+  mistake. A wrong call permanently fuses two real people, and the merge has no
+  inverse.
+
+  The reserved-name error on `track()` changes with it, from
+  `use identify(), group() or alias()` to `use identify() or group()`.
+
+  **There is no replacement, and most callers need none.** `identify({ userId })`
+  already stitches a known user to their prior activity. A second id you hold for
+  a known user (CRM id, billing id) belongs in `traits`/`userAttributes`, where
+  email and phone are resolution keys in their own right. A whole-user-base
+  re-keying should be run as a server-side backfill.
+
 ## [2.1.0] — 2026-09-01
 
 ### Added — reading flags

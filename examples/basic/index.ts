@@ -68,8 +68,6 @@ async function main(): Promise<void> {
     });
     log('group');
 
-    await intempt.alias({ userId, previousUserId: 'anon-abc123' });
-    log('alias');
 
     // ---- events ----
     await intempt.track('pricing_viewed', {

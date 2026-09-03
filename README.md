@@ -77,7 +77,6 @@ this safe in Lambda and other short-lived processes.
 | `trackBatch(events)`               | `Promise<void>`    | `POST …/track`, chunked              |
 | `identify(options)`                | `Promise<void>`    | `POST …/track` (reserved `Identify`) |
 | `group(options)`                   | `Promise<void>`    | `POST …/track` (reserved `Identify`) |
-| `alias(options)`                   | `Promise<void>`    | `POST …/track` (reserved `Identify`) |
 | `consent.grant(options)`           | `Promise<void>`    | `POST …/consents/data`               |
 | `consent.revoke(options)`          | `Promise<void>`    | `POST …/consents/data`               |
 | `ecommerce.productViewed(options)` | `Promise<void>`    | `POST …/track`                       |
@@ -148,8 +147,8 @@ Two platform identifiers are deliberately **not** exposed:
   profiles merge.
 
 If you need to tie server events to a visitor's pre-login browser activity,
-send the `userId` as soon as you know it and let the platform stitch. Same
-reasoning as [`alias()`](#sending-data): declare identity, don't manage it.
+send the `userId` as soon as you know it and let the platform stitch:
+declare identity, don't manage it.
 
 ## Sending data
 
@@ -171,7 +170,6 @@ await intempt.group({
   accountId: 'acme',
   attributes: { tier: 'enterprise' },
 });
-await intempt.alias({ userId: 'u1', previousUserId: 'anon-abc' });
 ```
 
 `trackBatch` chunks at `maxRequestEvents`, so a 500-event array becomes ten
@@ -187,9 +185,11 @@ no more than `maxConcurrentRequests` are ever in flight. If any chunk fails, the
 call rejects with the first error only after every sibling request has settled, so
 a rejection can never leave an unhandled promise behind.
 
-`alias` declares two identities as the same person and lets the platform resolve
-them. The destructive `/users/merge` endpoint is not exposed here: it has no
-inverse and takes internal numeric IDs this SDK cannot resolve.
+Identity resolution happens on the platform, so there is no merge or alias call
+here. Two identities that ever share an identifier -- the same device, email or
+phone -- converge on one profile on their own. The destructive `/users/merge`
+endpoint is not exposed either: it has no inverse and takes internal numeric IDs
+this SDK cannot resolve.
 
 ### Commerce
 
@@ -431,7 +431,7 @@ Breaking changes to expect:
 | Journeys, experiences, dashboards, segments, deals, brand | CLI and MCP server                                                                                 |
 | Tags and owner assignment                                 | CLI and MCP server                                                                                 |
 | Profile and account creation                              | CLI and MCP server                                                                                 |
-| Identity merge                                            | not exposed; use `alias()`                                                                         |
+| Identity merge                                            | not exposed; the platform resolves identity automatically                                          |
 | Content and design generation                             | blocked: those endpoints require a bearer JWT with a `person_id` claim, and no API-key path exists |
 
 ## Development
@@ -492,8 +492,8 @@ No. The API accepts `userId` on its own and links it to a profile for you.
 **Where is `users.merge()` / profile merging?**
 
 Deliberately absent. Merging is irreversible, no inverse endpoint exists, and it
-takes internal numeric IDs this SDK has no way to resolve. Use `alias()` and let
-the platform resolve identity itself. If you genuinely need a merge, do it
+takes internal numeric IDs this SDK has no way to resolve. The platform resolves
+identity on its own from shared identifiers. If you genuinely need a merge, do it
 through the CLI or MCP server, where a human confirms it.
 
 **Which API key should I use?**

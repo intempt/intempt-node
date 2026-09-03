@@ -40,8 +40,6 @@ void client.track('e', viaVariable);
 void client.identify(viaVariable);
 // @ts-expect-error profileId is not a v2 identifier
 void client.group({ ...viaVariable, accountId: 'acme' });
-// @ts-expect-error profileId is not a v2 identifier
-void client.alias({ ...viaVariable, userId: 'u1', previousUserId: 'p' });
 // trackBatch matters most of the four: TrackEvent extends TrackOptions, and if that
 // link were ever loosened the payload builder would put the field straight on the
 // wire. A mutant shaped like ingest.ts's own `WithProfileId` left typecheck clean
@@ -97,7 +95,6 @@ const sdk = new SDK('o', 'p', 'prefix.secret', '684508596718616576');
 void sdk.track('p1', 'e', { a: 1 });
 void sdk.identify('p1', 'u1');
 void sdk.group('p1', 'acme');
-void sdk.alias('p1', 'u1', 'u2');
 void sdk.record('p1', 'e', 'u1', 'acme', {});
 void sdk.consents('p1', 'accept');
 void sdk.productAdd('p1', 'sku-1', 1);
