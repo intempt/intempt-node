@@ -88,7 +88,6 @@ export class IntemptClient {
     return this.#ingest.group(options);
   }
 
-
   // ---- decisions out ----
 
   /**

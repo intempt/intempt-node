@@ -68,7 +68,6 @@ async function main(): Promise<void> {
     });
     log('group');
 
-
     // ---- events ----
     await intempt.track('pricing_viewed', {
       userId,

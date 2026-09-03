@@ -180,7 +180,6 @@ await step('group (creates the account if absent)', () =>
   intempt.group({ userId, accountId }),
 );
 
-
 if (PRODUCT_ID) {
   await step('ecommerce.productViewed (catalog product)', () =>
     intempt.ecommerce.productViewed({ userId, productId: PRODUCT_ID }),

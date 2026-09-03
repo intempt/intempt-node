@@ -244,7 +244,6 @@ export class Ingest {
       }),
     ]);
   }
-
 }
 
 function assertEventName(event: unknown, method: string): void {

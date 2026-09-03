@@ -8,10 +8,10 @@ than obeyed blindly.
 
 `intempt` — the server-side Node SDK. **Data in, decisions out, nothing else.**
 
-| Direction | Surface                                                                   |
-| --------- | ------------------------------------------------------------------------- |
+| Direction | Surface                                                           |
+| --------- | ----------------------------------------------------------------- |
 | in        | `track` `trackBatch` `identify` `group` `consent.*` `ecommerce.*` |
-| out       | `recommend`                                                               |
+| out       | `recommend`                                                       |
 
 Configuration and analysis operations belong to `@intempt/cli` and
 `@intempt/mcp-server`, which already carry ~202 of them. If an operation is not

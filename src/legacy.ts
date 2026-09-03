@@ -151,7 +151,6 @@ export class SDK {
     );
   }
 
-
   async consents(
     profileId: string,
     action: string,

@@ -90,7 +90,6 @@ describe('ingest reports the method the caller actually invoked', () => {
     scope.done();
   });
 
-
   it.each([
     [
       'identify',
