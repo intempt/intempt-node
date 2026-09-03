@@ -1,6 +1,6 @@
 {
   "name": "intempt-nodejs-sdk",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "Server-side Node.js client for the Intempt platform: data in, decisions out.",
   "keywords": [
     "intempt",
