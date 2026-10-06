@@ -16,7 +16,7 @@ jobs:
   # internally consistent. Runs without install so it cannot be skipped.
   bucketing:
     name: Server-only bucketing
-    runs-on: ubuntu-latest
+    runs-on: intempt-ubuntu-github-runner
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,7 +32,7 @@ jobs:
           GUARD_SRC: src,examples
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: intempt-ubuntu-github-runner
     strategy:
       fail-fast: false
       matrix:
@@ -93,7 +93,7 @@ jobs:
   # wrong. Running it across the matrix would triple the time for no extra signal.
   mutation:
     name: Mutation score
-    runs-on: ubuntu-latest
+    runs-on: intempt-ubuntu-github-runner
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
