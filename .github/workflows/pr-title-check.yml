@@ -12,7 +12,7 @@ permissions:
 jobs:
   check-title:
     name: Validate PR title
-    runs-on: intempt-ubuntu-github-runner
+    runs-on: ubuntu-latest
     steps:
       - name: Check PR title format
         env:
