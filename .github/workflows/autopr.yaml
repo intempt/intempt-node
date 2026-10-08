@@ -15,7 +15,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run the Action
-        uses: devops-infra/action-pull-request@v0.5.5
+        uses: devops-infra/action-pull-request@v1.4.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           source_branch: staging
