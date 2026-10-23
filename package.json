@@ -10,7 +10,7 @@
     "recommendations"
   ],
   "homepage": "https://github.com/intempt/intempt-node#readme",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
