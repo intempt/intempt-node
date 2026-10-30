@@ -26,5 +26,5 @@ jobs:
           assignee: ${{ vars.REVIEWERS }}
           draft: false
           get_diff: true
-          ignore_users: "dependabot"
+          ignore_users: 'dependabot'
           allow_no_diff: false
