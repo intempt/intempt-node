@@ -15,6 +15,7 @@ import {
   compact,
   ensureTimestamp,
 } from './utils';
+import { IntemptApiError } from './transport';
 import type { Transport } from './transport';
 import type { Batcher } from './batcher';
 
@@ -182,10 +183,13 @@ export class Ingest {
 
     const { maxRequestEvents, maxConcurrentRequests } = this.#deps.config();
     const groups = chunk(wire, maxRequestEvents);
+    // Shared by every group of this call: once a 413 has found the ceiling, the
+    // remaining groups go out at that width instead of each paying its own 413.
+    const width = { size: maxRequestEvents };
 
     if (maxConcurrentRequests <= 1) {
       for (const group of groups) {
-        await this.send(group);
+        await this.#sendWithin(group, width);
       }
       return;
     }
@@ -203,7 +207,7 @@ export class Ingest {
           cursor += 1;
           const group = groups[index];
           if (group === undefined) return;
-          await this.send(group);
+          await this.#sendWithin(group, width);
         }
       },
     );
@@ -216,6 +220,41 @@ export class Ingest {
     );
     if (failed) {
       throw failed.reason;
+    }
+  }
+
+  /**
+   * Sends `events` in slices of at most `width.size`, halving the width on a
+   * 413 and resending the rejected slice in two. Direct mode used to rethrow
+   * the first 413, so a server ceiling below `maxRequestEvents` delivered none
+   * of the call's events. Slices go out in order, so order is kept.
+   *
+   * A single event that still answers 413 is too large on its own: that is
+   * rethrown, as a direct-mode call reports every other failure.
+   */
+  async #sendWithin(events: WireEvent[], width: { size: number }): Promise<void> {
+    // A cursor, not chunk(): the width can narrow mid-loop (here or in a
+    // concurrent worker), and the slices still ahead must follow it.
+    let start = 0;
+    while (start < events.length) {
+      const slice = events.slice(start, start + width.size);
+      try {
+        await this.send(slice);
+      } catch (error) {
+        if (
+          !(error instanceof IntemptApiError) ||
+          error.status !== 413 ||
+          slice.length <= 1
+        ) {
+          throw error;
+        }
+        width.size = Math.min(width.size, Math.ceil(slice.length / 2));
+        this.#deps
+          .config()
+          .logger.warn(`[intempt] 413 received; reducing request size to ${width.size}`);
+        await this.#sendWithin(slice, width);
+      }
+      start += slice.length;
     }
   }
 

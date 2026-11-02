@@ -3,6 +3,17 @@
 All notable changes to this package are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Direct-mode `trackBatch()` now halves on 413**, as `maxRequestEvents` and
+  `trackBatch` documented. It used to rethrow the first 413, so a server ceiling
+  below `maxRequestEvents` delivered none of the call's events. A rejected
+  request is resent in two halves, the narrowed width applies to the rest of the
+  call, and events keep their order. A single event that still answers 413 is
+  rethrown as `IntemptApiError`. Batch mode was already correct.
+
 ## [3.0.0] — 2026-09-03
 
 ### Removed — BREAKING

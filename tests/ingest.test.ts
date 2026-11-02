@@ -7,6 +7,7 @@ import {
   nock,
   setupNock,
 } from './helpers';
+import { IntemptApiError } from '../src';
 
 setupNock();
 
@@ -236,5 +237,76 @@ describe('ingest: trackBatch', () => {
       ]),
     ).rejects.toThrow(/trackBatch\[1\]: event name is required/);
     expect(nock.pendingMocks()).toEqual([]);
+  });
+});
+
+/**
+ * A server whose real per-request ceiling is `limit` events: 413 above it,
+ * 200 at or below it. Records the width of every request and every event name
+ * that was accepted, so a test can assert each event arrived exactly once.
+ */
+function ceiling(limit: number) {
+  const widths: number[] = [];
+  const accepted: string[] = [];
+  nock(ORIGIN)
+    .persist()
+    .post(TRACK_PATH)
+    .reply((_uri, body) => {
+      const items = (body as WireBody).track;
+      widths.push(items.length);
+      if (items.length > limit) return [413, ''];
+      accepted.push(...items.map((item) => item.name));
+      return [200, ''];
+    });
+  return { widths, accepted };
+}
+
+function named(n: number) {
+  return Array.from({ length: n }, (_, i) => ({ event: `e${i}`, userId: 'u1' }));
+}
+
+describe('ingest: trackBatch direct mode on 413 (INT-5992 SDK-62)', () => {
+  it('halves an oversized request and delivers every event once, in order', async () => {
+    const server = ceiling(50);
+
+    await client({ maxRequestEvents: 200 }).trackBatch(named(200));
+
+    expect(server.accepted).toEqual(named(200).map((e) => e.event));
+    expect(server.widths).toEqual([200, 100, 50, 50, 50, 50]);
+  });
+
+  it('keeps the narrowed width for the rest of the call', async () => {
+    const server = ceiling(50);
+
+    await client({ maxRequestEvents: 100 }).trackBatch(named(300));
+
+    // The first group finds the ceiling; the next two groups go straight out at
+    // 50 instead of paying a 413 each.
+    expect(server.widths).toEqual([100, 50, 50, 50, 50, 50, 50]);
+    expect(server.accepted).toHaveLength(300);
+    expect(new Set(server.accepted).size).toBe(300);
+  });
+
+  it('halves under concurrency without duplicating or losing events', async () => {
+    const server = ceiling(25);
+
+    await client({ maxRequestEvents: 100, maxConcurrentRequests: 3 }).trackBatch(
+      named(300),
+    );
+
+    expect(server.accepted).toHaveLength(300);
+    expect(new Set(server.accepted).size).toBe(300);
+    expect(Math.max(...server.widths.filter((_, i) => i >= 3))).toBeLessThanOrEqual(50);
+  });
+
+  it('rejects with the 413 when a single event is still too large', async () => {
+    ceiling(0);
+
+    const error = await client({ maxRequestEvents: 4 })
+      .trackBatch(named(2))
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(IntemptApiError);
+    expect((error as IntemptApiError).status).toBe(413);
   });
 });
