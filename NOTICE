@@ -1,6 +1,6 @@
 Intempt Node.js SDK
 Copyright (c) 2024 Intempt
-Licensed under the MIT License (see LICENSE).
+Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 ------------------------------------------------------------------------------
 Third-party code
@@ -12,7 +12,7 @@ This product contains code derived from mixpanel-node:
     Copyright (c) 2012 Carl Sverre
     Released under the MIT License.
 
-Both projects are MIT licensed. The original copyright notice is retained
+The Intempt code is licensed under Apache-2.0; the mixpanel-node derived code remains under the MIT License. The original copyright notice is retained
 below and in the header of each file containing derived code.
 
 Copied substantially verbatim

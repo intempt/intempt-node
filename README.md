@@ -563,7 +563,7 @@ object, credential handling, keep-alive and proxy agent setup, response
 classification, library-version reporting, and the batch-size ceiling with 413
 halving.
 
-Copyright (c) 2012 Carl Sverre, MIT licensed. Both projects are MIT.
+Copyright (c) 2012 Carl Sverre, MIT licensed. Intempt's SDK is Apache-2.0; the derived mixpanel-node code remains MIT.
 [NOTICE](./NOTICE) records what is copied verbatim versus adapted, per file.
 
 The HTTP transport, wire format, endpoints, retry policy and every public method
@@ -571,5 +571,5 @@ signature are Intempt's own.
 
 ## License
 
-MIT. See [LICENSE](./LICENSE), and [NOTICE](./NOTICE) for the mixpanel-node
+Apache-2.0. See [LICENSE](./LICENSE), and [NOTICE](./NOTICE) for the mixpanel-node
 code this SDK derives from.
