@@ -16,7 +16,10 @@ permissions:
 
 jobs:
   publish:
-    runs-on: intempt-ubuntu-github-runner
+    # GitHub-hosted on purpose, the only job in this repo that is: npm refuses
+    # trusted publishing and provenance from self-hosted runners (E422
+    # "Unsupported GitHub Actions runner environment: self-hosted", v3.0.1).
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
