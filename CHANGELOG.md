@@ -5,7 +5,16 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [3.0.1] - 2026-11-02
+## [3.0.2] - 2026-11-06
+
+### Fixed
+
+- **Publishing works again.** 3.0.1 was tagged but never reached npm: npm
+  refuses trusted publishing from self-hosted CI runners, so its release run
+  failed. 3.0.2 carries the same code as 3.0.1 and is the first version
+  published with the `trackBatch()` 413 fix below.
+
+## [3.0.1] - 2026-11-02 (not published to npm)
 
 ### Fixed
 
