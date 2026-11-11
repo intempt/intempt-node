@@ -78,6 +78,7 @@ describe('onFlagError classifies the failure and the default is still returned',
     ['a non-JSON body', '<html>gateway</html>'],
     ['an empty body', ''],
     ['a JSON array', '[]'],
+    ['a JSON null', 'null'],
     ['choices that is not an array', '{"choices":"x"}'],
   ])('a 200 with %s is kind parse', async (_label, raw) => {
     nock(ORIGIN).post(CHOOSE_PATH).reply(200, raw);
@@ -142,6 +143,17 @@ describe('onFlagError classifies the failure and the default is still returned',
     expect(() => c.setConfig({ onFlagError: 1 as never })).toThrow(
       'onFlagError must be a function',
     );
+  });
+
+  it('a setConfig that does not name the hook keeps it', async () => {
+    nock(ORIGIN).post(CHOOSE_PATH).reply(500, {});
+    const errors: FlagError[] = [];
+    const c = client({ onFlagError: (e) => errors.push(e) });
+    c.setConfig({ debug: false });
+
+    await c.variation('k', ctx, 'safe');
+    expect(errors).toHaveLength(1);
+    await c.close();
   });
 
   it('setConfig replaces the hook, because flags read the config at call time', async () => {
