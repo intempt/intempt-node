@@ -37,16 +37,25 @@ describe('optOut gates every write path', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('suppresses consent records', async () => {
-    // 1.x gated only tracking; consent, choose and feeds still sent the
-    // profile identifier after optOut(). That was the privacy defect.
+  it('still sends consent grant and revoke (ruling D-5, INT-7437)', async () => {
+    // Consent is the person's own instruction, not tracking: a withdrawal must reach the server
+    // precisely when they have opted out. intempt-js consent() is not gated on opt-out either.
+    const actions: unknown[] = [];
+    const scope = nock(ORIGIN)
+      .post(CONSENT_PATH, (body: Record<string, unknown>) => {
+        actions.push(body.action);
+        return true;
+      })
+      .times(2)
+      .reply(200, '');
     const c = client();
     c.optOut();
 
     await c.consent.grant({ userId: 'u1' });
     await c.consent.revoke({ userId: 'u1' });
 
-    expect(nock.pendingMocks()).toEqual([]);
+    scope.done();
+    expect(actions).toEqual(['accept', 'reject']);
   });
 
   it('still validates arguments while opted out', async () => {

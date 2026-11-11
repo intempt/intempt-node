@@ -186,13 +186,15 @@ describe('legacy SDK: forwarding', () => {
     expect(bodies[0]).toMatchObject({ id: 'p1', type: 'user', limit: 5 });
   });
 
-  it('keeps optIn and optOut working, now covering consent too', async () => {
+  it('keeps optIn and optOut working; consent still sends while opted out (D-5)', async () => {
+    const consentScope = nock(ORIGIN).post(CONSENT_PATH).reply(200, '');
     const sdk = legacy();
     sdk.optOut();
 
     await sdk.track('p1', 'purchase', { total: 1 });
     await sdk.consents('p1', 'accept');
 
+    consentScope.done();
     expect(nock.pendingMocks()).toEqual([]);
 
     const bodies = capture();

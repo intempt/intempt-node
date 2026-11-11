@@ -62,7 +62,6 @@ export class IntemptClient {
     this.consent = new Consent({
       transport: this.#transport,
       config: configRef,
-      isOptedIn,
       assertOpen,
     });
     this.ecommerce = new Ecommerce(this.#ingest);
@@ -211,15 +210,16 @@ export class IntemptClient {
   // ---- privacy ----
 
   /**
-   * Re-enables sending. Note this gates every write namespace, not only
-   * tracking: consent records are suppressed too while opted out.
+   * Re-enables sending. Note this gates every tracking write namespace; consent
+   * is never gated (ruling D-5).
    */
   optIn(): void {
     this.#optedIn = true;
   }
 
   /**
-   * Suppresses all outbound writes: track, batch, commerce and consent.
+   * Suppresses all outbound tracking writes: track, batch and commerce. Consent
+   * is still sent, so a withdrawal reaches the server (ruling D-5).
    * `recommend()` is unaffected — it sends an identifier the caller already holds
    * and returns a decision rather than storing anything. (It is still refused
    * after close(), which is a different condition: opting out is a policy choice,
