@@ -5,8 +5,18 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.1.0] - unreleased
+
 ### Changed
 
+- **Consent is sent while opted out** (INT-7437, ruling D-5). After `optOut()`
+  consent records were dropped silently, so a person who had opted out could not
+  withdraw consent. `grant` and `revoke` are now sent regardless of opt-out, as
+  the client SDKs do; tracking writes stay suppressed.
+- **A flag's detail reason no longer reads `reason` off the choose response**
+  (INT-7457). choose-api never sends one; the reason is the fixed `UNANSWERED`,
+  as intempt-php already reports. No public effect: `variation()` returns only
+  the value.
 - **`sourceId` is validated at `Intempt.init`** (INT-7455). It must be a positive
   64-bit integer as a string of digits (`^[1-9][0-9]{0,18}$`, at most
   9223372036854775807), which is what the API parses. A value such as `"abc"`
