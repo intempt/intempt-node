@@ -16,7 +16,7 @@
 
 import { Agent } from 'node:http';
 import { Intempt, SDK } from '../src';
-import type { TrackOptions } from '../src';
+import type { FlagError, FlagErrorKind, FlagReason, TrackOptions } from '../src';
 
 const client = Intempt.init({
   org: 'o',
@@ -101,3 +101,20 @@ void sdk.productAdd('p1', 'sku-1', 1);
 void sdk.productView('p1', 'sku-1');
 void sdk.productOrdered('p1', [{ productId: 'sku-1' }]);
 void sdk.close();
+
+// ---- variationDetail and onFlagError (INT-7454) ----
+
+async function detailIsTyped(): Promise<void> {
+  const detail = await client.variationDetail('k', { userId: 'u1' }, false);
+  const value: boolean = detail.value;
+  const reason: FlagReason = detail.reason;
+  const kind: FlagErrorKind | undefined = detail.error?.kind;
+  // @ts-expect-error a reason the SDK never produces is not part of the union
+  const invented: FlagReason = 'unknown';
+  void [value, reason, kind, invented];
+}
+void detailIsTyped;
+
+client.setConfig({ onFlagError: (e: FlagError) => void e.key });
+// @ts-expect-error the hook receives a FlagError, not a string
+Intempt.init({ org: 'o', project: 'p', apiKey: 'a.b', onFlagError: (e: string) => e });

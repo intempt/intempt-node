@@ -9,7 +9,7 @@ import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
 import { Recommend } from './recommend';
 import { Flags } from './flags';
-import type { FlagContext } from './flags';
+import type { FlagContext, FlagDetail } from './flags';
 import type {
   GroupOptions,
   IdentifyOptions,
@@ -35,7 +35,8 @@ export class IntemptClient {
 
   constructor(config: IntemptConfig) {
     this.#resolved = resolveConfig(config);
-    this.#transport = new Transport(this.#resolved, new ApiKeyCredentials(config.apiKey));
+    const credentials = new ApiKeyCredentials(config.apiKey);
+    this.#transport = new Transport(this.#resolved, credentials);
 
     const configRef = (): ResolvedConfig => this.#resolved;
     // Two distinct conditions, deliberately not folded together: opting out is a
@@ -72,7 +73,11 @@ export class IntemptClient {
     });
     this.ecommerce = new Ecommerce(this.#ingest);
     this.#recommend = new Recommend({ transport: this.#transport, config: configRef });
-    this.#flags = new Flags({ transport: this.#transport, config: configRef });
+    this.#flags = new Flags({
+      transport: this.#transport,
+      config: configRef,
+      keyPrefix: credentials.prefix,
+    });
   }
 
   // ---- ingest, lifted to the top level so the common calls stay short ----
@@ -142,6 +147,20 @@ export class IntemptClient {
   async variation<T>(key: string, context: FlagContext, defaultValue: T): Promise<T> {
     this.#assertOpen();
     return this.#flags.value<T>(key, context, defaultValue);
+  }
+
+  /**
+   * The value plus why it was returned (INT-7454). `reason` is `'error'`, with `error` set, when the
+   * read failed and `defaultValue` came back; otherwise it is `'off'` whether or not a value was
+   * served, because the platform sends no reason to tell "off" from "not targeted" (INT-7457).
+   */
+  async variationDetail<T>(
+    key: string,
+    context: FlagContext,
+    defaultValue: T,
+  ): Promise<FlagDetail<T>> {
+    this.#assertOpen();
+    return this.#flags.detail<T>(key, context, defaultValue);
   }
 
   // `allFlags()` is deliberately NOT exposed.

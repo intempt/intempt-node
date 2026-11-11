@@ -31,6 +31,21 @@ This project follows [Semantic Versioning](https://semver.org/).
   batch on its final outcome with `{ kind, status?, eventCount, eventIds,
 retryAfter?, terminal }`; `transport` fires once per kept batch, not on every
   flush. A listener that throws is caught and logged.
+- **Flag failures are reported** (INT-7454, CONTRACT-R2 §S3). A new
+  `onFlagError(error)` config hook receives `{ key, kind, status? }` (`kind` is
+  `auth`, `bad_request`, `server`, `timeout`, `network` or `parse`; `key` is
+  `null` for `allFlags`). The default is still returned and nothing throws. A
+  401/403 is logged at error once per client, naming the key prefix and
+  sourceId. `IntemptApiError.timedOut` marks a request that ran past `timeout`.
+- **`variationDetail(key, context, defaultValue)`** (INT-7454). Resolves
+  `{ value, reason, error? }`; `reason` is `'error'` on a failed read and
+  `'off'` otherwise, since the platform sends no reason (INT-7457).
+
+### Fixed
+
+- A 200 whose `choices` is not an array made `variation()` reject with
+  `choices.find is not a function`; it now returns the default and reports
+  `parse` (INT-7454).
 
 ## [3.1.0] - unreleased
 

@@ -1,5 +1,6 @@
 import type { Agent } from 'node:http';
 import type { DeliveryFailure } from './delivery';
+import type { FlagError } from './flags';
 
 /** Minimal logger contract. `console` satisfies it. */
 export interface Logger {
@@ -71,6 +72,11 @@ export interface IntemptConfig {
    * construction.
    */
   onDeliveryFailure?: (failure: DeliveryFailure) => void;
+  /**
+   * Called once per flag read that failed and returned the caller's default (INT-7454). A
+   * listener that throws is caught and logged. Replaceable through `setConfig`.
+   */
+  onFlagError?: (error: FlagError) => void;
 }
 
 export interface ResolvedBatchOptions extends Required<BatchOptions> {}
@@ -92,6 +98,7 @@ export interface ResolvedConfig {
   maxConcurrentRequests: number;
   agent?: Agent;
   onDeliveryFailure?: (failure: DeliveryFailure) => void;
+  onFlagError?: (error: FlagError) => void;
 }
 
 /**

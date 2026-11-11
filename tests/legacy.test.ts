@@ -156,7 +156,6 @@ describe('legacy SDK: forwarding', () => {
     // The message used to say assignment was unavailable in a server SDK at all. It is available:
     // the endpoint serves a body by key, and {name, group, body} is everything variation() needs.
     // That - not a reason field - is why the message names its replacement instead of a dead end.
-    // The serving response still carries NO reason, which is why variationDetail stays internal.
     const sdk = legacy();
     for (const method of [
       'chooseExperimentsByGroups',

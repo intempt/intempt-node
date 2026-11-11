@@ -31,6 +31,7 @@ const PUBLIC_METHODS = [
   // `names` records a Kafka exposure against every eligible experience, so a read-everything call
   // is a project-wide write. Re-adding it fails here.
   'variation',
+  'variationDetail',
   'boolVariation',
   'stringVariation',
   'numberVariation',

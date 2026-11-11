@@ -1,5 +1,6 @@
 import type { Identifiers, ResolvedConfig } from './types';
 import { compact } from './utils';
+import { IntemptApiError } from './transport';
 import type { Transport } from './transport';
 
 /**
@@ -16,10 +17,10 @@ import type { Transport } from './transport';
  *  2. `defaultValue` is REQUIRED. It is what a caller receives on a network failure, a timeout, an
  *     unknown key or a malformed response. Optional is how `undefined` reaches production during an
  *     outage.
- *  3. `variationDetail` is NOT exposed. It would carry a `reason`, and the platform does not send
- *     one -- so it could not tell a deliberate off state from a request the service never
- *     answered, which is the only thing it exists to do. It returns when the serving contract
- *     carries a reason.
+ *  3. `variationDetail` tells a failed read from an answered one (INT-7454, CONTRACT-R2 §S3):
+ *     `reason: 'error'` plus a `FlagError` when the default was returned because the call failed.
+ *     It cannot tell "off" from "not targeted", because the platform sends no reason, so every
+ *     answered read reads `off` (INT-7457) rather than a guess.
  *  4. Evaluation is REMOTE only. There is no local rule engine and no flag store to poll.
  *  5. On a request path, every evaluation names the keys it wants. `POST /optimization/choose-api`
  *     records a Kafka exposure for each experience it evaluates, and it evaluates EVERY eligible
@@ -31,7 +32,7 @@ import type { Transport } from './transport';
  *     `allFlags` is the one call that omits `names`, and it is documented as a hazard rather than
  *     withheld -- by ruling (Beso, 2026-09-01), because php, python, swift, java and reactnative
  *     all ship it and a surface present in five SDKs and absent from the sixth is its own defect.
- *     It is for enumerating, not for serving. See `#choose` for the platform change that would
+ *     It is for enumerating, not for serving. See `#request` for the platform change that would
  *     make it safe.
  *
  * A server SDK is an `api`-channel consumer: it receives a value and branches on it in code. The
@@ -39,8 +40,22 @@ import type { Transport } from './transport';
  * `intemptjs` alone.
  */
 
-/** Why an evaluation returned the value it did. Mirrors the platform's `ChoiceReason`. */
-export type FlagReason = 'targeted' | 'holdout' | 'not_targeted' | 'off';
+/**
+ * Why an evaluation returned the value it did. Mirrors the platform's `ChoiceReason`, plus
+ * `error`. Only `off` and `error` are produced today: the serving response carries no reason.
+ */
+export type FlagReason = 'targeted' | 'holdout' | 'not_targeted' | 'off' | 'error';
+
+/** The same kinds in every SDK (CONTRACT-R2 §S3). */
+export type FlagErrorKind =
+  'auth' | 'bad_request' | 'server' | 'timeout' | 'network' | 'parse';
+
+/** A flag read that failed; the caller's default was returned. `key` is null for `allFlags`. */
+export interface FlagError {
+  key: string | null;
+  kind: FlagErrorKind;
+  status?: number;
+}
 
 /** Who is being evaluated. One stable identifier the caller holds constant. */
 export interface FlagContext extends Identifiers {
@@ -70,10 +85,11 @@ export interface FlagContext extends Identifiers {
   sessionId?: string;
 }
 
-/** Internal only -- see the note on `#detail`. Not exported from the package. */
-interface FlagDetail<T> {
+export interface FlagDetail<T> {
   value: T;
   reason: FlagReason;
+  /** Present only when `reason` is `error`. */
+  error?: FlagError;
 }
 
 interface RawChoice {
@@ -85,6 +101,24 @@ interface RawChoice {
 export interface FlagsDeps {
   transport: Transport;
   config(): ResolvedConfig;
+  /** Named in the 401/403 log; the secret half never reaches this class. */
+  keyPrefix: string;
+}
+
+/**
+ * 408 is the gateway's timeout and 429 the service's capacity, so neither is the caller's
+ * malformed request -- the same mapping as php and python.
+ */
+function classify(key: string | null, error: unknown): FlagError {
+  const status = error instanceof IntemptApiError ? error.status : undefined;
+  if (status === undefined) {
+    const timedOut = error instanceof IntemptApiError && error.timedOut;
+    return { key, kind: timedOut ? 'timeout' : 'network' };
+  }
+  if (status === 401 || status === 403) return { key, kind: 'auth', status };
+  if (status === 408) return { key, kind: 'timeout', status };
+  if (status === 429 || status >= 500) return { key, kind: 'server', status };
+  return { key, kind: 'bad_request', status };
 }
 
 /** A response the service did not answer is reported as such rather than guessed at. */
@@ -99,23 +133,18 @@ const KEY_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 export class Flags {
   readonly #deps: FlagsDeps;
+  #authLogged = false;
 
   constructor(deps: FlagsDeps) {
     this.#deps = deps;
   }
 
   /**
-   * Internal. NOT public, deliberately.
-   *
-   * It returns a `reason`, and the platform does not send one: a held-back person's experience is
-   * absent from the evaluation response entirely rather than present with a cause. So every reason
-   * would read `off` -- including for someone who WAS targeted and did receive the variant. That is
-   * a wrong answer, not a missing one, and a method whose only job is explaining why must not guess.
-   *
-   * `value` uses it for the value, which is correct either way. It becomes public when the serving
-   * contract carries a reason.
+   * `reason` is `error` only when the call failed. An answered read is `off` whether or not a value
+   * was served: a held-back person's experience is absent from the response rather than present
+   * with a cause, so telling "off" from "not targeted" would be a guess (INT-7457).
    */
-  async #detail<T>(
+  async detail<T>(
     key: string,
     context: FlagContext,
     defaultValue: T,
@@ -125,7 +154,7 @@ export class Flags {
     }
     if (!KEY_PATTERN.test(key)) {
       // A key the service will reject is a programming error, and it must fail here rather than
-      // 400 downstream: `#chooseOrEmpty` absorbs a validation error into a warn and the caller's
+      // 400 downstream: `#choose` absorbs a validation error into a warn and the caller's
       // default, which makes a typo'd key indistinguishable from an outage.
       throw new TypeError(
         `variation: key must match ${KEY_PATTERN.source} (the platform's own pattern); got "${key}"`,
@@ -138,7 +167,10 @@ export class Flags {
     }
     this.#assertAnswerable(context);
 
-    const choices = await this.#chooseOrEmpty(context, [key]);
+    const { choices, error } = await this.#choose(context, [key], key);
+    if (error) {
+      return { value: defaultValue, reason: 'error', error };
+    }
     const choice = choices.find((c) => c.name === key);
     if (!choice) {
       return { value: defaultValue, reason: UNANSWERED };
@@ -153,7 +185,7 @@ export class Flags {
   }
 
   async value<T>(key: string, context: FlagContext, defaultValue: T): Promise<T> {
-    const { value } = await this.#detail<T>(key, context, defaultValue);
+    const { value } = await this.detail<T>(key, context, defaultValue);
     return value;
   }
 
@@ -162,7 +194,7 @@ export class Flags {
    *
    * ⚠ **This is not a free convenience, and it does not belong on a request path.** It sends no
    * `names`, so the service evaluates every api-channel experience the person is eligible for, and
-   * on this endpoint an evaluation IS an exposure — see `#choose` for the full trace. Two costs,
+   * on this endpoint an evaluation IS an exposure — see `#request` for the full trace. Two costs,
    * both silent:
    *
    *  - the denominator of every running server experiment fills with people who were never shown
@@ -182,7 +214,8 @@ export class Flags {
     this.#assertAnswerable(context);
 
     const out: Record<string, unknown> = {};
-    for (const choice of await this.#chooseOrEmpty(context, undefined)) {
+    const { choices } = await this.#choose(context, undefined, null);
+    for (const choice of choices) {
       if (typeof choice.name === 'string' && choice.name !== '') {
         out[choice.name] = choice.body ?? null;
       }
@@ -195,7 +228,7 @@ export class Flags {
    *
    * `ExperienceChooserService.buildAudienceRequest` resolves a PROFILE entity from a non-blank
    * `profileId` plus a configured `sourceId`, falls through to a USER entity from `userId`, and
-   * throws when neither matches. `#chooseOrEmpty` absorbs a service failure by design -- so without
+   * throws when neither matches. `#choose` absorbs a service failure by design -- so without
    * this check an unresolvable context returns the caller's default for every key, forever, behind
    * one warn line, and the integration looks healthy while nothing is ever personalized.
    *
@@ -204,7 +237,7 @@ export class Flags {
    * recovers. This is the same rule the key-pattern check above already applies.
    *
    * `accountId` is the trap worth naming: `FlagContext extends Identifiers`, so TypeScript accepts
-   * it, and `#choose` sends only `userId`/`profileId`/`sourceId` -- an account-only caller was
+   * it, and `#request` sends only `userId`/`profileId`/`sourceId` -- an account-only caller was
    * type-checked, silently dropped, and served defaults forever.
    */
   #assertAnswerable(context: FlagContext): void {
@@ -228,7 +261,7 @@ export class Flags {
   }
 
   /**
-   * A transport failure returns no choices rather than throwing.
+   * A transport failure returns no choices and a `FlagError` rather than throwing.
    *
    * This is the entire reason `defaultValue` is required: a network failure, a 5xx or a timeout
    * must resolve to the value the caller chose, not reject. A flag SDK that throws when the service
@@ -236,18 +269,59 @@ export class Flags {
    * is for. A validation mistake (missing key, missing default) still throws, because that is a
    * programming error the caller can fix and not a runtime condition to absorb.
    */
-  async #chooseOrEmpty(
+  async #choose(
     context: FlagContext,
     names: string[] | undefined,
-  ): Promise<RawChoice[]> {
+    key: string | null,
+  ): Promise<{ choices: RawChoice[]; error?: FlagError }> {
+    let body: unknown;
     try {
-      return await this.#choose(context, names);
+      body = (await this.#request(context, names)).body;
     } catch (error) {
-      this.#deps
-        .config()
-        .logger.warn('[intempt] flag evaluation failed, using defaults', error);
-      return [];
+      return { choices: [], error: this.#failed(classify(key, error), error) };
     }
+    // The transport hands back a non-JSON body as its raw string and an empty one as undefined.
+    // A missing `choices` stays an honest "nothing served", as it always was.
+    const choices =
+      body !== null && typeof body === 'object' && !Array.isArray(body)
+        ? ((body as { choices?: unknown }).choices ?? [])
+        : undefined;
+    if (!Array.isArray(choices)) {
+      return { choices: [], error: this.#failed({ key, kind: 'parse' }, body) };
+    }
+    return { choices: choices as RawChoice[] };
+  }
+
+  /**
+   * A 401/403 is a misconfigured key that every later read repeats, so it is loud once per client
+   * and quiet after, instead of one warn per request that operators learn to filter.
+   */
+  #failed(error: FlagError, cause: unknown): FlagError {
+    const { logger, sourceId, onFlagError } = this.#deps.config();
+    if (error.kind === 'auth' && !this.#authLogged) {
+      this.#authLogged = true;
+      logger.error(
+        `[intempt] flag evaluation refused with ${error.status}: check the API key ` +
+          `(prefix ${this.#deps.keyPrefix}) and sourceId ${sourceId ?? '(none)'}; serving defaults`,
+      );
+    } else if (error.kind === 'auth') {
+      logger.debug(
+        `[intempt] flag evaluation refused with ${error.status}; using defaults`,
+      );
+    } else {
+      logger.warn(
+        `[intempt] flag evaluation failed (${error.kind}), using defaults`,
+        cause,
+      );
+    }
+    if (onFlagError) {
+      try {
+        onFlagError(error);
+      } catch (thrown) {
+        logger.error('[intempt] onFlagError listener threw', thrown);
+      }
+    }
+    return error;
   }
 
   /**
@@ -279,7 +353,10 @@ export class Flags {
    * kind of defect. It is documented as a hazard rather than removed. Prefer `variation` per key on
    * anything that runs per request.
    */
-  async #choose(context: FlagContext, names: string[] | undefined): Promise<RawChoice[]> {
+  async #request(
+    context: FlagContext,
+    names: string[] | undefined,
+  ): Promise<{ body: unknown }> {
     const { sourceId } = this.#deps.config();
     const body = compact({
       // No optional chaining on `context`: `#assertAnswerable` has already rejected an absent or
@@ -295,10 +372,9 @@ export class Flags {
       sessionId: context.sessionId,
     });
 
-    const response = await this.#deps.transport.post<{ choices?: RawChoice[] }>(
+    return this.#deps.transport.post(
       this.#deps.transport.projectPath('/optimization/choose-api'),
       body,
     );
-    return response.body?.choices ?? [];
   }
 }

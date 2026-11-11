@@ -242,8 +242,8 @@ export class SDK {
    * What is still NOT available is the ability to explain an absence. The serving response carries
    * no `reason` field - `ExperienceApiChoose` on `audience-service` main is `name`, `group`, `body`
    * and nothing more - so an unanswered request and a deliberate off state remain the same absent
-   * entry. That is why `variationDetail` stays internal (see `flags.ts`), and it is not why these
-   * four were superseded.
+   * entry, and `variationDetail` reports both as `off` (see `flags.ts`). That is not why these four
+   * were superseded.
    */
   static #experiencesRemoved(method: string): never {
     throw new Error(

@@ -21,6 +21,8 @@ export class IntemptApiError extends Error {
   readonly body?: string;
   readonly retryAfterMs?: number;
   readonly cause?: unknown;
+  /** The request ran past `timeout`. Without it a timeout reads like any other status-less failure. */
+  readonly timedOut: boolean;
 
   constructor(
     message: string,
@@ -29,6 +31,7 @@ export class IntemptApiError extends Error {
       body?: string;
       retryAfterMs?: number;
       cause?: unknown;
+      timedOut?: boolean;
     } = {},
   ) {
     super(message);
@@ -43,6 +46,7 @@ export class IntemptApiError extends Error {
     this.body = detail.body;
     this.retryAfterMs = detail.retryAfterMs;
     this.cause = detail.cause;
+    this.timedOut = detail.timedOut === true;
   }
 
   /** True for statuses worth retrying: 408, 429, and any 5xx. */
@@ -196,6 +200,7 @@ export class Transport {
         request.destroy(
           new IntemptApiError(
             `Intempt API request timed out after ${this.#config.timeout}ms`,
+            { timedOut: true },
           ),
         );
       });

@@ -132,6 +132,7 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
   ) {
     throw new TypeError('onDeliveryFailure must be a function');
   }
+  assertFlagHook(config.onFlagError);
 
   const { host, port } = splitHost(config.host ?? DEFAULT_CONFIG.host);
 
@@ -154,6 +155,7 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     ...(config.onDeliveryFailure !== undefined
       ? { onDeliveryFailure: config.onDeliveryFailure }
       : {}),
+    ...(config.onFlagError !== undefined ? { onFlagError: config.onFlagError } : {}),
   };
 }
 
@@ -225,8 +227,18 @@ export function mergeConfig(
     next.timeout = patch.timeout;
   }
   if (patch.debug !== undefined) next.debug = patch.debug;
+  if (patch.onFlagError !== undefined) {
+    assertFlagHook(patch.onFlagError);
+    next.onFlagError = patch.onFlagError;
+  }
 
   return next;
+}
+
+function assertFlagHook(hook: unknown): void {
+  if (hook !== undefined && typeof hook !== 'function') {
+    throw new TypeError('onFlagError must be a function');
+  }
 }
 
 export type { BatchOptions };
