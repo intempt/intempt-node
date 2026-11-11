@@ -9,7 +9,7 @@ import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
 import { Recommend } from './recommend';
 import { Flags } from './flags';
-import type { FlagContext, FlagDetail } from './flags';
+import type { FlagContext, FlagDetail, VariationOptions } from './flags';
 import type {
   GroupOptions,
   IdentifyOptions,
@@ -144,9 +144,14 @@ export class IntemptClient {
    * Ask for a key, never a mode. Whether the key names an experiment, a personalization or a flag
    * is the platform's business - its serving query filters on channel and status and never on mode.
    */
-  async variation<T>(key: string, context: FlagContext, defaultValue: T): Promise<T> {
+  async variation<T>(
+    key: string,
+    context: FlagContext,
+    defaultValue: T,
+    options?: VariationOptions,
+  ): Promise<T> {
     this.#assertOpen();
-    return this.#flags.value<T>(key, context, defaultValue);
+    return this.#flags.value<T>(key, context, defaultValue, options);
   }
 
   /**
@@ -158,34 +163,19 @@ export class IntemptClient {
     key: string,
     context: FlagContext,
     defaultValue: T,
+    options?: VariationOptions,
   ): Promise<FlagDetail<T>> {
     this.#assertOpen();
-    return this.#flags.detail<T>(key, context, defaultValue);
+    return this.#flags.detail<T>(key, context, defaultValue, options);
   }
-
-  // `allFlags()` is deliberately NOT exposed.
-  //
-  // It reads like a read and behaves like a write. `POST /optimization/choose-api` records a Kafka
-  // exposure per experience it evaluates, and omitting `names` makes it evaluate every experience
-  // the person is eligible for - so one convenience call marks them exposed to every running
-  // server experiment in the project, and permanently spends the `once` display budget for keys
-  // nobody rendered. Both effects are silent: the experiments keep running and simply stop
-  // detecting, and the later `variation('that_key', ...)` returns the caller's default forever.
-  //
-  // There is no request field that suppresses recording, so this cannot be fixed in the SDK. It
-  // returns when the platform can evaluate without publishing an exposure - an `exposure: false`
-  // on the choose request, or a separate non-recording route. Until then, read the keys you use:
-  // `variation(key, context, defaultValue)`, one call per key.
-  //
-  // Do not re-add it, and do not document it as available. `tests/encapsulation.test.ts` and
-  // `tests/flags.test.ts` both fail if it comes back.
 
   async boolVariation(
     key: string,
     context: FlagContext,
     defaultValue: boolean,
+    options?: VariationOptions,
   ): Promise<boolean> {
-    const value = await this.variation<unknown>(key, context, defaultValue);
+    const value = await this.variation<unknown>(key, context, defaultValue, options);
     // A served value of the wrong type is a misconfiguration, not something to coerce: `!!"false"`
     // is true, and a silent coercion would be indistinguishable from a correct answer.
     return typeof value === 'boolean' ? value : defaultValue;
@@ -195,8 +185,9 @@ export class IntemptClient {
     key: string,
     context: FlagContext,
     defaultValue: string,
+    options?: VariationOptions,
   ): Promise<string> {
-    const value = await this.variation<unknown>(key, context, defaultValue);
+    const value = await this.variation<unknown>(key, context, defaultValue, options);
     return typeof value === 'string' ? value : defaultValue;
   }
 
@@ -204,8 +195,9 @@ export class IntemptClient {
     key: string,
     context: FlagContext,
     defaultValue: number,
+    options?: VariationOptions,
   ): Promise<number> {
-    const value = await this.variation<unknown>(key, context, defaultValue);
+    const value = await this.variation<unknown>(key, context, defaultValue, options);
     return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue;
   }
 
@@ -213,8 +205,9 @@ export class IntemptClient {
     key: string,
     context: FlagContext,
     defaultValue: T,
+    options?: VariationOptions,
   ): Promise<T> {
-    const value = await this.variation<unknown>(key, context, defaultValue);
+    const value = await this.variation<unknown>(key, context, defaultValue, options);
     return value !== null && typeof value === 'object' ? (value as T) : defaultValue;
   }
 
@@ -227,6 +220,9 @@ export class IntemptClient {
    * `once` display budget for keys nobody rendered, after which `variation()` on those keys returns
    * your default forever. Two keys on a request path is two `variation()` calls, not one
    * `allFlags()`. Use this to enumerate: a debug endpoint, an admin view, a one-off audit.
+   *
+   * It sends `exposure: false` (INT-7456), which takes effect once audience-service honours the
+   * field; until then the service ignores it and the costs above still apply.
    *
    * See `docs/CONVENTIONS.md` for the full trace and the platform change that would make it safe.
    */

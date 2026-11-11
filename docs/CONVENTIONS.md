@@ -42,9 +42,11 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
   experiment in the project — inflating each denominator uniformly, which shows up as an experiment
   that stopped detecting rather than one that broke — and, for a `once` display, spends their
   display budget on keys nobody rendered, after which `variation()` on those keys returns the
-  caller's default permanently. The request has no exposure-suppression field, so **this cannot be
-  fixed here**; it becomes safe when the platform can evaluate without publishing — an
-  `exposure: false` on the choose request, or a separate non-recording route.
+  caller's default permanently. `allFlags()` sends `exposure: false`, and a single read takes
+  `{ disableExposure: true }` for a read that shows nothing (INT-7456, CONTRACT-R2 §S4). Absent,
+  the field means "record", so a default read is unchanged. **The field takes effect only once
+  audience-service honours it**; today the service ignores unknown fields and records anyway. The
+  SDK keeps no `allFlags` result and serves no read from one, so there is no exposure dedupe to do.
 
   `allFlags()` is nevertheless part of this SDK's surface, by ruling (Beso, 2026-09-01): php,
   python, swift, java and reactnative all ship it, and a method that exists in five SDKs and not the

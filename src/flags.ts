@@ -32,8 +32,8 @@ import type { Transport } from './transport';
  *     `allFlags` is the one call that omits `names`, and it is documented as a hazard rather than
  *     withheld -- by ruling (Beso, 2026-09-01), because php, python, swift, java and reactnative
  *     all ship it and a surface present in five SDKs and absent from the sixth is its own defect.
- *     It is for enumerating, not for serving. See `#request` for the platform change that would
- *     make it safe.
+ *     It is for enumerating, not for serving. It asks for no exposure (INT-7456); see `#request`
+ *     for why that request is not yet honoured.
  *
  * A server SDK is an `api`-channel consumer: it receives a value and branches on it in code. The
  * `web` channel, where a change is applied against the DOM without the caller branching, is
@@ -83,6 +83,15 @@ export interface FlagContext extends Identifiers {
    * and know that `once_per_visit` degrades to `once` on this channel, rather than inheriting it.
    */
   sessionId?: string;
+}
+
+/** Per-read options for `variation`, `variationDetail` and the typed helpers. */
+export interface VariationOptions {
+  /**
+   * Evaluate without recording an exposure (INT-7456): for a read that does not show the value,
+   * such as a pre-render or a prefetch. Sends `exposure: false`; omitted, the read records.
+   */
+  disableExposure?: boolean;
 }
 
 export interface FlagDetail<T> {
@@ -148,6 +157,7 @@ export class Flags {
     key: string,
     context: FlagContext,
     defaultValue: T,
+    options?: VariationOptions,
   ): Promise<FlagDetail<T>> {
     if (typeof key !== 'string' || !key.trim()) {
       throw new TypeError('variation: key is required');
@@ -167,7 +177,12 @@ export class Flags {
     }
     this.#assertAnswerable(context);
 
-    const { choices, error } = await this.#choose(context, [key], key);
+    const { choices, error } = await this.#choose(
+      context,
+      [key],
+      key,
+      options?.disableExposure === true,
+    );
     if (error) {
       return { value: defaultValue, reason: 'error', error };
     }
@@ -184,8 +199,13 @@ export class Flags {
     };
   }
 
-  async value<T>(key: string, context: FlagContext, defaultValue: T): Promise<T> {
-    const { value } = await this.detail<T>(key, context, defaultValue);
+  async value<T>(
+    key: string,
+    context: FlagContext,
+    defaultValue: T,
+    options?: VariationOptions,
+  ): Promise<T> {
+    const { value } = await this.detail<T>(key, context, defaultValue, options);
     return value;
   }
 
@@ -204,9 +224,9 @@ export class Flags {
    *    from an outage.
    *
    * Use it to enumerate — a debug endpoint, an admin view, a one-off audit. **Two keys on a request
-   * path means two `variation()` calls, not one `allFlags()`.** The request carries no
-   * exposure-suppression field, so no SDK can make this safe; that needs an `exposure: false` on
-   * `POST /optimization/choose-api` or a separate non-recording route.
+   * path means two `variation()` calls, not one `allFlags()`.** It sends `exposure: false`
+   * (INT-7456), which removes both costs only once audience-service honours the field; until then
+   * the service ignores it and records as above (see `#request`).
    *
    * Matches `allFlags` in php, swift, java and reactnative and `all_flags` in python.
    */
@@ -214,7 +234,7 @@ export class Flags {
     this.#assertAnswerable(context);
 
     const out: Record<string, unknown> = {};
-    const { choices } = await this.#choose(context, undefined, null);
+    const { choices } = await this.#choose(context, undefined, null, true);
     for (const choice of choices) {
       if (typeof choice.name === 'string' && choice.name !== '') {
         out[choice.name] = choice.body ?? null;
@@ -273,10 +293,11 @@ export class Flags {
     context: FlagContext,
     names: string[] | undefined,
     key: string | null,
+    evaluateOnly: boolean,
   ): Promise<{ choices: RawChoice[]; error?: FlagError }> {
     let body: unknown;
     try {
-      body = (await this.#request(context, names)).body;
+      body = (await this.#request(context, names, evaluateOnly)).body;
     } catch (error) {
       return { choices: [], error: this.#failed(classify(key, error), error) };
     }
@@ -342,11 +363,11 @@ export class Flags {
    *    drops out of `choices` forever, and the caller gets their default indistinguishably from an
    *    outage.
    *
-   * The request carries no exposure-suppression field -- `ExperienceApiChooseRequest` is
-   * `{identification, names, groups, device, sessionId, productId, timestamp}` -- so the SDK cannot
-   * opt out of recording, only decline to evaluate what nobody asked for. **A read-everything call
-   * becomes safe when the platform can evaluate without publishing** (an `exposure: false` on this
-   * request, or a separate non-recording route).
+   * `exposure: false` asks the service to evaluate without spending a ONCE gate or publishing
+   * (CONTRACT-R2 §S4). `allFlags` and a `disableExposure` read send it. The audience-service side
+   * has not shipped: today's `ExperienceApiChooseRequest` has no such field and Spring ignores
+   * unknown ones (checked for php, reports/impl2/intempt-php.md INT-7456), so **every call still
+   * records until it does**. Nothing here makes a read-everything call safe on its own.
    *
    * `allFlags` is kept anyway, by ruling (Beso, 2026-09-01), because php, python, swift, java and
    * reactnative all ship it and a surface that exists in five SDKs and not the sixth is its own
@@ -356,6 +377,7 @@ export class Flags {
   async #request(
     context: FlagContext,
     names: string[] | undefined,
+    evaluateOnly: boolean,
   ): Promise<{ body: unknown }> {
     const { sourceId } = this.#deps.config();
     const body = compact({
@@ -370,6 +392,9 @@ export class Flags {
       names,
       device: 'all',
       sessionId: context.sessionId,
+      // Absent, not `true`, on a recording read: a backend that predates the field then behaves
+      // exactly as before (CONTRACT-R2 §S4).
+      exposure: evaluateOnly ? false : undefined,
     });
 
     return this.#deps.transport.post(

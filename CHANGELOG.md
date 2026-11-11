@@ -41,6 +41,12 @@ retryAfter?, terminal }`; `transport` fires once per kept batch, not on every
   `{ value, reason, error? }`; `reason` is `'error'` on a failed read and
   `'off'` otherwise, since the platform sends no reason (INT-7457).
 
+- **Evaluation without exposure** (INT-7456, CONTRACT-R2 §S4). `allFlags()`
+  sends `exposure: false`; `variation`, `variationDetail` and the typed helpers
+  take `{ disableExposure: true }` as a fourth argument for a read that shows
+  nothing. A default read sends no `exposure` field, so it records as before.
+  The field takes effect once audience-service honours it.
+
 ### Fixed
 
 - A 200 whose `choices` is not an array made `variation()` reject with

@@ -118,3 +118,9 @@ void detailIsTyped;
 client.setConfig({ onFlagError: (e: FlagError) => void e.key });
 // @ts-expect-error the hook receives a FlagError, not a string
 Intempt.init({ org: 'o', project: 'p', apiKey: 'a.b', onFlagError: (e: string) => e });
+
+// ---- disableExposure is a per-read option, not part of who is evaluated (INT-7456) ----
+
+void client.variation('k', { userId: 'u1' }, false, { disableExposure: true });
+// @ts-expect-error disableExposure is not an identifier
+void client.variation('k', { userId: 'u1', disableExposure: true }, false);

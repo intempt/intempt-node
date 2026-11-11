@@ -10,6 +10,7 @@ export type {
   FlagError,
   FlagErrorKind,
   FlagReason,
+  VariationOptions,
 } from './flags';
 export type { DeliveryFailure } from './delivery';
 export type { FlushResult } from './batcher';
