@@ -44,8 +44,8 @@ describe('audit the optOut gate in send()', () => {
   });
 
   it('discards rather than counting a failure when opted out', async () => {
-    // send() returning early must not look like a transient failure, or repeated
-    // opt-out flushes would trip the circuit breaker.
+    // send() returning early must not look like a delivery failure: nothing is
+    // dropped or reported for an opt-out discard.
     const logger = testLogger();
     // size 1 means each track() triggers an immediate flush while still opted in,
     // so those sends need interceptors.
@@ -61,9 +61,7 @@ describe('audit the optOut gate in send()', () => {
       await c.flush();
       c.optIn();
     }
-    expect(
-      logger.calls.error.some((a) => String(a[0]).includes('stopping batching')),
-    ).toBe(false);
+    expect(logger.calls.error).toEqual([]);
     await c.close();
   });
 });

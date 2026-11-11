@@ -183,6 +183,12 @@ export function mergeConfig(
   // keepAlive and agent are read once, when Transport builds its agents. Silently
   // accepting them left a caller believing they had disabled keep-alive to let a
   // process exit, when nothing had changed.
+  if ((patch as Record<string, unknown>).onDeliveryFailure !== undefined) {
+    throw new TypeError(
+      'setConfig: "onDeliveryFailure" is fixed at construction because the batcher holds it. ' +
+        'Pass it to Intempt.init instead.',
+    );
+  }
   for (const fixed of ['keepAlive', 'agent'] as const) {
     if ((patch as Record<string, unknown>)[fixed] !== undefined) {
       throw new TypeError(

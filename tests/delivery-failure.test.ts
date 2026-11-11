@@ -156,3 +156,18 @@ describe('flush() and close() resolve { sent, failed } (INT-7444)', () => {
     await c.close();
   });
 });
+
+describe('onDeliveryFailure is fixed at construction (INT-7444)', () => {
+  it('setConfig refuses it rather than silently ignoring it', () => {
+    const patch = { onDeliveryFailure: () => undefined } as never;
+    expect(() => client().setConfig(patch)).toThrow(
+      /onDeliveryFailure.*fixed at construction/,
+    );
+  });
+
+  it('init refuses a listener that is not a function', () => {
+    expect(() => client({ onDeliveryFailure: 'nope' } as never)).toThrow(
+      /onDeliveryFailure must be a function/,
+    );
+  });
+});

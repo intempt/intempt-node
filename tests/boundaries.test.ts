@@ -19,9 +19,8 @@ setupNock();
  *
  * A surviving mutant means some decision in the code can be rewritten without a
  * single test noticing, so these are the comparisons and thresholds nothing was
- * pinning: which statuses count as failures, how many attempts the breaker
- * allows, whether backoff grows or shrinks, and whether a reduced batch width
- * ever recovers.
+ * pinning: which statuses count as failures and which error fields are set.
+ * The retry-era sections (breaker, backoff, width) went with INT-7436.
  */
 
 function batched(overrides: Record<string, unknown> = {}) {
@@ -162,46 +161,4 @@ describe('the queue-full drop is reported with enough detail to act on', () => {
     expect(dropped![1]).toMatchObject({ name: 'overflow', maxQueue: 2 });
     await c.close();
   }, 10_000);
-});
-
-describe('widening rests on evidence actually gathered', () => {
-  it('does not widen from sends narrower than the current width', async () => {
-    // A trickle producer flushing one event per tick would otherwise earn a
-    // widening from ten width-1 requests, none of which tested the width that a
-    // 413 had just taken away.
-    const widths: number[] = [];
-    let rejectWide = true;
-    nock(ORIGIN)
-      .post(TRACK_PATH, (b: { track: unknown[] }) => {
-        widths.push(b.track.length);
-        return true;
-      })
-      .times(60)
-      .reply(function () {
-        const n = widths[widths.length - 1] ?? 0;
-        return rejectWide && n > 2 ? [413, ''] : [200, ''];
-      });
-
-    const { c } = batched({
-      batch: { size: 4, flushMs: 10_000, maxQueue: 100, flushOnExit: false },
-    });
-
-    // Drop to width 2.
-    for (let i = 0; i < 4; i += 1) await c.track(`a${i}`, { userId: 'u1' });
-    await c.flush();
-    rejectWide = false;
-
-    // Twenty single-event flushes. Each is width 1, below the width of 2, so none
-    // of them should count toward widening.
-    const before = widths.length;
-    for (let i = 0; i < 20; i += 1) {
-      await c.track(`b${i}`, { userId: 'u1' });
-      await c.flush();
-    }
-
-    const singles = widths.slice(before);
-    expect(singles.every((w) => w === 1)).toBe(true);
-    expect(Math.max(...singles)).toBe(1);
-    await c.close();
-  }, 20_000);
 });

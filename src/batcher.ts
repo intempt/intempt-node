@@ -75,6 +75,12 @@ export class Batcher {
   #sent = 0;
   #failed = 0;
   #stopped = false;
+  /**
+   * Set while the `beforeExit` drain runs. There is no next flush at exit, so a batch that would
+   * be kept is dropped instead: keeping it ends the drain, the loop empties, `beforeExit` fires
+   * again and the process never exits (the removed circuit breaker used to cap this).
+   */
+  #exiting = false;
   readonly #closeBudgetMs: number;
   /** Epoch ms after which a close-initiated drain gives up. Unset outside close. */
   #closeDeadline: number | undefined;
@@ -97,7 +103,7 @@ export class Batcher {
 
     if (options.flushOnExit) {
       this.#exitHook = () => {
-        void this.flush();
+        void this.#exitFlush();
       };
       process.on('beforeExit', this.#exitHook);
     }
@@ -172,7 +178,7 @@ export class Batcher {
         this.#sent += batch.length;
         continue;
       }
-      if (outcome.kept) {
+      if (outcome.kept && !this.#exiting) {
         this.#reportTransport(batch, outcome.failure);
         // Ending the drain is what makes "kept" mean "next flush": continuing would
         // resend the same slice in a hot loop against an unreachable host.
@@ -186,7 +192,20 @@ export class Batcher {
         status: outcome.failure.status,
         count: batch.length,
       });
-      this.#report(outcome.failure);
+      this.#report(
+        outcome.kept
+          ? { ...outcome.failure, kind: 'dropped', terminal: true }
+          : outcome.failure,
+      );
+    }
+  }
+
+  async #exitFlush(): Promise<void> {
+    this.#exiting = true;
+    try {
+      await this.flush();
+    } finally {
+      this.#exiting = false;
     }
   }
 

@@ -31,7 +31,7 @@ function counter(
   return widths;
 }
 
-/** flushMs of 1 keeps real backoff in the low milliseconds; no fake timers. */
+/** flushMs of 1 keeps scheduled flushes in the low milliseconds; no fake timers. */
 function batched(overrides: Record<string, unknown> = {}) {
   const logger = testLogger();
   const c = client({

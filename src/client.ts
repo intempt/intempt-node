@@ -279,7 +279,7 @@ export class IntemptClient {
         | 'agent'
         | 'onDeliveryFailure'
       >
-    > & { keepAlive?: never; agent?: never },
+    > & { keepAlive?: never; agent?: never; onDeliveryFailure?: never },
   ): void {
     this.#resolved = mergeConfig(this.#resolved, patch);
     this.#transport.setConfig(this.#resolved);
