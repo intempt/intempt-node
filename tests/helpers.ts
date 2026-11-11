@@ -2,6 +2,9 @@ import { afterAll, afterEach, beforeAll, vi } from 'vitest';
 import nock from 'nock';
 import { Intempt } from '../src';
 import type { IntemptConfig, Logger } from '../src';
+import { ApiKeyCredentials } from '../src/credentials';
+import { resolveConfig } from '../src/config';
+import { Transport } from '../src/transport';
 
 export const HOST = 'api.test.local';
 export const ORIGIN = `https://${HOST}`;
@@ -101,3 +104,36 @@ export async function waitFor(
 }
 
 export { nock };
+
+/**
+ * The `IntemptApiError` one track request produces, read straight off the transport.
+ *
+ * `track()` no longer rejects for a delivery failure (INT-7436/7444, CONTRACT-R2 §S1/S2), so tests
+ * that inspect how a response or socket failure is classified read it here instead.
+ */
+export async function postError(
+  overrides: Partial<IntemptConfig> = {},
+  body: unknown = { track: [] },
+): Promise<unknown> {
+  const resolved = resolveConfig({
+    org: ORG,
+    project: PROJECT,
+    apiKey: API_KEY,
+    sourceId: SOURCE,
+    host: HOST,
+    logger: testLogger(),
+    ...overrides,
+  });
+  const transport = new Transport(
+    resolved,
+    new ApiKeyCredentials(overrides.apiKey ?? API_KEY),
+  );
+  try {
+    await transport.post(TRACK_PATH, body);
+    return undefined;
+  } catch (error) {
+    return error;
+  } finally {
+    transport.destroy();
+  }
+}

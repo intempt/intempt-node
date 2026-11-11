@@ -2,7 +2,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Intempt, SDK, type IntemptClient } from '../src';
-import type { Logger } from '../src';
+import type { DeliveryFailure, Logger } from '../src';
 
 // Deliberately NOT importing ./helpers: it loads `nock`, and nock patches
 // http.ClientRequest at import time. That turns every request in this file into
@@ -217,25 +217,31 @@ describe('over a real socket: keep-alive', () => {
 });
 
 describe('over a real socket: failures', () => {
-  it('times out on a slow server and reports it as retryable', async () => {
+  it('times out on a slow server and drops without a resend (INT-7436)', async () => {
     server.reset();
     server.responses.push({ status: 200, body: '{}', delayMs: 300 });
-    const c = realClient({ timeout: 60 });
+    const failures: DeliveryFailure[] = [];
+    const c = realClient({
+      timeout: 60,
+      onDeliveryFailure: (f: DeliveryFailure) => failures.push(f),
+    });
 
-    const error = await c.track('slow', { userId: 'u1' }).catch((e: unknown) => e);
-    expect((error as Error).message).toMatch(/timed out/);
+    await expect(c.track('slow', { userId: 'u1' })).resolves.toBe(false);
+    expect(failures.map((f) => [f.kind, f.status])).toEqual([['dropped', undefined]]);
 
     await c.close();
   });
 
-  it('surfaces a real 500 body', async () => {
+  it('reports a real 500 as terminal (INT-7444)', async () => {
     server.reset();
     server.responses.push({ status: 500, body: '{"error":"boom"}' });
-    const c = realClient();
+    const failures: DeliveryFailure[] = [];
+    const c = realClient({ onDeliveryFailure: (f: DeliveryFailure) => failures.push(f) });
 
-    const error = await c.track('x', { userId: 'u1' }).catch((e: unknown) => e);
-    expect((error as { status?: number }).status).toBe(500);
-    expect((error as { body?: string }).body).toContain('boom');
+    await expect(c.track('x', { userId: 'u1' })).resolves.toBe(false);
+    expect(failures.map((f) => [f.kind, f.status, f.terminal])).toEqual([
+      ['terminal', 500, true],
+    ]);
 
     await c.close();
   });
@@ -292,22 +298,22 @@ describe('over a real socket: a dead connection always settles the promise', () 
     return outcome;
   }
 
-  it('rejects when the socket dies before any response', async () => {
-    expect(await outcomeAgainst((req) => req.socket.destroy())).toBe('rejected');
+  it('resolves when the socket dies before any response (INT-7436: never rejects)', async () => {
+    expect(await outcomeAgainst((req) => req.socket.destroy())).toBe('resolved');
   });
 
-  it('rejects when the socket dies after headers, mid-body', async () => {
+  it('resolves when the socket dies after headers, mid-body (INT-7436: never rejects)', async () => {
     expect(
       await outcomeAgainst((_req, res) => {
         res.writeHead(200, { 'Content-Length': '999' });
         res.write('{');
         res.socket?.destroy();
       }),
-    ).toBe('rejected');
+    ).toBe('resolved');
   });
 
-  it('rejects when the server closes with zero bytes sent', async () => {
-    expect(await outcomeAgainst((req) => req.socket.end())).toBe('rejected');
+  it('resolves when the server closes with zero bytes sent (INT-7436: never rejects)', async () => {
+    expect(await outcomeAgainst((req) => req.socket.end())).toBe('resolved');
   });
 });
 

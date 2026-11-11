@@ -278,73 +278,39 @@ const intempt = Intempt.init({
   },
 });
 
-await intempt.track('page_view', { userId: 'u1' }); // resolves once buffered
+await intempt.track('page_view', { userId: 'u1' }); // resolves true once buffered
 
-await intempt.flush(); // drain now
-await intempt.close(); // drain, then release timers and sockets
+await intempt.flush(); // drain now; resolves { sent, failed }
+await intempt.close(); // drain, then release timers and sockets; resolves { sent, failed }
 intempt.buffered; // events still queued
 ```
 
-`flush()` and `close()` are safe to call when batching is off; they do nothing.
+`flush()` and `close()` are safe to call when batching is off; they resolve
+`{ sent: 0, failed: 0 }`.
 
-`close()` drains for at most 30 seconds. Past that it stops retrying and logs how
-many events it gave up on. Without a ceiling a shutdown hook can block for minutes
-against a failing endpoint — backoff is `flushMs * 2 ** failures`, so `flushMs:
-60000` works out at roughly 24 minutes — and the retry timer is deliberately not
-`unref`'d, so it holds the event loop open the whole time. Those events are lost
-either way once the process is going down; the ceiling makes the loss counted and
-loud instead of silent and slow. `flush()` is **not** bounded: a caller who is not
-shutting down has not asked to give up.
+`close()` drains for at most 30 seconds. Events still unsent at the end — the
+budget ran out, or the server was unreachable — are dropped, counted in `failed`
+and reported. `flush()` applies no budget.
 
-Retry policy:
+Delivery policy (INT-7436), the same in batch and direct mode:
 
-| Response                | Behaviour                                               |
-| ----------------------- | ------------------------------------------------------- |
-| 413, batch > 1          | halve the batch size, retry                             |
-| 413, batch = 1          | drop the event, log it                                  |
-| 429                     | honour `Retry-After`, else exponential backoff          |
-| 5xx, 408, timeout       | exponential backoff, floored at 100ms, capped at 10 min |
-| other 4xx               | drop the batch, log the status and body                 |
-| 5 consecutive failures  | stop batching and say how many events are stranded      |
-| 3 consecutive 413 drops | say the gateway limit is the likely cause, once         |
+| Outcome                                    | Behaviour                                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------- |
+| 2xx                                        | sent                                                                            |
+| 429, 503                                   | resend once after `Retry-After` (1–60 s, 1 s if absent); a second failure drops |
+| `Retry-After` above 5 s, or past `close()` | drop instead of waiting                                                         |
+| any other status (400s, 408, 413, 5xx)     | drop, no resend                                                                 |
+| timeout or lost response after sending     | drop, no resend: the server may already have it                                 |
+| never reached the server (DNS, refused)    | batch mode keeps the batch for the next flush; direct mode drops                |
 
-Two details worth knowing about the width, because both are visible in your
-request count.
-
-A 413 halves the width, and the width only widens again after ten consecutive
-successful sends that filled it, doubling each time. So one transient 413 costs
-throughput for a while rather than forever — an earlier version never recovered at
-all, and resetting to full immediately just alternates 413/200 at double the
-request count.
-
-A 413 on a single event drops that event and returns the width to full, because the
-oversized event is gone and the width was never the problem. If drops keep coming
-with nothing accepted in between — a gateway whose body limit sits below one event
-— the SDK says so once and otherwise carries on unchanged.
-
-That tally is diagnostic only, and deliberately so. Two earlier versions used it to
-change behaviour and both were worse than what they fixed. Stopping batching
-stranded the buffer and discarded every later event, where the original merely lost
-the events that were genuinely too large. Pinning the width to 1 capped throughput
-to one event per round trip, and since the width then has to climb back through the
-widening ramp — 37 requests to deliver 120 events against 15 — a producer faster
-than that overflows `maxQueue` and good events are lost. Trading delivered events
-for a lower request count is the wrong direction.
-
-The cost that remains is about `log2(batch.size)` requests per dropped event, since
-the halving chain replays each time. It is only paid while events are being
-dropped, which is already logged on every occurrence.
+Each request is sent once because ingestion has no idempotency key: `eventId`
+travels in the payload but nothing collapses duplicates, so a resend after a
+request that actually landed produces duplicate rows. 429 and 503 are the two
+answers that mean the server did not ingest, so they alone are resent. A 413 is
+not split and resent; lower `maxRequestEvents` instead.
 
 The buffer is in memory. A hard crash loses it. Crash durability needs disk with
 fsync and boot-time recovery, which is a different design.
-
-**Delivery is at-least-once, not exactly-once.** A retry after a lost response
-re-sends events the server may already have stored, and ingestion has no
-idempotency key — `eventId` travels in the payload but is not a column in the
-events table, and the table is a plain `MergeTree`, so nothing collapses duplicates.
-A 5xx or timeout that the server actually processed therefore produces duplicate
-rows. Set `batch: false` if you would rather a failure surface to your code than be
-retried, and de-duplicate downstream if exact counts matter.
 
 ## TLS, proxies and private CAs
 
@@ -375,22 +341,29 @@ request fails; use `https.Agent` unless you set `protocol: 'http'`.
 
 ## Errors
 
-Every method returns a promise that rejects on failure. Nothing is swallowed.
+A delivery problem never rejects (INT-7444). `track`, `trackBatch`, `identify`
+and `group` resolve `true` when the event was accepted — queued in batch mode,
+delivered in direct mode — and `false` otherwise. The final outcome of every
+batch that did not deliver reaches one listener, once per batch, never per
+attempt:
 
 ```ts
-import { IntemptApiError } from 'intempt-nodejs-sdk';
-
-try {
-  await intempt.track('purchase', { userId: 'u1' });
-} catch (error) {
-  if (error instanceof IntemptApiError) {
-    error.status; // 429, 500, undefined on a transport failure
-    error.body; // response body
-    error.retryAfterMs; // parsed Retry-After
-    error.retryable; // 408, 429, 5xx, transport errors and timeouts
-  }
-}
+const intempt = Intempt.init({
+  ...config,
+  onDeliveryFailure(failure) {
+    failure.kind; // 'transport' (unreachable, kept), 'terminal' (server said no), 'dropped' (dropped here)
+    failure.status; // HTTP status, when there was one
+    failure.eventCount;
+    failure.eventIds;
+    failure.retryAfter; // seconds, when the server sent Retry-After
+    failure.terminal; // false only for 'transport': the batch is still queued
+  },
+});
 ```
+
+A listener that throws is caught and logged. Programming errors — a missing
+identifier, a reserved event name, a payload that cannot be serialised, a closed
+client — still reject.
 
 ## Library identity
 
@@ -560,8 +533,7 @@ generated from the commit log. Every change needs a test, and
 This SDK derives roughly 190 lines from
 [mixpanel-node](https://github.com/mixpanel/mixpanel-node): its configuration
 object, credential handling, keep-alive and proxy agent setup, response
-classification, library-version reporting, and the batch-size ceiling with 413
-halving.
+classification, library-version reporting, and the batch-size ceiling.
 
 Copyright (c) 2012 Carl Sverre, MIT licensed. Both projects are MIT.
 [NOTICE](./NOTICE) records what is copied verbatim versus adapted, per file.

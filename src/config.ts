@@ -126,6 +126,13 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     throw new RangeError('maxConcurrentRequests must be a positive integer');
   }
 
+  if (
+    config.onDeliveryFailure !== undefined &&
+    typeof config.onDeliveryFailure !== 'function'
+  ) {
+    throw new TypeError('onDeliveryFailure must be a function');
+  }
+
   const { host, port } = splitHost(config.host ?? DEFAULT_CONFIG.host);
 
   return {
@@ -144,6 +151,9 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     maxRequestEvents,
     maxConcurrentRequests,
     ...(config.agent !== undefined ? { agent: config.agent } : {}),
+    ...(config.onDeliveryFailure !== undefined
+      ? { onDeliveryFailure: config.onDeliveryFailure }
+      : {}),
   };
 }
 
@@ -157,7 +167,14 @@ export function mergeConfig(
   patch: Partial<
     Omit<
       IntemptConfig,
-      'org' | 'project' | 'apiKey' | 'sourceId' | 'batch' | 'keepAlive' | 'agent'
+      | 'org'
+      | 'project'
+      | 'apiKey'
+      | 'sourceId'
+      | 'batch'
+      | 'keepAlive'
+      | 'agent'
+      | 'onDeliveryFailure'
     >
   >,
 ): ResolvedConfig {

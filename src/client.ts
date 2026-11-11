@@ -2,6 +2,8 @@ import { mergeConfig, resolveConfig } from './config';
 import { ApiKeyCredentials } from './credentials';
 import { Transport } from './transport';
 import { Batcher } from './batcher';
+import type { FlushResult } from './batcher';
+import type { DeliveryFailure } from './delivery';
 import { Ingest } from './ingest';
 import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
@@ -41,6 +43,7 @@ export class IntemptClient {
     // and must be loud.
     const isOptedIn = (): boolean => this.#optedIn && !this.#closed;
     const assertOpen = (): void => this.#assertOpen();
+    const report = (failure: DeliveryFailure): void => this.#reportFailure(failure);
 
     this.#ingest = new Ingest({
       transport: this.#transport,
@@ -48,6 +51,7 @@ export class IntemptClient {
       batcher: () => this.#batcher,
       isOptedIn,
       assertOpen,
+      report,
     });
 
     if (this.#resolved.batch !== false) {
@@ -55,7 +59,8 @@ export class IntemptClient {
         options: this.#resolved.batch,
         maxRequestEvents: this.#resolved.maxRequestEvents,
         logger: this.#resolved.logger,
-        send: (events) => this.#ingest.send(events),
+        send: (events, deadline) => this.#ingest.send(events, deadline),
+        report,
       });
     }
 
@@ -63,6 +68,7 @@ export class IntemptClient {
       transport: this.#transport,
       config: configRef,
       assertOpen,
+      report,
     });
     this.ecommerce = new Ecommerce(this.#ingest);
     this.#recommend = new Recommend({ transport: this.#transport, config: configRef });
@@ -70,21 +76,36 @@ export class IntemptClient {
   }
 
   // ---- ingest, lifted to the top level so the common calls stay short ----
+  //
+  // Each resolves whether the event was accepted - queued in batch mode, delivered in direct
+  // mode - and never rejects for a delivery problem (INT-7444); those reach `onDeliveryFailure`.
+  // A Promise rather than the contract's synchronous bool: these were `Promise<void>`, and a
+  // synchronous return would break every caller chaining `.then()`/`.catch()` on them.
 
-  track(event: string, options: TrackOptions): Promise<void> {
+  track(event: string, options: TrackOptions): Promise<boolean> {
     return this.#ingest.track(event, options);
   }
 
-  trackBatch(events: TrackEvent[]): Promise<void> {
+  trackBatch(events: TrackEvent[]): Promise<boolean> {
     return this.#ingest.trackBatch(events);
   }
 
-  identify(options: IdentifyOptions): Promise<void> {
+  identify(options: IdentifyOptions): Promise<boolean> {
     return this.#ingest.identify(options);
   }
 
-  group(options: GroupOptions): Promise<void> {
+  group(options: GroupOptions): Promise<boolean> {
     return this.#ingest.group(options);
+  }
+
+  #reportFailure(failure: DeliveryFailure): void {
+    const listener = this.#resolved.onDeliveryFailure;
+    if (!listener) return;
+    try {
+      listener(failure);
+    } catch (error) {
+      this.#resolved.logger.error('[intempt] onDeliveryFailure listener threw', error);
+    }
   }
 
   // ---- decisions out ----
@@ -249,7 +270,14 @@ export class IntemptClient {
     patch: Partial<
       Omit<
         IntemptConfig,
-        'org' | 'project' | 'apiKey' | 'sourceId' | 'batch' | 'keepAlive' | 'agent'
+        | 'org'
+        | 'project'
+        | 'apiKey'
+        | 'sourceId'
+        | 'batch'
+        | 'keepAlive'
+        | 'agent'
+        | 'onDeliveryFailure'
       >
     > & { keepAlive?: never; agent?: never },
   ): void {
@@ -280,13 +308,15 @@ export class IntemptClient {
   }
 
   /**
-   * Drains the buffer. A no-op when batching is off, so calling it
-   * unconditionally in a shutdown hook is safe.
+   * Drains the buffer and resolves what it did: `{ sent, failed }` in events. Resolves
+   * `{ sent: 0, failed: 0 }` when batching is off, so calling it unconditionally in a shutdown
+   * hook is safe. Never rejects for a delivery problem.
    */
-  async flush(): Promise<void> {
+  async flush(): Promise<FlushResult> {
     if (this.#batcher) {
-      await this.#batcher.flush();
+      return this.#batcher.flush();
     }
+    return { sent: 0, failed: 0 };
   }
 
   #assertOpen(): void {
@@ -297,14 +327,17 @@ export class IntemptClient {
     }
   }
 
-  /** Flushes, then releases timers and sockets. The client is unusable after. */
-  async close(): Promise<void> {
-    if (this.#closed) return;
-    if (this.#batcher) {
-      await this.#batcher.close();
-    }
+  /**
+   * Flushes, then releases timers and sockets, and resolves `{ sent, failed }` for the final
+   * drain; events still unsent at the end count as failed. This is the contract's `shutdown()`
+   * (CONTRACT-R2 §S2) under its existing name. The client is unusable after.
+   */
+  async close(): Promise<FlushResult> {
+    if (this.#closed) return { sent: 0, failed: 0 };
+    const result = this.#batcher ? await this.#batcher.close() : { sent: 0, failed: 0 };
     this.#closed = true;
     this.#transport.destroy();
+    return result;
   }
 }
 

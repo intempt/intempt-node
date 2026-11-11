@@ -16,39 +16,6 @@ setupNock();
  * One test per defect found by the code review of PR #19, so none can return.
  */
 
-describe('regression: 413 halving is not undone by the next success', () => {
-  it('keeps the reduced width until a full-width send succeeds', async () => {
-    // Resetting after every success meant 413 -> halve -> succeed -> reset ->
-    // 413 again, forever, at double the request count, and each success cleared
-    // the failure counter so the breaker never tripped.
-    const widths: number[] = [];
-    nock(ORIGIN)
-      .post(TRACK_PATH, (b: { track: unknown[] }) => {
-        widths.push(b.track.length);
-        return true;
-      })
-      .times(6)
-      .reply(function () {
-        const n = widths[widths.length - 1] ?? 0;
-        return n > 4 ? [413, ''] : [200, ''];
-      });
-
-    const c = client({
-      logger: testLogger(),
-      batch: { size: 8, flushMs: 10_000, maxQueue: 100, flushOnExit: false },
-    });
-    for (let i = 0; i < 16; i += 1) await c.track(`e${i}`, { userId: 'u1' });
-    await c.flush();
-
-    // First request oversized and rejected, then every following one stays at 4.
-    expect(widths[0]).toBe(8);
-    expect(widths.slice(1).every((w) => w <= 4)).toBe(true);
-    expect(widths.filter((w) => w === 8)).toHaveLength(1);
-    expect(c.buffered).toBe(0);
-    await c.close();
-  });
-});
-
 describe('regression: a zero or past Retry-After must not become a hot loop', () => {
   it('floors the backoff instead of retrying instantly', async () => {
     const logger = testLogger();
@@ -232,7 +199,7 @@ describe('regression: destroy() releases the agent actually in use', () => {
         sourceId: '1',
         logger: testLogger(),
       });
-      await expect(c.close()).resolves.toBeUndefined();
+      await expect(c.close()).resolves.toEqual({ sent: 0, failed: 0 });
     } finally {
       if (previous === undefined) delete process.env.HTTPS_PROXY;
       else process.env.HTTPS_PROXY = previous;

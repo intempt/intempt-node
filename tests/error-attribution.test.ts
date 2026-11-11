@@ -86,7 +86,7 @@ describe('ingest reports the method the caller actually invoked', () => {
   it('accepts group with only an accountId, which is itself an identifier', async () => {
     // Worth pinning: this is why group() needs no assertIdentifier call.
     const scope = nock(ORIGIN).post(TRACK_PATH).reply(200, '');
-    await expect(client().group({ accountId: 'a' } as never)).resolves.toBeUndefined();
+    await expect(client().group({ accountId: 'a' } as never)).resolves.toBe(true);
     scope.done();
   });
 

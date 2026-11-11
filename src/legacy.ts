@@ -277,11 +277,11 @@ export class SDK {
     this.#client.optOut();
   }
 
-  flush(): Promise<void> {
-    return this.#client.flush();
+  async flush(): Promise<void> {
+    await this.#client.flush();
   }
 
-  close(): Promise<void> {
-    return this.#client.close();
+  async close(): Promise<void> {
+    await this.#client.close();
   }
 }

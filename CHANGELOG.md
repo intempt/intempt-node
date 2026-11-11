@@ -5,6 +5,33 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Every ingestion request is sent once** (INT-7436, CONTRACT-R2 §S1). 429 and
+  503 are resent once after `Retry-After` clamped to 1–60 s (1 s when absent);
+  a wait above 5 s, or past the `close()` budget, drops instead. Every other
+  status, and a timeout after the request was written, drops with no resend:
+  the server may already have stored it and ingestion does not de-duplicate.
+  Removed: exponential backoff, the 5-failure circuit breaker, and 413 halving
+  in both batch mode and direct-mode `trackBatch()` (lower `maxRequestEvents`
+  instead). A batch that never reached the server (DNS, refused connection) is
+  kept for the next flush in batch mode. Consent writes follow the same policy.
+- **Delivery failures no longer reject** (INT-7444, CONTRACT-R2 §S2). `track`,
+  `trackBatch`, `identify` and `group` resolve `true` when the event was
+  accepted (queued in batch mode, delivered in direct mode) and `false`
+  otherwise; `consent.*` resolves either way. Callers that caught a rejected
+  `IntemptApiError` from these calls must move to `onDeliveryFailure`.
+  Programming errors still reject.
+- **`flush()` and `close()` resolve `{ sent, failed }`** (INT-7444). `close()`
+  is the contract's `shutdown()`; events it cannot send are counted as failed.
+
+### Added
+
+- **`onDeliveryFailure(failure)` config listener** (INT-7444). Fires once per
+  batch on its final outcome with `{ kind, status?, eventCount, eventIds,
+retryAfter?, terminal }`; `transport` fires once per kept batch, not on every
+  flush. A listener that throws is caught and logged.
+
 ## [3.1.0] - unreleased
 
 ### Changed

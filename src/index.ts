@@ -5,6 +5,8 @@ export { COMMERCE_EVENTS } from './ecommerce';
 export { IDENTIFY_EVENT } from './ingest';
 export { LIB_NAME, LIB_VERSION } from './stamp';
 export type { FlagContext } from './flags';
+export type { DeliveryFailure } from './delivery';
+export type { FlushResult } from './batcher';
 
 /** @deprecated Use `Intempt.init()`. Removed in 3.0.0. */
 export { SDK } from './legacy';

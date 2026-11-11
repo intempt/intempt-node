@@ -11,6 +11,7 @@ import {
   client,
   nock,
   setupNock,
+  postError,
 } from './helpers';
 
 setupNock();
@@ -257,9 +258,7 @@ describe('undefined values are dropped rather than serialised', () => {
 describe('the error type identifies itself', () => {
   it('reports name as IntemptApiError, which is what callers match on', async () => {
     nock(ORIGIN).post(TRACK_PATH).reply(500, 'boom');
-    const error = (await client()
-      .track('purchase', { userId: 'u1' })
-      .catch((e: unknown) => e)) as Error;
+    const error = (await postError()) as Error;
     expect(error.name).toBe('IntemptApiError');
     // toString() derives from name, so this is the string a log line shows.
     expect(String(error)).toMatch(/^IntemptApiError: /);

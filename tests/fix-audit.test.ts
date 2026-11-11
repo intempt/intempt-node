@@ -8,7 +8,6 @@ import {
   nock,
   setupNock,
   testLogger,
-  waitFor,
 } from './helpers';
 
 setupNock();
@@ -73,8 +72,8 @@ describe('audit the closed-client throw', () => {
   it('keeps close() itself idempotent and non-throwing', async () => {
     const c = client();
     await c.close();
-    await expect(c.close()).resolves.toBeUndefined();
-    await expect(c.flush()).resolves.toBeUndefined();
+    await expect(c.close()).resolves.toEqual({ sent: 0, failed: 0 });
+    await expect(c.flush()).resolves.toEqual({ sent: 0, failed: 0 });
   });
 
   it('gates the read path after close, like every other method', async () => {
@@ -109,118 +108,6 @@ describe('audit the closed-client throw', () => {
       caught = e;
     }
     expect((caught as Error).message).toMatch(/client is closed/);
-  });
-});
-
-describe('audit the 413 width policy', () => {
-  // Recovery of the full width is asserted in tests/boundaries.test.ts, which
-  // counts width-4 requests before and after the 413. This test only proves the
-  // narrower property that a 413 does not lose events.
-  //
-  // It used to be titled "recovers full width…" and asserted `widths` contained a
-  // 4 — which the rejected pre-413 attempt already satisfied, so it passed while
-  // the width in fact stayed halved for the life of the client. Mutation testing
-  // caught the vacuous assertion.
-  it('drains the queue through a 413 without losing events', async () => {
-    const widths: number[] = [];
-    let rejectBig = true;
-    nock(ORIGIN)
-      .post(TRACK_PATH, (b: { track: unknown[] }) => {
-        widths.push(b.track.length);
-        return true;
-      })
-      .times(8)
-      .reply(function () {
-        const n = widths[widths.length - 1] ?? 0;
-        return rejectBig && n > 2 ? [413, ''] : [200, ''];
-      });
-
-    const c = client({
-      logger: testLogger(),
-      batch: { size: 4, flushMs: 10_000, maxQueue: 100, flushOnExit: false },
-    });
-    for (let i = 0; i < 4; i += 1) await c.track(`a${i}`, { userId: 'u1' });
-    await c.flush();
-    expect(c.buffered).toBe(0);
-
-    // Server healthy again: everything queued after the 413 still gets sent.
-    rejectBig = false;
-    for (let i = 0; i < 4; i += 1) await c.track(`b${i}`, { userId: 'u1' });
-    await c.flush();
-
-    // 4 rejected + 4 accepted + 4 more = every event accounted for, counting the
-    // rejected attempt once.
-    const accepted = widths.slice(1).reduce((a, b) => a + b, 0);
-    expect(accepted).toBe(8);
-    expect(c.buffered).toBe(0);
-    await c.close();
-  });
-
-  it('does not divide below one and spin', async () => {
-    const logger = testLogger();
-    nock(ORIGIN).post(TRACK_PATH).times(4).reply(413, '');
-    const c = client({
-      logger,
-      batch: { size: 2, flushMs: 10_000, maxQueue: 10, flushOnExit: false },
-    });
-    await c.track('a', { userId: 'u1' });
-    await c.track('b', { userId: 'u1' });
-    await c.flush();
-
-    // Halve to 1, then drop each single event; the queue must empty, not spin.
-    expect(c.buffered).toBe(0);
-    expect(
-      logger.calls.error.some((a) => String(a[0]).includes('single event too large')),
-    ).toBe(true);
-    await c.close();
-  });
-});
-
-describe('audit the retry floor', () => {
-  it('still honours a genuinely long Retry-After rather than flooring it down', async () => {
-    // The floor must be a lower bound only. Clamping a long wait down would
-    // ignore a server asking for real relief.
-    const logger = testLogger();
-    nock(ORIGIN).post(TRACK_PATH).reply(429, '', { 'Retry-After': '2' });
-    nock(ORIGIN).post(TRACK_PATH).reply(200, '');
-
-    const c = client({
-      logger,
-      batch: { size: 1, flushMs: 10, maxQueue: 10, flushOnExit: false },
-    });
-    await c.track('a', { userId: 'u1' });
-    const flushing = c.flush();
-
-    // Wait for the backoff decision to be logged, then assert what it chose.
-    await waitFor(() =>
-      logger.calls.warn.some((a) => /retrying in \d+ms/.test(String(a[0]))),
-    );
-    expect(logger.calls.warn.some((a) => /retrying in 2000ms/.test(String(a[0])))).toBe(
-      true,
-    );
-    await flushing;
-    await c.close();
-  }, 10_000);
-
-  it('caps a hostile multi-year Retry-After at the maximum interval', async () => {
-    const logger = testLogger();
-    nock(ORIGIN).post(TRACK_PATH).reply(429, '', { 'Retry-After': '999999999' });
-    const c = client({
-      logger,
-      batch: { size: 1, flushMs: 10, maxQueue: 10, flushOnExit: false },
-    });
-    await c.track('a', { userId: 'u1' });
-    void c.flush();
-    await waitFor(() =>
-      logger.calls.warn.some((a) => /retrying in \d+ms/.test(String(a[0]))),
-    );
-
-    const advised = logger.calls.warn
-      .map((a) => /retrying in (\d+)ms/.exec(String(a[0]))?.[1])
-      .filter((v): v is string => v !== undefined)
-      .map(Number);
-    expect(advised[0]).toBeLessThanOrEqual(10 * 60 * 1000);
-    nock.cleanAll();
   });
 });
 
@@ -263,13 +150,13 @@ describe('audit the frozen config snapshot', () => {
       batch: { size: 2, flushMs: 10_000, maxQueue: 10, flushOnExit: false },
     });
     // Read the snapshot first: if freezing had frozen the batcher's own options,
-    // its internal width adjustments would now throw.
+    // a drain that touched them would now throw.
     void c.config.batch;
-    // width 2 -> 413, halve to 1, then one 413 per single event: three requests.
-    nock(ORIGIN).post(TRACK_PATH).times(4).reply(413, '');
+    // One request, dropped on 413 without halving (INT-7436).
+    nock(ORIGIN).post(TRACK_PATH).reply(413, '');
     await c.track('a', { userId: 'u1' });
     await c.track('b', { userId: 'u1' });
-    await expect(c.flush()).resolves.toBeUndefined();
+    await expect(c.flush()).resolves.toEqual({ sent: 0, failed: 2 });
     await c.close();
   });
 });
@@ -300,7 +187,7 @@ describe('audit destroy() with a proxy configured', () => {
         logger: testLogger(),
       });
       await c.close();
-      await expect(c.close()).resolves.toBeUndefined();
+      await expect(c.close()).resolves.toEqual({ sent: 0, failed: 0 });
     } finally {
       if (previous === undefined) delete process.env.HTTPS_PROXY;
       else process.env.HTTPS_PROXY = previous;

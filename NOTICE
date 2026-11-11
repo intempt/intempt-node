@@ -37,7 +37,7 @@ promise-native form)
     library name and version stamping
                         from lib/mixpanel-node.js  send_event_request
   src/batcher.ts
-    the batch-size ceiling and 413 halving behaviour
+    the batch-size ceiling (413 halving removed in INT-7436)
                         from lib/mixpanel-node.js  send_batch_requests
 
 Not derived from mixpanel-node

@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { IntemptApiError } from '../src';
-import { ORIGIN, TRACK_PATH, client, nock, setupNock, testLogger } from './helpers';
+import {
+  ORIGIN,
+  TRACK_PATH,
+  client,
+  nock,
+  setupNock,
+  testLogger,
+  postError,
+} from './helpers';
 
 setupNock();
 
@@ -63,9 +71,10 @@ describe('attack: hostile input', () => {
     // The SDK should not invent a length limit the API does not have; it should
     // simply pass it and surface whatever the API says.
     nock(ORIGIN).post(TRACK_PATH).reply(400, '{"errors":[{"message":"too long"}]}');
-    const error = await client()
-      .track('x'.repeat(10_000), { userId: 'u1' })
-      .catch((e: unknown) => e);
+    const error = await postError(
+      {},
+      { track: [{ name: 'x'.repeat(10_000), payload: [] }] },
+    );
     expect((error as IntemptApiError).status).toBe(400);
   });
 
@@ -92,16 +101,14 @@ describe('attack: a hostile logger', () => {
     // debug: true routes through the logger before the request is sent.
     await expect(
       client({ logger: exploding, debug: true }).track('purchase', { userId: 'u1' }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(true);
   });
 });
 
 describe('attack: credential exposure through error paths', () => {
   it('keeps the key out of a thrown error, however it is serialised', async () => {
     nock(ORIGIN).post(TRACK_PATH).reply(500, 'boom');
-    const error = (await client()
-      .track('purchase', { userId: 'u1' })
-      .catch((e: unknown) => e)) as IntemptApiError;
+    const error = (await postError()) as IntemptApiError;
 
     const secret = 'sec0123456789abcdef';
     const basic = Buffer.from('pfx0123456789abcdef:sec0123456789abcdef').toString(
@@ -201,7 +208,7 @@ describe('attack: batcher under abuse', () => {
     expect(process.listenerCount('beforeExit')).toBe(before);
   });
 
-  it('stops rather than looping forever on a permanently failing server', async () => {
+  it('sends once rather than looping on a permanently failing server (INT-7436)', async () => {
     nock(ORIGIN).post(TRACK_PATH).times(20).reply(500, '');
     const { c, logger } = batched({
       batch: { size: 1, flushMs: 1, maxQueue: 10, flushOnExit: false },
@@ -210,11 +217,11 @@ describe('attack: batcher under abuse', () => {
     await c.track('a', { userId: 'u1' });
     await c.flush();
 
-    // Five attempts then stop; the remaining mocks prove it did not keep going.
-    expect(nock.pendingMocks().length).toBeGreaterThan(0);
-    expect(
-      logger.calls.error.some((a) => String(a[0]).includes('stopping batching')),
-    ).toBe(true);
+    // One attempt, dropped and reported; the remaining mocks prove it did not keep going.
+    expect(nock.pendingMocks()).toHaveLength(1);
+    expect(logger.calls.error.some((a) => String(a[0]).includes('batch dropped'))).toBe(
+      true,
+    );
   });
 });
 
@@ -231,7 +238,7 @@ describe('attack: concurrency in trackBatch', () => {
         client({ maxRequestEvents: 1, maxConcurrentRequests: 6 }).trackBatch(
           Array.from({ length: 6 }, (_, i) => ({ event: `e${i}`, userId: 'u1' })),
         ),
-      ).rejects.toThrow(IntemptApiError);
+      ).resolves.toBe(false);
       // Asserting the absence of an unhandled rejection, so a wait is unavoidable.
       await new Promise((r) => setTimeout(r, 250));
       expect(unhandled).toEqual([]);
@@ -244,7 +251,7 @@ describe('attack: concurrency in trackBatch', () => {
 describe('attack: transport edge cases', () => {
   it('does not crash on a 200 with a body that is not JSON', async () => {
     nock(ORIGIN).post(TRACK_PATH).reply(200, '<html>gateway</html>');
-    await expect(client().track('purchase', { userId: 'u1' })).resolves.toBeUndefined();
+    await expect(client().track('purchase', { userId: 'u1' })).resolves.toBe(true);
   });
 
   it('surfaces a socket hangup as a retryable error', async () => {
@@ -255,9 +262,7 @@ describe('attack: transport edge cases', () => {
     nock(ORIGIN)
       .post(TRACK_PATH)
       .replyWithError(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }));
-    const error = (await client()
-      .track('purchase', { userId: 'u1' })
-      .catch((e: unknown) => e)) as IntemptApiError;
+    const error = (await postError()) as IntemptApiError;
     expect(error).toBeInstanceOf(IntemptApiError);
     expect(error.retryable).toBe(true);
   });
@@ -266,9 +271,7 @@ describe('attack: transport edge cases', () => {
     nock(ORIGIN)
       .post(TRACK_PATH)
       .reply(429, '', { 'Retry-After': 'not-a-number-or-a-date' });
-    const error = (await client()
-      .track('purchase', { userId: 'u1' })
-      .catch((e: unknown) => e)) as IntemptApiError;
+    const error = (await postError()) as IntemptApiError;
     expect(error.status).toBe(429);
     expect(error.retryAfterMs).toBeUndefined();
     expect(error.retryable).toBe(true);

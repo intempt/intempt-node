@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { IntemptApiError } from '../src';
-import { BASIC, HOST, ORIGIN, TRACK_PATH, client, nock, setupNock } from './helpers';
+import {
+  BASIC,
+  HOST,
+  ORIGIN,
+  TRACK_PATH,
+  client,
+  nock,
+  setupNock,
+  postError,
+} from './helpers';
 
 setupNock();
 
@@ -58,9 +67,7 @@ describe('transport: errors', () => {
   it('surfaces the HTTP status and body instead of a generic message', async () => {
     nock(ORIGIN).post(TRACK_PATH).reply(422, '{"error":"bad name"}');
 
-    const error = await client()
-      .track('purchase', { userId: 'u1' })
-      .catch((e: unknown) => e);
+    const error = await postError();
 
     expect(error).toBeInstanceOf(IntemptApiError);
     const api = error as IntemptApiError;
@@ -83,9 +90,7 @@ describe('transport: errors', () => {
 
     for (const [status, retryable] of statuses) {
       nock(ORIGIN).post(TRACK_PATH).reply(status, '');
-      const error = (await client()
-        .track('purchase', { userId: 'u1' })
-        .catch((e: unknown) => e)) as IntemptApiError;
+      const error = (await postError()) as IntemptApiError;
       expect(error.status, `status ${status}`).toBe(status);
       expect(error.retryable, `status ${status} retryable`).toBe(retryable);
     }
@@ -94,9 +99,7 @@ describe('transport: errors', () => {
   it('parses Retry-After given in seconds', async () => {
     nock(ORIGIN).post(TRACK_PATH).reply(429, '', { 'Retry-After': '3' });
 
-    const error = (await client()
-      .track('purchase', { userId: 'u1' })
-      .catch((e: unknown) => e)) as IntemptApiError;
+    const error = (await postError()) as IntemptApiError;
 
     expect(error.retryAfterMs).toBe(3000);
   });
@@ -105,9 +108,7 @@ describe('transport: errors', () => {
     const when = new Date(Date.now() + 5000).toUTCString();
     nock(ORIGIN).post(TRACK_PATH).reply(429, '', { 'Retry-After': when });
 
-    const error = (await client()
-      .track('purchase', { userId: 'u1' })
-      .catch((e: unknown) => e)) as IntemptApiError;
+    const error = (await postError()) as IntemptApiError;
 
     expect(error.retryAfterMs).toBeGreaterThan(3000);
     expect(error.retryAfterMs).toBeLessThanOrEqual(5000);
@@ -116,9 +117,7 @@ describe('transport: errors', () => {
   it('rejects with a retryable error on timeout', async () => {
     nock(ORIGIN).post(TRACK_PATH).delayConnection(200).reply(200, '');
 
-    const error = (await client({ timeout: 30 })
-      .track('purchase', { userId: 'u1' })
-      .catch((e: unknown) => e)) as IntemptApiError;
+    const error = (await postError({ timeout: 30 })) as IntemptApiError;
 
     expect(error).toBeInstanceOf(IntemptApiError);
     expect(error.status).toBeUndefined();
@@ -129,9 +128,7 @@ describe('transport: errors', () => {
   it('wraps transport failures with no response as retryable', async () => {
     nock(ORIGIN).post(TRACK_PATH).replyWithError('ECONNRESET');
 
-    const error = (await client()
-      .track('purchase', { userId: 'u1' })
-      .catch((e: unknown) => e)) as IntemptApiError;
+    const error = (await postError()) as IntemptApiError;
 
     expect(error).toBeInstanceOf(IntemptApiError);
     expect(error.retryable).toBe(true);
