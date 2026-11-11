@@ -39,6 +39,34 @@ describe('config: required fields', () => {
   });
 });
 
+// INT-7455: the backend parses sourceId as a positive Java long; anything else failed every call
+// silently instead of failing init.
+describe('config: sourceId must be a positive 64-bit integer string', () => {
+  it.each([
+    'abc',
+    '12a',
+    '0',
+    '01',
+    '-5',
+    ' 1',
+    '1\n',
+    '1.5',
+    '9223372036854775808',
+    '12345678901234567890',
+  ])('rejects %j', (sourceId) => {
+    expect(() => Intempt.init({ ...base, sourceId })).toThrow(
+      /"sourceId" must be a positive 64-bit integer/,
+    );
+  });
+
+  it.each(['1', '1841503112918048768', '9223372036854775807'])(
+    'accepts %j and keeps every digit',
+    (sourceId) => {
+      expect(Intempt.init({ ...base, sourceId }).config.sourceId).toBe(sourceId);
+    },
+  );
+});
+
 describe('config: defaults', () => {
   it('targets production over https with batching off', () => {
     const c = Intempt.init(base);

@@ -5,6 +5,13 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **`sourceId` is validated at `Intempt.init`** (INT-7455). It must be a positive
+  64-bit integer as a string of digits (`^[1-9][0-9]{0,18}$`, at most
+  9223372036854775807), which is what the API parses. A value such as `"abc"`
+  used to pass init and then fail every call that carried it; it now throws.
+
 ## [3.0.2] - 2026-11-06
 
 ### Fixed
