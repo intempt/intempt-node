@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds release notes for a tag from the commit range since the previous tag.
-# Conventional Commit prefixes are enforced by pr-title-check.yml, so the log is
-# a reliable source and the notes do not have to be typed by hand.
+# Commit subjects are not enforced (the PR title check was removed: it blocked the
+# automated "Merge Staging into Main" promotion), so the notes are only as good as the log.
 set -euo pipefail
 
 VERSION_LABEL="${1:?usage: generate-changelog.sh <version-label> <repo-url> [end-ref]}"
