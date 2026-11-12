@@ -251,7 +251,7 @@ instead of telling them where it moved.
 ## Privacy
 
 ```ts
-intempt.optOut(); // suppresses every write: events, commerce, consent
+intempt.optOut(); // suppresses events and commerce; consent is still sent
 intempt.isOptedIn(); // false
 intempt.optIn();
 ```

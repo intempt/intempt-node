@@ -16,7 +16,6 @@ const LOW_TIMESTAMP_LIMIT_MS = 1_262_304_000_000;
 export interface ConsentDeps {
   transport: Transport;
   config(): ResolvedConfig;
-  isOptedIn(): boolean;
   /** Throws if the client has been closed. */
   assertOpen(): void;
 }
@@ -61,10 +60,9 @@ export class Consent {
       );
     }
 
+    // Deliberately NOT gated on opt-out (ruling D-5, INT-7437): a withdrawal must reach the
+    // server precisely when the person has opted out. intempt-js consent() does the same.
     this.#deps.assertOpen();
-    if (!this.#deps.isOptedIn()) {
-      return;
-    }
 
     const ms =
       options.timestamp === undefined ? Date.now() : ensureTimestamp(options.timestamp);

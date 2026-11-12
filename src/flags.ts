@@ -80,7 +80,6 @@ interface RawChoice {
   name?: string;
   group?: string;
   body?: unknown;
-  reason?: FlagReason;
 }
 
 export interface FlagsDeps {
@@ -146,7 +145,10 @@ export class Flags {
     }
     return {
       value: (choice.body ?? defaultValue) as T,
-      reason: choice.reason ?? UNANSWERED,
+      // Not read off the wire (INT-7457): ExperienceApiChoose carries only name/group/body, so a
+      // `reason` key could only come from a fixture. RawChoice has no `reason`, so tsc refuses a
+      // reintroduced read.
+      reason: UNANSWERED,
     };
   }
 

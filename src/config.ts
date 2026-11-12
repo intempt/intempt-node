@@ -65,6 +65,20 @@ function splitHost(host: string): { host: string; port?: number } {
   return { host: hostname, port: parsed };
 }
 
+const LONG_MAX = '9223372036854775807';
+
+/**
+ * The backend parses sourceId as a Java long and requires it > 0 (INT-7455). Compared as a
+ * string, never through Number(): a 19-digit id is past Number.MAX_SAFE_INTEGER and would round.
+ * Equal-length digit strings order lexicographically exactly as they order numerically.
+ */
+function isPositiveLong(value: string): boolean {
+  return (
+    /^[1-9][0-9]{0,18}$/.test(value) &&
+    (value.length < LONG_MAX.length || value <= LONG_MAX)
+  );
+}
+
 export function resolveConfig(config: IntemptConfig): ResolvedConfig {
   if (!config || typeof config !== 'object') {
     throw new TypeError('Intempt.init requires a config object');
@@ -75,8 +89,16 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
       throw new TypeError(`Intempt.init: "${field}" is required`);
     }
   }
-  if (config.sourceId !== undefined && String(config.sourceId).trim() === '') {
-    throw new TypeError('Intempt.init: "sourceId" must not be empty when provided');
+  if (config.sourceId !== undefined) {
+    const sourceId = String(config.sourceId);
+    if (sourceId.trim() === '') {
+      throw new TypeError('Intempt.init: "sourceId" must not be empty when provided');
+    }
+    if (!isPositiveLong(sourceId)) {
+      throw new TypeError(
+        'Intempt.init: "sourceId" must be a positive 64-bit integer, as a string of digits',
+      );
+    }
   }
 
   const rawLogger = config.logger ?? console;

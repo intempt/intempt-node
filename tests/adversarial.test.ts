@@ -306,7 +306,6 @@ describe('attack: optOut cannot be bypassed', () => {
     const spy = vi.spyOn(c, 'isOptedIn');
 
     await c.track('purchase', { userId: 'u1' });
-    await c.consent.grant({ userId: 'u1' });
     await c.ecommerce.ordered({ userId: 'u1', products: [{ productId: 'p' }] });
 
     expect(nock.pendingMocks()).toEqual([]);
