@@ -21,6 +21,11 @@ This project follows [Semantic Versioning](https://semver.org/).
   `kind: 'terminal'` (the server answered) or `kind: 'dropped'` (timeout, or
   never reached: consent has no queue), `eventCount: 1` and `eventIds: []`. The
   1.x `SDK.consent`/`consents` shim resolves on a delivery failure too.
+- **A full queue drops the oldest waiting event** (ruling R4). At
+  `batch.maxQueue` the oldest event that no send is carrying is dropped and
+  reported `dropped` with its `eventIds`; the new event is queued and `track`
+  resolves `true`. It used to drop the new event and resolve `false`. When every
+  queued event is in flight, the new event is still dropped.
 
 ### Changed
 
@@ -35,6 +40,12 @@ This project follows [Semantic Versioning](https://semver.org/).
   kept for the next timed flush (or an explicit `flush()`) in batch mode;
   reaching `batch.size` meanwhile starts no resend. Consent writes follow the
   same policy.
+- **A stale keep-alive socket no longer loses a batch** (ruling R5). A reused
+  socket that fails with `ECONNRESET`/`EPIPE` before any response byte is
+  reconnected once at once; if that also fails before the write, the batch is
+  treated as never reached. A fresh socket lost after the write, and any
+  timeout, still drop with no resend. `ENETDOWN` and TLS handshake failures
+  (certificate and protocol-version errors) are now never-reached as well.
 - **`flush()` and `close()` resolve `{ sent, failed }`** (INT-7444). `close()`
   is the contract's `shutdown()`; events it cannot send are counted as failed.
 

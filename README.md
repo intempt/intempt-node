@@ -285,7 +285,7 @@ const intempt = Intempt.init({
   batch: {
     size: 50, // buffered events that trigger a flush
     flushMs: 5_000, // idle time before a flush
-    maxQueue: 10_000, // ceiling; beyond it events are dropped and logged
+    maxQueue: 10_000, // ceiling; beyond it the oldest waiting event is dropped and reported
     flushOnExit: true, // flush on process 'beforeExit'
   },
 });
@@ -306,14 +306,15 @@ and reported. `flush()` applies no budget.
 
 Delivery policy (INT-7436), the same in batch and direct mode:
 
-| Outcome                                    | Behaviour                                                                                                                                             |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2xx                                        | sent                                                                                                                                                  |
-| 429, 503                                   | resend once after `Retry-After` (1–60 s, 1 s if absent); a second failure drops                                                                       |
-| `Retry-After` above 5 s, or past `close()` | drop instead of waiting                                                                                                                               |
-| any other status (400s, 408, 413, 5xx)     | drop, no resend                                                                                                                                       |
-| timeout or lost response after sending     | drop, no resend: the server may already have it                                                                                                       |
-| never reached the server (DNS, refused)    | batch mode keeps the batch until the next timed flush (`flushMs`) or `flush()`; reaching `size` meanwhile sends nothing; direct mode and consent drop |
+| Outcome                                                              | Behaviour                                                                                                                                             |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2xx                                                                  | sent                                                                                                                                                  |
+| 429, 503                                                             | resend once after `Retry-After` (1–60 s, 1 s if absent); a second failure drops                                                                       |
+| `Retry-After` above 5 s, or past `close()`                           | drop instead of waiting                                                                                                                               |
+| any other status (400s, 408, 413, 5xx)                               | drop, no resend                                                                                                                                       |
+| timeout or lost response after sending                               | drop, no resend: the server may already have it                                                                                                       |
+| never reached the server (DNS, refused, network down, TLS handshake) | batch mode keeps the batch until the next timed flush (`flushMs`) or `flush()`; reaching `size` meanwhile sends nothing; direct mode and consent drop |
+| a pooled keep-alive socket the server closed                         | reconnected once at once; if that also fails before sending, treated as never reached                                                                 |
 
 Each request is sent once because ingestion has no idempotency key: `eventId`
 travels in the payload but nothing collapses duplicates, so a resend after a
