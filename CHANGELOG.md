@@ -7,9 +7,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed — BREAKING
 
-Both changes below alter the public contract, so under SemVer they ship in a
-new major version, not in a 3.x minor.
-
 - **Delivery failures no longer reject** (INT-7444, CONTRACT-R2 §S2). `track`,
   `trackBatch`, `identify` and `group` resolve `true` when the event was
   accepted (queued in batch mode, delivered in direct mode) and `false`

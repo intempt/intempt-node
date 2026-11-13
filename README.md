@@ -402,7 +402,6 @@ Breaking changes to expect:
 | `?apiKey=` query parameter                  | `Authorization: Basic` header             |
 | invalid input warns and resolves            | rejects                                   |
 | product helpers return `{ error: true }`    | reject on invalid input                   |
-| a delivery failure                          | resolves, logged at error; never rejects  |
 | `trackingClient` and friends                | removed                                   |
 | `NODE_ENV=test` targets staging             | `host` is configuration                   |
 | `optOut()` gates tracking only              | gates every write                         |
@@ -411,6 +410,9 @@ Breaking changes to expect:
 | `choosePersonalizationsByGroups` and 3 more | throw — browser SDK only                  |
 | `recommendation(...)`                       | `recommend({ userId, feedId, fields })`   |
 | unbounded resend, no flush                  | buffering is opt-in, with `flush`/`close` |
+
+A delivery failure on the shim resolves and is logged at error; it never rejects.
+The shim takes no config, so it has no `onDeliveryFailure` listener.
 
 ## Not in this SDK
 
