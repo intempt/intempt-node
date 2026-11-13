@@ -3,7 +3,7 @@
 All notable changes to this package are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [4.0.0] - unreleased
 
 ### Changed — BREAKING
 
