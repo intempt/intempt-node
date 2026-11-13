@@ -509,6 +509,58 @@ describe('over a real socket: a stale keep-alive socket (R5)', () => {
     await s.stop();
   });
 
+  it('in batch mode keeps the batch when both tries die on stale pooled sockets', async () => {
+    const s = await staleServer((req) => req.socket.destroy());
+    s.mode.stale = false;
+    // A caller-supplied agent shared by two clients: the direct one leaves two idle sockets in
+    // it, then the batching one draws both as reused.
+    const agent = new http.Agent({ keepAlive: true });
+    const warm = clientFor(s.host, {
+      agent,
+      maxRequestEvents: 1,
+      maxConcurrentRequests: 2,
+    });
+    await warm.c.trackBatch([
+      { event: 'p', userId: 'u1' },
+      { event: 'q', userId: 'u1' },
+    ]);
+    await warm.c.close();
+    s.mode.stale = true;
+    const { c, failures } = clientFor(s.host, {
+      agent,
+      batch: { size: 1, flushMs: 60_000, maxQueue: 10, flushOnExit: false },
+    });
+
+    // size 1 sends from track(); an explicit flush() here would resend the kept batch at once.
+    await c.track('b', { userId: 'u1' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(s.seen.filter((x) => x.startsWith('stale:'))).toEqual(['stale:b', 'stale:b']);
+    expect(c.buffered).toBe(1);
+    expect(failures.map((f) => [f.kind, f.terminal])).toEqual([['transport', false]]);
+    await c.close();
+    agent.destroy();
+    await s.stop();
+  });
+
+  it('does not reconnect once response bytes arrived on a reused socket', async () => {
+    const s = await staleServer((req) => {
+      const socket = req.socket;
+      socket.write('HTTP/1.1 200 OK\r\nContent-Length: 99\r\n\r\n{', () =>
+        socket.destroy(),
+      );
+    });
+    const { c, failures } = clientFor(s.host);
+
+    await expect(c.track('a', { userId: 'u1' })).resolves.toBe(true);
+    await expect(c.track('b', { userId: 'u1' })).resolves.toBe(false);
+
+    expect(s.seen).toEqual(['ok:a', 'stale:b']);
+    expect(failures.map((f) => [f.kind, f.terminal])).toEqual([['dropped', true]]);
+    await c.close();
+    await s.stop();
+  });
+
   it('drops with no resend when a fresh socket dies after the write', async () => {
     const s = await staleServer(() => {});
     let first = true;
