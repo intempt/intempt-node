@@ -76,6 +76,12 @@ export class Batcher {
   #failed = 0;
   #stopped = false;
   /**
+   * Set while a kept (never-reached) batch waits for the timed flush (ruling R4). A size-triggered
+   * drain does nothing while it is set: otherwise every `track()` past batch.size re-sent the kept
+   * slice at an unreachable host, and the drain's `#clearTimer()` cancelled the timed retry.
+   */
+  #held = false;
+  /**
    * Set while the `beforeExit` drain runs. There is no next flush at exit, so a batch that would
    * be kept is dropped instead: keeping it ends the drain, the loop empties, `beforeExit` fires
    * again and the process never exits (the removed circuit breaker used to cap this).
@@ -129,8 +135,8 @@ export class Batcher {
 
     this.#queue.push(event);
 
-    if (this.#queue.length >= this.#batchSize) {
-      void this.flush();
+    if (this.#queue.length >= this.#batchSize && !this.#held) {
+      void this.#run(true);
     } else {
       this.#scheduleFlush(this.#options.flushMs);
     }
@@ -142,9 +148,18 @@ export class Batcher {
    * when the queue is empty, a batch could not reach the server (kept for the next
    * flush), or a close budget ran out.
    */
-  async flush(): Promise<FlushResult> {
+  flush(): Promise<FlushResult> {
+    return this.#run(false);
+  }
+
+  /** `bySize` drains are skipped while a kept batch is held; flush(), timer and close are not. */
+  async #run(bySize: boolean): Promise<FlushResult> {
     const since = this.#totals();
-    const next = this.#chain.then(() => this.#drain());
+    const next = this.#chain.then(() => {
+      if (bySize && this.#held) return;
+      this.#held = false;
+      return this.#drain();
+    });
     // Keep the chain itself settled so one failure cannot poison later flushes.
     this.#chain = next.then(
       () => undefined,
@@ -180,6 +195,7 @@ export class Batcher {
       }
       if (outcome.kept && !this.#exiting) {
         this.#reportTransport(batch, outcome.failure);
+        this.#held = true;
         // Ending the drain is what makes "kept" mean "next flush": continuing would
         // resend the same slice in a hot loop against an unreachable host.
         this.#scheduleFlush(this.#options.flushMs);

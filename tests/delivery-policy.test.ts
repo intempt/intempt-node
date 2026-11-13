@@ -189,7 +189,79 @@ describe('direct mode: send once, never reject (INT-7436)', () => {
       });
     const c = client();
 
-    await expect(c.consent.grant({ userId: 'u1' })).resolves.not.toThrow();
+    await expect(c.consent.grant({ userId: 'u1' })).resolves.toBe(false);
     expect(hits).toBe(1);
+  });
+});
+
+/**
+ * Ro-bot mcp-1794565555-8 impact:F1, ruling R4: a kept batch waits for the timed flush. Before
+ * this, every enqueue that reached batch.size chained another drain, so each `track()` re-sent
+ * the kept slice at an unreachable host, and the size-triggered drain also cancelled the timer.
+ *
+ * The interceptor is registered with a generous `.times()` and counts in its body matcher: nock's
+ * blocked-net-connect error carries ENETUNREACH, which is never-reached, so an unmocked extra
+ * attempt would masquerade as another kept batch instead of failing.
+ */
+describe('a kept batch waits for the next timed flush (R4)', () => {
+  function unreachable(): { attempts: () => number } {
+    let attempts = 0;
+    nock(ORIGIN)
+      .post(TRACK_PATH, () => {
+        attempts += 1;
+        return true;
+      })
+      .times(50)
+      .replyWithError(
+        Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+      );
+    return { attempts: () => attempts };
+  }
+
+  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function kept(flushMs: number) {
+    const failures: Array<{ kind: string; eventCount: number }> = [];
+    const c = client({
+      logger: testLogger(),
+      batch: { size: 2, flushMs, maxQueue: 100, flushOnExit: false },
+      onDeliveryFailure: (f: { kind: string; eventCount: number }) => failures.push(f),
+    } as never);
+    return { c, failures };
+  }
+
+  it('track() makes no network attempt while a kept batch waits', async () => {
+    const server = unreachable();
+    const { c, failures } = kept(60_000);
+
+    for (const name of ['a', 'b', 'c', 'd', 'e', 'f']) {
+      await c.track(name, { userId: 'u1' });
+    }
+    await settle(50);
+
+    expect(server.attempts()).toBe(1);
+    expect(c.buffered).toBe(6);
+    expect(failures.map((f) => [f.kind, f.eventCount])).toEqual([['transport', 2]]);
+
+    nock.cleanAll();
+    nock(ORIGIN).post(TRACK_PATH).times(3).reply(200, {});
+    await expect(c.flush()).resolves.toEqual({ sent: 6, failed: 0 });
+    await c.close();
+  });
+
+  it('the timed flush still resends the kept batch after size-triggered enqueues', async () => {
+    const server = unreachable();
+    const { c } = kept(40);
+
+    for (const name of ['a', 'b', 'c', 'd']) {
+      await c.track(name, { userId: 'u1' });
+    }
+    await settle(10);
+    expect(server.attempts()).toBe(1);
+
+    await settle(150);
+    expect(server.attempts()).toBeGreaterThanOrEqual(2);
+    expect(server.attempts()).toBeLessThanOrEqual(5);
+    await c.close();
   });
 });
