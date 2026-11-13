@@ -171,3 +171,81 @@ describe('onDeliveryFailure is fixed at construction (INT-7444)', () => {
     );
   });
 });
+
+/**
+ * Ruling R4 queue cap (parity with intempt-php 2915a01): at maxQueue the oldest event that no send
+ * is carrying is evicted and reported `dropped`, the new event is queued and `track` resolves
+ * true. Events in flight are never evicted: `#settle` removes them by position after the send.
+ */
+describe('queue cap evicts the oldest waiting event (R4)', () => {
+  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function names(): string[][] {
+    const seen: string[][] = [];
+    nock(ORIGIN)
+      .post(TRACK_PATH, (body: { track: { name: string }[] }) => {
+        seen.push(body.track.map((e) => e.name));
+        return true;
+      })
+      .times(5)
+      .reply(200, {});
+    return seen;
+  }
+
+  it('evicts the held head of a kept batch, queues the new event and resolves true', async () => {
+    nock(ORIGIN)
+      .post(TRACK_PATH)
+      .replyWithError(
+        Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+      );
+    const { c, failures, logger } = batched(
+      {},
+      { size: 2, maxQueue: 3, flushMs: 60_000 },
+    );
+
+    await c.track('a', { userId: 'u1' });
+    await c.track('b', { userId: 'u1' });
+    await settle(20);
+    await c.track('c', { userId: 'u1' });
+    const keptIds = failures[0]!.eventIds;
+
+    await expect(c.track('d', { userId: 'u1' })).resolves.toBe(true);
+    expect(c.buffered).toBe(3);
+    expect(failures.map((f) => [f.kind, f.eventCount, f.terminal])).toEqual([
+      ['transport', 2, false],
+      ['dropped', 1, true],
+    ]);
+    expect(failures[1]!.eventIds).toEqual([keptIds[0]]);
+    expect(
+      logger.calls.error.some((args) => String(args[0]).includes('oldest event dropped')),
+    ).toBe(true);
+
+    const seen = names();
+    await expect(c.flush()).resolves.toEqual({ sent: 3, failed: 0 });
+    expect(seen).toEqual([['b', 'c'], ['d']]);
+    await c.close();
+  });
+
+  it('never evicts an event a send is carrying', async () => {
+    const seen: string[][] = [];
+    nock(ORIGIN)
+      .post(TRACK_PATH, (body: { track: { name: string }[] }) => {
+        seen.push(body.track.map((e) => e.name));
+        return true;
+      })
+      .times(3)
+      .delay(80)
+      .reply(200, {});
+    const { c, failures } = batched({}, { size: 2, maxQueue: 3, flushMs: 60_000 });
+
+    await c.track('a', { userId: 'u1' });
+    await c.track('b', { userId: 'u1' }); // starts a send carrying a+b
+    await c.track('c', { userId: 'u1' });
+    await expect(c.track('d', { userId: 'u1' })).resolves.toBe(true);
+
+    expect(failures.map((f) => [f.kind, f.eventCount])).toEqual([['dropped', 1]]);
+    await c.flush();
+    expect(seen).toEqual([['a', 'b'], ['d']]);
+    await c.close();
+  });
+});

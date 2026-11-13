@@ -81,6 +81,8 @@ export class Batcher {
    * slice at an unreachable host, and the drain's `#clearTimer()` cancelled the timed retry.
    */
   #held = false;
+  /** Events at the head of the queue that the current send is carrying; 0 when idle. */
+  #inFlight = 0;
   /**
    * Set while the `beforeExit` drain runs. There is no next flush at exit, so a batch that would
    * be kept is dropped instead: keeping it ends the drain, the loop empties, `beforeExit` fires
@@ -125,12 +127,22 @@ export class Batcher {
       return false;
     }
     if (this.#queue.length >= this.#options.maxQueue) {
-      this.#logger.error('[intempt] batch queue full; event dropped', {
-        name: event.name,
+      // R4: the oldest waiting event goes so the newest data survives an outage. Events a send is
+      // carrying stay: #settle removes them by position once the send returns.
+      if (this.#queue.length === this.#inFlight) {
+        this.#logger.error('[intempt] batch queue full; event dropped', {
+          name: event.name,
+          maxQueue: this.#options.maxQueue,
+        });
+        this.#drop([event]);
+        return false;
+      }
+      const [oldest] = this.#queue.splice(this.#inFlight, 1);
+      this.#logger.error('[intempt] batch queue full; oldest event dropped', {
+        name: oldest!.name,
         maxQueue: this.#options.maxQueue,
       });
-      this.#drop([event]);
-      return false;
+      this.#drop([oldest!]);
     }
 
     this.#queue.push(event);
@@ -186,7 +198,9 @@ export class Batcher {
       // Take a slice rather than the whole array: events appended during the
       // await stay queued instead of being cleared out from under the send.
       const batch = this.#queue.slice(0, this.#batchSize);
+      this.#inFlight = batch.length;
       const outcome = await this.#attempt(batch);
+      this.#inFlight = 0;
 
       if (outcome.ok) {
         this.#settle(batch);
