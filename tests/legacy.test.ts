@@ -13,6 +13,7 @@ import {
   feedPath,
   nock,
   setupNock,
+  testLogger,
 } from './helpers';
 
 setupNock();
@@ -140,6 +141,21 @@ describe('legacy SDK: forwarding', () => {
     expect(bodies.map((b) => b.action)).toEqual(['accept', 'reject']);
     expect(bodies[1]!.category).toBe('marketing');
     expect(bodies[1]!.sourceId).toBe(SOURCE);
+  });
+
+  it('a delivery failure resolves and is logged at error, never rejected (R2)', async () => {
+    nock(ORIGIN).post(CONSENT_PATH).times(2).reply(500, '');
+    nock(ORIGIN).post(TRACK_PATH).reply(401, '');
+    const logger = testLogger();
+    const sdk = legacy();
+    sdk.v2.setConfig({ logger });
+
+    await expect(sdk.consents('p1', 'accept')).resolves.toBeUndefined();
+    await expect(sdk.consent('p1', 'reject', 'marketing')).resolves.toBeUndefined();
+    await expect(sdk.track('p1', 'purchase', { total: 1 })).resolves.toBeUndefined();
+
+    expect(logger.calls.error.length).toBe(3);
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('rejects an unknown consent action instead of warning and resolving', async () => {

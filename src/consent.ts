@@ -30,18 +30,19 @@ export class Consent {
     this.#deps = deps;
   }
 
-  grant(options: ConsentOptions): Promise<void> {
+  /** Resolves false when the record did not deliver; that failure is logged and reported (R2). */
+  grant(options: ConsentOptions): Promise<boolean> {
     return this.#record('accept', options);
   }
 
-  revoke(options: ConsentOptions): Promise<void> {
+  revoke(options: ConsentOptions): Promise<boolean> {
     return this.#record('reject', options);
   }
 
   async #record(
     action: 'accept' | 'reject',
     options: InternalConsentOptions,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!options || typeof options !== 'object') {
       throw new TypeError(
         `consent.${action === 'accept' ? 'grant' : 'revoke'}: options are required`,
@@ -102,17 +103,17 @@ export class Consent {
     // Same failure policy as tracking (CONTRACT-R2 §S1): sent once, never rejects for delivery.
     const path = this.#deps.transport.projectPath('/consents/data');
     const outcome = await deliver([], () => this.#deps.transport.post(path, body));
-    if (!outcome.ok) {
-      const { failure } = outcome;
-      this.#deps.config().logger.error('[intempt] consent delivery failed', {
-        kind: failure.kind,
-        status: failure.status,
-      });
-      this.#deps.report({
-        ...failure,
-        ...(failure.kind === 'transport' ? { kind: 'dropped', terminal: true } : {}),
-        eventCount: 1,
-      });
-    }
+    if (outcome.ok) return true;
+    const { failure } = outcome;
+    this.#deps.config().logger.error('[intempt] consent delivery failed', {
+      kind: failure.kind,
+      status: failure.status,
+    });
+    this.#deps.report({
+      ...failure,
+      ...(failure.kind === 'transport' ? { kind: 'dropped', terminal: true } : {}),
+      eventCount: 1,
+    });
+    return false;
   }
 }
