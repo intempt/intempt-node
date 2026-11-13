@@ -31,7 +31,7 @@ function counter(
   return widths;
 }
 
-/** flushMs of 1 keeps real backoff in the low milliseconds; no fake timers. */
+/** flushMs of 1 keeps scheduled flushes in the low milliseconds; no fake timers. */
 function batched(overrides: Record<string, unknown> = {}) {
   const logger = testLogger();
   const c = client({
@@ -131,118 +131,6 @@ describe('batcher: buffering', () => {
     ).toBe(true);
 
     await c.close();
-  });
-});
-
-describe('batcher: retry table', () => {
-  it('halves the batch on 413 and retries', async () => {
-    const widths = counter(3, [413, 200, 200]);
-    const { c, logger } = batched();
-
-    for (const name of ['a', 'b', 'c', 'd']) {
-      await c.track(name, { userId: 'u1' });
-    }
-    await c.flush();
-
-    expect(widths).toEqual([4, 2, 2]);
-    expect(
-      logger.calls.warn.some((args) => String(args[0]).includes('reducing batch size')),
-    ).toBe(true);
-    await c.close();
-  });
-
-  it('drops a single event that is still too large at 413', async () => {
-    const widths = counter(1, [413]);
-    const { c, logger } = batched({
-      batch: { size: 1, flushMs: 10_000, maxQueue: 10, flushOnExit: false },
-    });
-
-    await c.track('huge', { userId: 'u1' });
-    await c.flush();
-
-    expect(widths).toEqual([1]);
-    expect(c.buffered).toBe(0);
-    expect(
-      logger.calls.error.some((args) =>
-        String(args[0]).includes('single event too large'),
-      ),
-    ).toBe(true);
-    await c.close();
-  });
-
-  it('retries a 429 and honours Retry-After', async () => {
-    const widths = counter(2, [429, 200], { 'Retry-After': '1' });
-    const { c, logger } = batched({
-      batch: { size: 1, flushMs: 10_000, maxQueue: 10, flushOnExit: false },
-    });
-
-    await c.track('a', { userId: 'u1' });
-    await c.flush();
-
-    expect(widths).toEqual([1, 1]);
-    expect(c.buffered).toBe(0);
-    expect(
-      logger.calls.warn.some((args) => /retrying in \d+ms/.test(String(args[0]))),
-    ).toBe(true);
-    await c.close();
-  });
-
-  it('retries 5xx with growing backoff', async () => {
-    const widths = counter(3, [500, 503, 200]);
-    const { c, logger } = batched({
-      batch: { size: 1, flushMs: 1, maxQueue: 10, flushOnExit: false },
-    });
-
-    await c.track('a', { userId: 'u1' });
-    await c.flush();
-
-    expect(widths).toEqual([1, 1, 1]);
-    const delays = logger.calls.warn
-      .map((args) => /retrying in (\d+)ms/.exec(String(args[0]))?.[1])
-      .filter((v): v is string => v !== undefined)
-      .map(Number);
-    // Floored at MIN_RETRY_INTERVAL_MS so a tiny flushMs cannot become a hot loop.
-    expect(delays).toEqual([100, 100]);
-    await c.close();
-  });
-
-  it('drops the batch on a non-retryable 4xx without looping', async () => {
-    const widths = counter(1, [400]);
-    const { c, logger } = batched({
-      batch: { size: 1, flushMs: 10_000, maxQueue: 10, flushOnExit: false },
-    });
-
-    await c.track('a', { userId: 'u1' });
-    await c.flush();
-
-    expect(widths).toEqual([1]);
-    expect(c.buffered).toBe(0);
-    expect(
-      logger.calls.error.some((args) => String(args[0]).includes('non-retryable')),
-    ).toBe(true);
-    await c.close();
-  });
-
-  it('stops after five consecutive failures and says how many are stranded', async () => {
-    const widths = counter(5, [500, 500, 500, 500, 500]);
-    const { c, logger } = batched({
-      batch: { size: 1, flushMs: 1, maxQueue: 10, flushOnExit: false },
-    });
-
-    await c.track('a', { userId: 'u1' });
-    await c.flush();
-
-    expect(widths).toHaveLength(5);
-    expect(c.buffered).toBe(1);
-    expect(
-      logger.calls.error.some((args) => String(args[0]).includes('stopping batching')),
-    ).toBe(true);
-
-    // Further events are refused loudly rather than buffered forever.
-    await c.track('b', { userId: 'u1' });
-    expect(
-      logger.calls.error.some((args) => String(args[0]).includes('batching is stopped')),
-    ).toBe(true);
   });
 });
 

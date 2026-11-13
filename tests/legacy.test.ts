@@ -13,6 +13,7 @@ import {
   feedPath,
   nock,
   setupNock,
+  testLogger,
 } from './helpers';
 
 setupNock();
@@ -142,6 +143,21 @@ describe('legacy SDK: forwarding', () => {
     expect(bodies[1]!.sourceId).toBe(SOURCE);
   });
 
+  it('a delivery failure resolves and is logged at error, never rejected (R2)', async () => {
+    nock(ORIGIN).post(CONSENT_PATH).times(2).reply(500, '');
+    nock(ORIGIN).post(TRACK_PATH).reply(401, '');
+    const logger = testLogger();
+    const sdk = legacy();
+    sdk.v2.setConfig({ logger });
+
+    await expect(sdk.consents('p1', 'accept')).resolves.toBeUndefined();
+    await expect(sdk.consent('p1', 'reject', 'marketing')).resolves.toBeUndefined();
+    await expect(sdk.track('p1', 'purchase', { total: 1 })).resolves.toBeUndefined();
+
+    expect(logger.calls.error.length).toBe(3);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
   it('rejects an unknown consent action instead of warning and resolving', async () => {
     // 1.x logged 'consents request params are incorrect' and resolved.
     await expect(legacy().consents('p1', 'maybe')).rejects.toThrow(
@@ -156,7 +172,6 @@ describe('legacy SDK: forwarding', () => {
     // The message used to say assignment was unavailable in a server SDK at all. It is available:
     // the endpoint serves a body by key, and {name, group, body} is everything variation() needs.
     // That - not a reason field - is why the message names its replacement instead of a dead end.
-    // The serving response still carries NO reason, which is why variationDetail stays internal.
     const sdk = legacy();
     for (const method of [
       'chooseExperimentsByGroups',

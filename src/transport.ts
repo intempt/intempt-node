@@ -21,6 +21,8 @@ export class IntemptApiError extends Error {
   readonly body?: string;
   readonly retryAfterMs?: number;
   readonly cause?: unknown;
+  /** The request ran past `timeout`. Without it a timeout reads like any other status-less failure. */
+  readonly timedOut: boolean;
 
   constructor(
     message: string,
@@ -29,6 +31,7 @@ export class IntemptApiError extends Error {
       body?: string;
       retryAfterMs?: number;
       cause?: unknown;
+      timedOut?: boolean;
     } = {},
   ) {
     super(message);
@@ -43,6 +46,7 @@ export class IntemptApiError extends Error {
     this.body = detail.body;
     this.retryAfterMs = detail.retryAfterMs;
     this.cause = detail.cause;
+    this.timedOut = detail.timedOut === true;
   }
 
   /** True for statuses worth retrying: 408, 429, and any 5xx. */
@@ -50,6 +54,21 @@ export class IntemptApiError extends Error {
     if (this.status === undefined) return true; // transport error or timeout
     return this.status === 408 || this.status === 429 || this.status >= 500;
   }
+}
+
+/**
+ * How a pooled keep-alive socket the server already closed fails the next write. On a REUSED
+ * socket before any response byte this means the request never reached a live peer (ruling R5),
+ * so it is reconnected once, the way undici, URLSession and Java's HttpClient do internally.
+ */
+const STALE_SOCKET_CODES = new Set(['ECONNRESET', 'EPIPE']);
+
+/** Failures on a reused socket before any response byte, both on the first try and the reconnect. */
+const staleSocketFailures = new WeakSet<IntemptApiError>();
+
+/** True when the request and its one reconnect both died on a stale pooled socket: never reached. */
+export function staleSocketFailure(error: IntemptApiError): boolean {
+  return staleSocketFailures.has(error);
 }
 
 export interface TransportResponse<T = unknown> {
@@ -142,6 +161,21 @@ export class Transport {
       options.port = this.#config.port;
     }
 
+    try {
+      return await this.#exchange<T>(requestLib, options, payload);
+    } catch (error) {
+      if (!(error instanceof IntemptApiError) || !staleSocketFailure(error)) throw error;
+      // The agent dropped the dead socket, so this takes a fresh one unless another idle socket
+      // is also stale; that second failure leaks out still marked, and delivery keeps the batch.
+      return this.#exchange<T>(requestLib, options, payload);
+    }
+  }
+
+  #exchange<T>(
+    requestLib: typeof http | typeof https,
+    options: http.RequestOptions,
+    payload: Buffer,
+  ): Promise<TransportResponse<T>> {
     return new Promise<TransportResponse<T>>((resolveRaw, rejectRaw) => {
       // A request can end without emitting either `response` or `error`: a socket
       // destroyed elsewhere, or an error value that is not an Error instance.
@@ -159,7 +193,9 @@ export class Transport {
         rejectRaw(error);
       };
 
+      let responded = false;
       const request = requestLib.request(options, (res) => {
+        responded = true;
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => chunks.push(chunk));
         res.on('end', () => {
@@ -196,6 +232,7 @@ export class Transport {
         request.destroy(
           new IntemptApiError(
             `Intempt API request timed out after ${this.#config.timeout}ms`,
+            { timedOut: true },
           ),
         );
       });
@@ -206,9 +243,19 @@ export class Transport {
           return;
         }
         const message = error instanceof Error ? error.message : String(error);
-        reject(
-          new IntemptApiError(`Intempt API request failed: ${message}`, { cause: error }),
-        );
+        const failure = new IntemptApiError(`Intempt API request failed: ${message}`, {
+          cause: error,
+        });
+        const code = (error as { code?: unknown } | null)?.code;
+        if (
+          request.reusedSocket &&
+          !responded &&
+          typeof code === 'string' &&
+          STALE_SOCKET_CODES.has(code)
+        ) {
+          staleSocketFailures.add(failure);
+        }
+        reject(failure);
       });
 
       // Last resort. `close` always fires, so if nothing settled the promise by

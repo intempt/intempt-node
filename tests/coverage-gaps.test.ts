@@ -189,10 +189,10 @@ describe('ecommerce: an explicit timestamp reaches every product line', () => {
 });
 
 describe('batcher: an error that is not an IntemptApiError', () => {
-  it('treats it as retryable and eventually stops, rather than crashing the drain', async () => {
+  it('drops and reports the batch, rather than crashing the drain (INT-7436)', async () => {
     // A circular payload makes JSON.stringify throw a raw TypeError inside post(),
-    // so #handleFailure receives something that is not an IntemptApiError. Its
-    // status is unknown, so it must be treated as transient and hit the breaker.
+    // so the batcher receives something that is not a delivery outcome. Resending
+    // cannot fix an unserialisable payload, so it is dropped and reported.
     const logger = testLogger();
     const c = client({
       logger,
@@ -205,7 +205,7 @@ describe('batcher: an error that is not an IntemptApiError', () => {
     await c.flush();
 
     expect(
-      logger.calls.error.some((a) => String(a[0]).includes('stopping batching')),
+      logger.calls.error.some((a) => String(a[0]).includes('could not be sent; dropped')),
     ).toBe(true);
     expect(nock.pendingMocks()).toEqual([]);
   });

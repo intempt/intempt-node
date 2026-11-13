@@ -1,4 +1,6 @@
 import type { Agent } from 'node:http';
+import type { DeliveryFailure } from './delivery';
+import type { FlagError } from './flags';
 
 /** Minimal logger contract. `console` satisfies it. */
 export interface Logger {
@@ -46,8 +48,8 @@ export interface IntemptConfig {
   batch?: false | BatchOptions;
   /**
    * Hard ceiling on events per HTTP request, applied in both modes. The
-   * server's real ceiling is not published, so this is a client-side guess that
-   * 413 responses halve at runtime.
+   * server's real ceiling is not published. A request answered 413 is dropped
+   * and reported, not halved and resent (INT-7436): lower this instead.
    */
   maxRequestEvents?: number;
   /**
@@ -63,6 +65,18 @@ export interface IntemptConfig {
    * the agent you pass is used verbatim.
    */
   agent?: Agent;
+  /**
+   * Called once per batch whose delivery finally failed, never per attempt
+   * (INT-7444). Delivery problems never reject `track()` and friends; this is
+   * where they surface. A listener that throws is caught and logged. Fixed at
+   * construction.
+   */
+  onDeliveryFailure?: (failure: DeliveryFailure) => void;
+  /**
+   * Called once per flag read that failed and returned the caller's default (INT-7454). A
+   * listener that throws is caught and logged. Replaceable through `setConfig`.
+   */
+  onFlagError?: (error: FlagError) => void;
 }
 
 export interface ResolvedBatchOptions extends Required<BatchOptions> {}
@@ -83,6 +97,8 @@ export interface ResolvedConfig {
   maxRequestEvents: number;
   maxConcurrentRequests: number;
   agent?: Agent;
+  onDeliveryFailure?: (failure: DeliveryFailure) => void;
+  onFlagError?: (error: FlagError) => void;
 }
 
 /**

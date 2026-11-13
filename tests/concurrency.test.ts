@@ -1,7 +1,7 @@
 import http from 'node:http';
 import https from 'node:https';
 import { describe, expect, it, vi } from 'vitest';
-import { Intempt, IntemptApiError } from '../src';
+import { Intempt } from '../src';
 import {
   API_KEY,
   ORG,
@@ -101,8 +101,8 @@ describe('trackBatch concurrency', () => {
     );
   });
 
-  it('rejects with the first failure and awaits its siblings', async () => {
-    // A rejection must not leave sibling requests unawaited; an unhandled
+  it('resolves false on a failed chunk and awaits its siblings (INT-7436)', async () => {
+    // A failed chunk must not leave sibling requests unawaited; an unhandled
     // rejection would take the host process down under Node's default policy.
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown) => unhandled.push(reason);
@@ -114,7 +114,7 @@ describe('trackBatch concurrency', () => {
     try {
       await expect(
         client({ maxRequestEvents: 1, maxConcurrentRequests: 4 }).trackBatch(events(4)),
-      ).rejects.toThrow(/responded 500/);
+      ).resolves.toBe(false);
       // Give any stray rejection a chance to surface; polling is not possible
       // here because we are asserting the ABSENCE of an event.
       await new Promise((resolve) => setTimeout(resolve, 250));
@@ -158,21 +158,23 @@ describe('custom agent injection', () => {
     await c.close();
   });
 
-  it('must match the protocol: an http.Agent on an https client fails loudly', async () => {
+  it('must match the protocol: an http.Agent on an https client fails and is reported', async () => {
     // Worth pinning, because the failure is confusing — an http.Agent dials
     // port 80 for an https request rather than erroring on the mismatch.
+    const logger = testLogger();
     const c = Intempt.init({
       org: ORG,
       project: PROJECT,
       apiKey: API_KEY,
       sourceId: SOURCE,
       host: 'api.test.local',
-      logger: testLogger(),
+      logger,
       agent: new http.Agent(),
     });
 
     nock(ORIGIN).post(TRACK_PATH).reply(200, '');
-    await expect(c.track('purchase', { userId: 'u1' })).rejects.toThrow(IntemptApiError);
+    await expect(c.track('purchase', { userId: 'u1' })).resolves.toBe(false);
+    expect(logger.calls.error.length).toBeGreaterThan(0);
     await c.close();
   });
 

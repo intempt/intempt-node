@@ -109,7 +109,7 @@ describe('close', () => {
   it('is idempotent', async () => {
     const c = client();
     await c.close();
-    await expect(c.close()).resolves.toBeUndefined();
+    await expect(c.close()).resolves.toEqual({ sent: 0, failed: 0 });
   });
 
   it('reports nothing buffered when batching is off', async () => {

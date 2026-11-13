@@ -2,12 +2,14 @@ import { mergeConfig, resolveConfig } from './config';
 import { ApiKeyCredentials } from './credentials';
 import { Transport } from './transport';
 import { Batcher } from './batcher';
+import type { FlushResult } from './batcher';
+import type { DeliveryFailure } from './delivery';
 import { Ingest } from './ingest';
 import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
 import { Recommend } from './recommend';
 import { Flags } from './flags';
-import type { FlagContext } from './flags';
+import type { FlagContext, FlagDetail, VariationOptions } from './flags';
 import type {
   GroupOptions,
   IdentifyOptions,
@@ -33,7 +35,8 @@ export class IntemptClient {
 
   constructor(config: IntemptConfig) {
     this.#resolved = resolveConfig(config);
-    this.#transport = new Transport(this.#resolved, new ApiKeyCredentials(config.apiKey));
+    const credentials = new ApiKeyCredentials(config.apiKey);
+    this.#transport = new Transport(this.#resolved, credentials);
 
     const configRef = (): ResolvedConfig => this.#resolved;
     // Two distinct conditions, deliberately not folded together: opting out is a
@@ -41,6 +44,7 @@ export class IntemptClient {
     // and must be loud.
     const isOptedIn = (): boolean => this.#optedIn && !this.#closed;
     const assertOpen = (): void => this.#assertOpen();
+    const report = (failure: DeliveryFailure): void => this.#reportFailure(failure);
 
     this.#ingest = new Ingest({
       transport: this.#transport,
@@ -48,6 +52,7 @@ export class IntemptClient {
       batcher: () => this.#batcher,
       isOptedIn,
       assertOpen,
+      report,
     });
 
     if (this.#resolved.batch !== false) {
@@ -55,7 +60,8 @@ export class IntemptClient {
         options: this.#resolved.batch,
         maxRequestEvents: this.#resolved.maxRequestEvents,
         logger: this.#resolved.logger,
-        send: (events) => this.#ingest.send(events),
+        send: (events, deadline) => this.#ingest.send(events, deadline),
+        report,
       });
     }
 
@@ -63,28 +69,48 @@ export class IntemptClient {
       transport: this.#transport,
       config: configRef,
       assertOpen,
+      report,
     });
     this.ecommerce = new Ecommerce(this.#ingest);
     this.#recommend = new Recommend({ transport: this.#transport, config: configRef });
-    this.#flags = new Flags({ transport: this.#transport, config: configRef });
+    this.#flags = new Flags({
+      transport: this.#transport,
+      config: configRef,
+      keyPrefix: credentials.prefix,
+    });
   }
 
   // ---- ingest, lifted to the top level so the common calls stay short ----
+  //
+  // Each resolves whether the event was accepted - queued in batch mode, delivered in direct
+  // mode - and never rejects for a delivery problem (INT-7444); those reach `onDeliveryFailure`.
+  // A Promise rather than the contract's synchronous bool: these were `Promise<void>`, and a
+  // synchronous return would break every caller chaining `.then()`/`.catch()` on them.
 
-  track(event: string, options: TrackOptions): Promise<void> {
+  track(event: string, options: TrackOptions): Promise<boolean> {
     return this.#ingest.track(event, options);
   }
 
-  trackBatch(events: TrackEvent[]): Promise<void> {
+  trackBatch(events: TrackEvent[]): Promise<boolean> {
     return this.#ingest.trackBatch(events);
   }
 
-  identify(options: IdentifyOptions): Promise<void> {
+  identify(options: IdentifyOptions): Promise<boolean> {
     return this.#ingest.identify(options);
   }
 
-  group(options: GroupOptions): Promise<void> {
+  group(options: GroupOptions): Promise<boolean> {
     return this.#ingest.group(options);
+  }
+
+  #reportFailure(failure: DeliveryFailure): void {
+    const listener = this.#resolved.onDeliveryFailure;
+    if (!listener) return;
+    try {
+      listener(failure);
+    } catch (error) {
+      this.#resolved.logger.error('[intempt] onDeliveryFailure listener threw', error);
+    }
   }
 
   // ---- decisions out ----
@@ -118,34 +144,38 @@ export class IntemptClient {
    * Ask for a key, never a mode. Whether the key names an experiment, a personalization or a flag
    * is the platform's business - its serving query filters on channel and status and never on mode.
    */
-  async variation<T>(key: string, context: FlagContext, defaultValue: T): Promise<T> {
+  async variation<T>(
+    key: string,
+    context: FlagContext,
+    defaultValue: T,
+    options?: VariationOptions,
+  ): Promise<T> {
     this.#assertOpen();
-    return this.#flags.value<T>(key, context, defaultValue);
+    return this.#flags.value<T>(key, context, defaultValue, options);
   }
 
-  // `allFlags()` is deliberately NOT exposed.
-  //
-  // It reads like a read and behaves like a write. `POST /optimization/choose-api` records a Kafka
-  // exposure per experience it evaluates, and omitting `names` makes it evaluate every experience
-  // the person is eligible for - so one convenience call marks them exposed to every running
-  // server experiment in the project, and permanently spends the `once` display budget for keys
-  // nobody rendered. Both effects are silent: the experiments keep running and simply stop
-  // detecting, and the later `variation('that_key', ...)` returns the caller's default forever.
-  //
-  // There is no request field that suppresses recording, so this cannot be fixed in the SDK. It
-  // returns when the platform can evaluate without publishing an exposure - an `exposure: false`
-  // on the choose request, or a separate non-recording route. Until then, read the keys you use:
-  // `variation(key, context, defaultValue)`, one call per key.
-  //
-  // Do not re-add it, and do not document it as available. `tests/encapsulation.test.ts` and
-  // `tests/flags.test.ts` both fail if it comes back.
+  /**
+   * The value plus why it was returned (INT-7454). `reason` is `'error'`, with `error` set, when the
+   * read failed and `defaultValue` came back; otherwise it is `'off'` whether or not a value was
+   * served, because the platform sends no reason to tell "off" from "not targeted" (INT-7457).
+   */
+  async variationDetail<T>(
+    key: string,
+    context: FlagContext,
+    defaultValue: T,
+    options?: VariationOptions,
+  ): Promise<FlagDetail<T>> {
+    this.#assertOpen();
+    return this.#flags.detail<T>(key, context, defaultValue, options);
+  }
 
   async boolVariation(
     key: string,
     context: FlagContext,
     defaultValue: boolean,
+    options?: VariationOptions,
   ): Promise<boolean> {
-    const value = await this.variation<unknown>(key, context, defaultValue);
+    const value = await this.variation<unknown>(key, context, defaultValue, options);
     // A served value of the wrong type is a misconfiguration, not something to coerce: `!!"false"`
     // is true, and a silent coercion would be indistinguishable from a correct answer.
     return typeof value === 'boolean' ? value : defaultValue;
@@ -155,8 +185,9 @@ export class IntemptClient {
     key: string,
     context: FlagContext,
     defaultValue: string,
+    options?: VariationOptions,
   ): Promise<string> {
-    const value = await this.variation<unknown>(key, context, defaultValue);
+    const value = await this.variation<unknown>(key, context, defaultValue, options);
     return typeof value === 'string' ? value : defaultValue;
   }
 
@@ -164,8 +195,9 @@ export class IntemptClient {
     key: string,
     context: FlagContext,
     defaultValue: number,
+    options?: VariationOptions,
   ): Promise<number> {
-    const value = await this.variation<unknown>(key, context, defaultValue);
+    const value = await this.variation<unknown>(key, context, defaultValue, options);
     return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue;
   }
 
@@ -173,8 +205,9 @@ export class IntemptClient {
     key: string,
     context: FlagContext,
     defaultValue: T,
+    options?: VariationOptions,
   ): Promise<T> {
-    const value = await this.variation<unknown>(key, context, defaultValue);
+    const value = await this.variation<unknown>(key, context, defaultValue, options);
     return value !== null && typeof value === 'object' ? (value as T) : defaultValue;
   }
 
@@ -187,6 +220,9 @@ export class IntemptClient {
    * `once` display budget for keys nobody rendered, after which `variation()` on those keys returns
    * your default forever. Two keys on a request path is two `variation()` calls, not one
    * `allFlags()`. Use this to enumerate: a debug endpoint, an admin view, a one-off audit.
+   *
+   * It sends `exposure: false` (INT-7456), which takes effect once audience-service honours the
+   * field; until then the service ignores it and the costs above still apply.
    *
    * See `docs/CONVENTIONS.md` for the full trace and the platform change that would make it safe.
    */
@@ -249,9 +285,16 @@ export class IntemptClient {
     patch: Partial<
       Omit<
         IntemptConfig,
-        'org' | 'project' | 'apiKey' | 'sourceId' | 'batch' | 'keepAlive' | 'agent'
+        | 'org'
+        | 'project'
+        | 'apiKey'
+        | 'sourceId'
+        | 'batch'
+        | 'keepAlive'
+        | 'agent'
+        | 'onDeliveryFailure'
       >
-    > & { keepAlive?: never; agent?: never },
+    > & { keepAlive?: never; agent?: never; onDeliveryFailure?: never },
   ): void {
     this.#resolved = mergeConfig(this.#resolved, patch);
     this.#transport.setConfig(this.#resolved);
@@ -280,13 +323,15 @@ export class IntemptClient {
   }
 
   /**
-   * Drains the buffer. A no-op when batching is off, so calling it
-   * unconditionally in a shutdown hook is safe.
+   * Drains the buffer and resolves what it did: `{ sent, failed }` in events. Resolves
+   * `{ sent: 0, failed: 0 }` when batching is off, so calling it unconditionally in a shutdown
+   * hook is safe. Never rejects for a delivery problem.
    */
-  async flush(): Promise<void> {
+  async flush(): Promise<FlushResult> {
     if (this.#batcher) {
-      await this.#batcher.flush();
+      return this.#batcher.flush();
     }
+    return { sent: 0, failed: 0 };
   }
 
   #assertOpen(): void {
@@ -297,14 +342,17 @@ export class IntemptClient {
     }
   }
 
-  /** Flushes, then releases timers and sockets. The client is unusable after. */
-  async close(): Promise<void> {
-    if (this.#closed) return;
-    if (this.#batcher) {
-      await this.#batcher.close();
-    }
+  /**
+   * Flushes, then releases timers and sockets, and resolves `{ sent, failed }` for the final
+   * drain; events still unsent at the end count as failed. This is the contract's `shutdown()`
+   * (CONTRACT-R2 §S2) under its existing name. The client is unusable after.
+   */
+  async close(): Promise<FlushResult> {
+    if (this.#closed) return { sent: 0, failed: 0 };
+    const result = this.#batcher ? await this.#batcher.close() : { sent: 0, failed: 0 };
     this.#closed = true;
     this.#transport.destroy();
+    return result;
   }
 }
 

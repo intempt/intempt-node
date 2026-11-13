@@ -3,7 +3,79 @@
 All notable changes to this package are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [4.0.0] - unreleased
+
+### Changed — BREAKING
+
+- **Delivery failures no longer reject** (INT-7444, CONTRACT-R2 §S2). `track`,
+  `trackBatch`, `identify` and `group` resolve `true` when the event was
+  accepted (queued in batch mode, delivered in direct mode) and `false`
+  otherwise; they used to resolve `void` and reject with `IntemptApiError`.
+  The `ecommerce` helpers resolve either way. Callers that caught a rejected
+  `IntemptApiError` from these calls must move to `onDeliveryFailure` or the
+  returned boolean. Programming errors still reject.
+- **Consent failures are reported, not thrown** (ruling R2). `consent.grant`
+  and `consent.revoke` resolve `true` when the record was stored and `false`
+  otherwise; they used to resolve `void` and reject with `IntemptApiError`. A
+  failure is logged at error and fires `onDeliveryFailure` once with
+  `kind: 'terminal'` (the server answered) or `kind: 'dropped'` (timeout, or
+  never reached: consent has no queue), `eventCount: 1` and `eventIds: []`. The
+  1.x `SDK.consent`/`consents` shim resolves on a delivery failure too.
+- **A full queue drops the oldest waiting event** (ruling R4). At
+  `batch.maxQueue` the oldest event that no send is carrying is dropped and
+  reported `dropped` with its `eventIds`; the new event is queued and `track`
+  resolves `true`. It used to drop the new event and resolve `false`. When every
+  queued event is in flight, the new event is still dropped.
+
+### Changed
+
+- **Every ingestion request is sent once** (INT-7436, CONTRACT-R2 §S1). 429 and
+  503 are resent once after `Retry-After` clamped to 1–60 s (1 s when absent);
+  a wait above 5 s, or past the `close()` budget, drops instead. Every other
+  status, and a timeout after the request was written, drops with no resend:
+  the server may already have stored it and ingestion does not de-duplicate.
+  Removed: exponential backoff, the 5-failure circuit breaker, and 413 halving
+  in both batch mode and direct-mode `trackBatch()` (lower `maxRequestEvents`
+  instead). A batch that never reached the server (DNS, refused connection) is
+  kept for the next timed flush (or an explicit `flush()`) in batch mode;
+  reaching `batch.size` meanwhile starts no resend. Consent writes follow the
+  same policy.
+- **A stale keep-alive socket no longer loses a batch** (ruling R5). A reused
+  socket that fails with `ECONNRESET`/`EPIPE` before any response byte is
+  reconnected once at once; if that also fails before the write, the batch is
+  treated as never reached. A fresh socket lost after the write, and any
+  timeout, still drop with no resend. `ENETDOWN` and TLS handshake failures
+  (certificate and protocol-version errors) are now never-reached as well.
+- **`flush()` and `close()` resolve `{ sent, failed }`** (INT-7444). `close()`
+  is the contract's `shutdown()`; events it cannot send are counted as failed.
+
+### Added
+
+- **`onDeliveryFailure(failure)` config listener** (INT-7444). Fires once per
+  batch on its final outcome with `{ kind, status?, eventCount, eventIds,
+retryAfter?, terminal }`; `transport` fires once per kept batch, not on every
+  flush. A listener that throws is caught and logged.
+- **Flag failures are reported** (INT-7454, CONTRACT-R2 §S3). A new
+  `onFlagError(error)` config hook receives `{ key, kind, status? }` (`kind` is
+  `auth`, `bad_request`, `server`, `timeout`, `network` or `parse`; `key` is
+  `null` for `allFlags`). The default is still returned and nothing throws. A
+  401/403 is logged at error once per client, naming the key prefix and
+  sourceId. `IntemptApiError.timedOut` marks a request that ran past `timeout`.
+- **`variationDetail(key, context, defaultValue)`** (INT-7454). Resolves
+  `{ value, reason, error? }`; `reason` is `'error'` on a failed read and
+  `'off'` otherwise, since the platform sends no reason (INT-7457).
+
+- **Evaluation without exposure** (INT-7456, CONTRACT-R2 §S4). `allFlags()`
+  sends `exposure: false`; `variation`, `variationDetail` and the typed helpers
+  take `{ disableExposure: true }` as a fourth argument for a read that shows
+  nothing. A default read sends no `exposure` field, so it records as before.
+  The field takes effect once audience-service honours it.
+
+### Fixed
+
+- A 200 whose `choices` is not an array made `variation()` reject with
+  `choices.find is not a function`; it now returns the default and reports
+  `parse` (INT-7454).
 
 ## [3.1.0] - unreleased
 

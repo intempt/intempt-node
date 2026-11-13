@@ -126,6 +126,14 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     throw new RangeError('maxConcurrentRequests must be a positive integer');
   }
 
+  if (
+    config.onDeliveryFailure !== undefined &&
+    typeof config.onDeliveryFailure !== 'function'
+  ) {
+    throw new TypeError('onDeliveryFailure must be a function');
+  }
+  assertFlagHook(config.onFlagError);
+
   const { host, port } = splitHost(config.host ?? DEFAULT_CONFIG.host);
 
   return {
@@ -144,6 +152,10 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     maxRequestEvents,
     maxConcurrentRequests,
     ...(config.agent !== undefined ? { agent: config.agent } : {}),
+    ...(config.onDeliveryFailure !== undefined
+      ? { onDeliveryFailure: config.onDeliveryFailure }
+      : {}),
+    ...(config.onFlagError !== undefined ? { onFlagError: config.onFlagError } : {}),
   };
 }
 
@@ -157,7 +169,14 @@ export function mergeConfig(
   patch: Partial<
     Omit<
       IntemptConfig,
-      'org' | 'project' | 'apiKey' | 'sourceId' | 'batch' | 'keepAlive' | 'agent'
+      | 'org'
+      | 'project'
+      | 'apiKey'
+      | 'sourceId'
+      | 'batch'
+      | 'keepAlive'
+      | 'agent'
+      | 'onDeliveryFailure'
     >
   >,
 ): ResolvedConfig {
@@ -166,6 +185,12 @@ export function mergeConfig(
   // keepAlive and agent are read once, when Transport builds its agents. Silently
   // accepting them left a caller believing they had disabled keep-alive to let a
   // process exit, when nothing had changed.
+  if ((patch as Record<string, unknown>).onDeliveryFailure !== undefined) {
+    throw new TypeError(
+      'setConfig: "onDeliveryFailure" is fixed at construction because the batcher holds it. ' +
+        'Pass it to Intempt.init instead.',
+    );
+  }
   for (const fixed of ['keepAlive', 'agent'] as const) {
     if ((patch as Record<string, unknown>)[fixed] !== undefined) {
       throw new TypeError(
@@ -202,8 +227,18 @@ export function mergeConfig(
     next.timeout = patch.timeout;
   }
   if (patch.debug !== undefined) next.debug = patch.debug;
+  if (patch.onFlagError !== undefined) {
+    assertFlagHook(patch.onFlagError);
+    next.onFlagError = patch.onFlagError;
+  }
 
   return next;
+}
+
+function assertFlagHook(hook: unknown): void {
+  if (hook !== undefined && typeof hook !== 'function') {
+    throw new TypeError('onFlagError must be a function');
+  }
 }
 
 export type { BatchOptions };

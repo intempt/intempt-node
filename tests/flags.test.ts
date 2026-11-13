@@ -21,8 +21,8 @@ describe('variation', () => {
         choices: [{ name: 'checkout_v2', group: 'B', body: true, reason: 'targeted' }],
       });
 
-    // `variation`, not `variationDetail` -- the detail method is internal until the platform sends
-    // a reason. `group` IS on the wire (`ExperienceApiChoose` declares name, group, body); `reason`
+    // `variation`, not `variationDetail`: the platform sends no reason, so the detail would read
+    // `off` either way (INT-7457, see tests/flag-errors.test.ts). `group` IS on the wire (`ExperienceApiChoose` declares name, group, body); `reason`
     // is not, on any merged branch. So asserting on the reason here would prove nothing, and the
     // mock carries it only to show that an unknown field is ignored rather than trusted.
     const c = client();

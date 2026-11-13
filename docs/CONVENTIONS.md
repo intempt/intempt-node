@@ -28,10 +28,13 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
 - **A wrong-typed value falls back; it is never coerced.** A flag configured as a string and read as
   a boolean returns the caller's default, not `true`. Coercion makes a misconfiguration look like a
   deliberate value.
-- **`variationDetail` is NOT exposed.** It would carry a reason, and the serving response does not
-  send one — so it could only report "off" for a person who was in fact targeted and served, which
-  is the single thing such a method exists to tell you. It stays internal until the platform sends
-  a reason. Do not re-add it, and do not document it.
+- **`variationDetail` reports a failure, not a cause** (INT-7454, CONTRACT-R2 §S3). A read that
+  failed returns the default with `reason: 'error'` and a `FlagError`
+  `{key, kind: auth|bad_request|server|timeout|network|parse, status?}`, which also reaches the
+  `onFlagError` hook. 408 is `timeout` and 429 is `server`, as in php. An answered read is `off`
+  whether or not a value was served: the serving response sends no reason, so "off" and "not
+  targeted" cannot be told apart and the SDK does not guess (INT-7457). A 401/403 is logged at
+  error once per client, naming the key prefix and sourceId, and at debug after.
 - **On a request path, every read names its keys. `allFlags()` exists, and it is a hazard.** On this
   endpoint an evaluation _is_ an exposure: `POST /optimization/choose-api` publishes a Kafka event
   per experience it evaluates, and omitting `names` makes it evaluate every experience the person is
@@ -39,9 +42,11 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
   experiment in the project — inflating each denominator uniformly, which shows up as an experiment
   that stopped detecting rather than one that broke — and, for a `once` display, spends their
   display budget on keys nobody rendered, after which `variation()` on those keys returns the
-  caller's default permanently. The request has no exposure-suppression field, so **this cannot be
-  fixed here**; it becomes safe when the platform can evaluate without publishing — an
-  `exposure: false` on the choose request, or a separate non-recording route.
+  caller's default permanently. `allFlags()` sends `exposure: false`, and a single read takes
+  `{ disableExposure: true }` for a read that shows nothing (INT-7456, CONTRACT-R2 §S4). Absent,
+  the field means "record", so a default read is unchanged. **The field takes effect only once
+  audience-service honours it**; today the service ignores unknown fields and records anyway. The
+  SDK keeps no `allFlags` result and serves no read from one, so there is no exposure dedupe to do.
 
   `allFlags()` is nevertheless part of this SDK's surface, by ruling (Beso, 2026-09-01): php,
   python, swift, java and reactnative all ship it, and a method that exists in five SDKs and not the
@@ -69,10 +74,11 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
 ## Errors
 
 Two tiers, and they are not interchangeable: a configuration mistake surfaces when the config is
-built, and an API failure carries the status, the body and any `Retry-After`. A transport failure
-that never produced a response carries a **null** status — read as retryable, because a request
-that never arrived may well arrive next time, whereas a 400 fails identically however often it is
-repeated.
+built, and an API failure carries the status, the body and any `Retry-After`. Ingestion writes and
+`consent.grant`/`consent.revoke` never reject for a delivery failure: they resolve `false`, log at
+error, and are sent once (429/503 resent once), and the final outcome goes
+to `onDeliveryFailure` (INT-7436/INT-7444, CONTRACT-R2 §S1/S2). A request that never reached the
+server is the one failure a batch is kept for, because nothing can have been stored.
 
 ## Wire shape
 

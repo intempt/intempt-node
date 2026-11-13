@@ -15,9 +15,10 @@ import {
   compact,
   ensureTimestamp,
 } from './utils';
-import { IntemptApiError } from './transport';
 import type { Transport } from './transport';
 import type { Batcher } from './batcher';
+import { deliver } from './delivery';
+import type { DeliveryFailure, SendOutcome } from './delivery';
 
 /**
  * The option shapes as seen from inside, where `profileId` is still a real field.
@@ -44,6 +45,8 @@ export interface IngestDeps {
   isOptedIn(): boolean;
   /** Throws if the client has been closed. */
   assertOpen(): void;
+  /** Final outcome of a write that did not deliver. */
+  report(failure: DeliveryFailure): void;
 }
 
 export class Ingest {
@@ -89,7 +92,7 @@ export class Ingest {
     name: string,
     options: InternalTrackOptions,
     lines: readonly Record<string, unknown>[],
-  ): Promise<void> {
+  ): Promise<boolean> {
     const eventId = randomUUID();
     const timestamp =
       options.timestamp === undefined ? Date.now() : ensureTimestamp(options.timestamp);
@@ -107,28 +110,51 @@ export class Ingest {
       ),
     };
 
-    await this.#submit([event]);
+    return this.#submit([event]);
   }
 
-  /** Sends immediately, or buffers when batching is enabled. */
-  async #submit(events: WireEvent[]): Promise<void> {
+  /**
+   * Sends immediately, or buffers when batching is enabled. Resolves whether the events were
+   * accepted: queued in batch mode, delivered in direct mode. Never rejects for delivery
+   * (CONTRACT-R2 §S2).
+   */
+  async #submit(events: WireEvent[]): Promise<boolean> {
     // A closed client throws; an opted-out client returns quietly. Silently
     // discarding a write after close is how 1.x lost events without telling
     // anyone, and the README promises nothing is swallowed.
     this.#deps.assertOpen();
     if (!this.#deps.isOptedIn() || events.length === 0) {
-      return;
+      return false;
     }
 
     const batcher = this.#deps.batcher();
     if (batcher) {
+      let accepted = true;
       for (const event of events) {
-        batcher.enqueue(event);
+        accepted = batcher.enqueue(event) && accepted;
       }
-      return;
+      return accepted;
     }
 
-    await this.send(events);
+    return this.#sendDirect(events);
+  }
+
+  /** Direct mode has no queue, so a never-reached request is dropped, not kept (S1.5). */
+  async #sendDirect(events: WireEvent[]): Promise<boolean> {
+    const outcome = await this.send(events);
+    if (outcome.ok) return true;
+    const { failure } = outcome;
+    this.#deps.config().logger.error('[intempt] delivery failed; events dropped', {
+      kind: failure.kind,
+      status: failure.status,
+      count: events.length,
+    });
+    this.#deps.report(
+      failure.kind === 'transport'
+        ? { ...failure, kind: 'dropped', terminal: true }
+        : failure,
+    );
+    return false;
   }
 
   /**
@@ -138,35 +164,41 @@ export class Ingest {
    * later `flush()`, `close()` or the exit hook — a consent revocation between
    * capture and flush would not have been honoured.
    */
-  async send(events: WireEvent[]): Promise<void> {
+  async send(events: WireEvent[], deadline?: number): Promise<SendOutcome> {
     if (!this.#deps.isOptedIn()) {
       this.#deps
         .config()
         .logger.warn(
           `[intempt] opted out; discarding ${events.length} buffered event(s) rather than sending`,
         );
-      return;
+      return { ok: true };
     }
-    await this.#deps.transport.post(this.#trackPath(), { track: events });
+    const path = this.#trackPath();
+    return deliver(
+      events,
+      () => this.#deps.transport.post(path, { track: events }),
+      deadline !== undefined ? { deadline } : {},
+    );
   }
 
-  async track(event: string, options: InternalTrackOptions): Promise<void> {
+  async track(event: string, options: InternalTrackOptions): Promise<boolean> {
     assertEventName(event, 'track');
     assertIdentifier(options, 'track');
-    await this.#submit([this.#buildEvent(event, options)]);
+    return this.#submit([this.#buildEvent(event, options)]);
   }
 
   /**
    * Sends many events. Chunked so one oversized call cannot become one
    * oversized request; the server's per-request ceiling is not published, so
-   * the chunk size comes from config and 413s halve it at runtime.
+   * the chunk size comes from config. Each chunk is sent once (INT-7436): a
+   * 413 drops and reports that chunk rather than halving and resending it.
    */
-  async trackBatch(events: WithProfileId<TrackEvent>[]): Promise<void> {
+  async trackBatch(events: WithProfileId<TrackEvent>[]): Promise<boolean> {
     if (!Array.isArray(events)) {
       throw new TypeError('trackBatch: events must be an array');
     }
     if (events.length === 0) {
-      return;
+      return true;
     }
     events.forEach((event, index) => {
       assertEventName(event?.event, `trackBatch[${index}]`);
@@ -177,22 +209,12 @@ export class Ingest {
 
     const batcher = this.#deps.batcher();
     if (batcher || !this.#deps.isOptedIn()) {
-      await this.#submit(wire);
-      return;
+      return this.#submit(wire);
     }
 
     const { maxRequestEvents, maxConcurrentRequests } = this.#deps.config();
     const groups = chunk(wire, maxRequestEvents);
-    // Shared by every group of this call: once a 413 has found the ceiling, the
-    // remaining groups go out at that width instead of each paying its own 413.
-    const width = { size: maxRequestEvents };
-
-    if (maxConcurrentRequests <= 1) {
-      for (const group of groups) {
-        await this.#sendWithin(group, width);
-      }
-      return;
-    }
+    let delivered = true;
 
     // Bounded parallelism: workers pull from a shared cursor, so a slow request
     // does not stall the others and no more than maxConcurrentRequests are ever
@@ -207,13 +229,14 @@ export class Ingest {
           cursor += 1;
           const group = groups[index];
           if (group === undefined) return;
-          await this.#sendWithin(group, width);
+          delivered = (await this.#sendDirect(group)) && delivered;
         }
       },
     );
 
-    // allSettled, then rethrow the first failure: a rejection must not leave
-    // sibling requests unawaited and surfacing as unhandled rejections.
+    // allSettled, then rethrow the first failure: only a programming error (an
+    // unserialisable payload) still rejects, and it must not leave sibling
+    // requests unawaited and surfacing as unhandled rejections.
     const results = await Promise.allSettled(workers);
     const failed = results.find(
       (r): r is PromiseRejectedResult => r.status === 'rejected',
@@ -221,47 +244,13 @@ export class Ingest {
     if (failed) {
       throw failed.reason;
     }
+    return delivered;
   }
 
-  /**
-   * Sends `events` in slices of at most `width.size`, halving the width on a
-   * 413 and resending the rejected slice in two. Direct mode used to rethrow
-   * the first 413, so a server ceiling below `maxRequestEvents` delivered none
-   * of the call's events. Slices go out in order, so order is kept.
-   *
-   * A single event that still answers 413 is too large on its own: that is
-   * rethrown, as a direct-mode call reports every other failure.
-   */
-  async #sendWithin(events: WireEvent[], width: { size: number }): Promise<void> {
-    // A cursor, not chunk(): the width can narrow mid-loop (here or in a
-    // concurrent worker), and the slices still ahead must follow it.
-    let start = 0;
-    while (start < events.length) {
-      const slice = events.slice(start, start + width.size);
-      try {
-        await this.send(slice);
-      } catch (error) {
-        if (
-          !(error instanceof IntemptApiError) ||
-          error.status !== 413 ||
-          slice.length <= 1
-        ) {
-          throw error;
-        }
-        width.size = Math.min(width.size, Math.ceil(slice.length / 2));
-        this.#deps
-          .config()
-          .logger.warn(`[intempt] 413 received; reducing request size to ${width.size}`);
-        await this.#sendWithin(slice, width);
-      }
-      start += slice.length;
-    }
-  }
-
-  async identify(options: InternalIdentifyOptions): Promise<void> {
+  async identify(options: InternalIdentifyOptions): Promise<boolean> {
     assertIdentifier(options, 'identify');
     const { traits, event, ...ids } = options;
-    await this.#submit([
+    return this.#submit([
       this.#buildEvent(reservedName(event, 'identify'), {
         ...ids,
         ...(traits !== undefined ? { userAttributes: traits } : {}),
@@ -269,14 +258,14 @@ export class Ingest {
     ]);
   }
 
-  async group(options: InternalGroupOptions): Promise<void> {
+  async group(options: InternalGroupOptions): Promise<boolean> {
     // No assertIdentifier here: accountId is required by the signature and is
     // itself an identifier, so the check can never fail. Mutation testing found
     // it — the string 'group' could be rewritten to anything and no test noticed,
     // because the line is unreachable.
     assertNonBlank(options?.accountId, 'group', 'accountId');
     const { attributes, event, ...ids } = options;
-    await this.#submit([
+    return this.#submit([
       this.#buildEvent(reservedName(event, 'group'), {
         ...ids,
         ...(attributes !== undefined ? { accountAttributes: attributes } : {}),
