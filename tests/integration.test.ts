@@ -393,3 +393,137 @@ describe('over a real socket: consent wire format', () => {
     await sdk.close();
   });
 });
+
+/**
+ * Ruling R5 (parity with intempt-python 09cce9c): a pooled keep-alive socket the server already
+ * closed must not lose a batch. A failure on a reused socket before any response byte is
+ * reconnected once; if that also fails before the write the batch is never-reached and kept. A
+ * fresh socket lost after the write is still dropped with no resend.
+ */
+describe('over a real socket: a stale keep-alive socket (R5)', () => {
+  /** Answers the first request on each socket; `onReused` decides what a reused socket gets. */
+  async function staleServer(
+    onReused: (req: http.IncomingMessage, srv: http.Server) => void,
+  ) {
+    const perSocket = new WeakMap<object, number>();
+    const seen: string[] = [];
+    const srv = http.createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        const n = (perSocket.get(req.socket) ?? 0) + 1;
+        perSocket.set(req.socket, n);
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+          track: { name: string }[];
+        };
+        const names = body.track.map((e) => e.name).join(',');
+        if (n > 1 && mode.stale) {
+          seen.push(`stale:${names}`);
+          onReused(req, srv);
+          return;
+        }
+        seen.push(`ok:${names}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('{}');
+      });
+    });
+    const mode = { stale: true };
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+    const { port } = srv.address() as AddressInfo;
+    const stop = async (): Promise<void> => {
+      srv.closeAllConnections();
+      await new Promise<void>((r) => srv.close(() => r()));
+    };
+    return { srv, seen, mode, host: `127.0.0.1:${port}`, stop };
+  }
+
+  function clientFor(host: string, extra: Record<string, unknown> = {}) {
+    const failures: DeliveryFailure[] = [];
+    const c = Intempt.init({
+      org: ORG,
+      project: PROJECT,
+      apiKey: API_KEY,
+      sourceId: SOURCE,
+      host,
+      protocol: 'http',
+      logger: testLogger(),
+      onDeliveryFailure: (f: DeliveryFailure) => failures.push(f),
+      ...extra,
+    });
+    return { c, failures };
+  }
+
+  it('reconnects once on a fresh socket and delivers', async () => {
+    const s = await staleServer((req) => req.socket.destroy());
+    const { c, failures } = clientFor(s.host);
+
+    await expect(c.track('a', { userId: 'u1' })).resolves.toBe(true);
+    await expect(c.track('b', { userId: 'u1' })).resolves.toBe(true);
+
+    expect(s.seen).toEqual(['ok:a', 'stale:b', 'ok:b']);
+    expect(failures).toEqual([]);
+    await c.close();
+    await s.stop();
+  });
+
+  it('keeps the batch when the reconnect cannot connect', async () => {
+    const s = await staleServer((req, srv) => {
+      srv.close();
+      req.socket.destroy();
+    });
+    const { c, failures } = clientFor(s.host, {
+      batch: { size: 1, flushMs: 60_000, maxQueue: 10, flushOnExit: false },
+    });
+
+    await c.track('a', { userId: 'u1' });
+    await c.flush();
+    await c.track('b', { userId: 'u1' });
+    await c.flush();
+
+    expect(s.seen).toEqual(['ok:a', 'stale:b']);
+    expect(c.buffered).toBe(1);
+    expect(failures.map((f) => [f.kind, f.terminal])).toEqual([['transport', false]]);
+    await s.stop();
+  });
+
+  it('keeps the batch when the reconnect lands on another stale pooled socket', async () => {
+    const s = await staleServer((req) => req.socket.destroy());
+    s.mode.stale = false;
+    const { c, failures } = clientFor(s.host, {
+      maxRequestEvents: 1,
+      maxConcurrentRequests: 2,
+    });
+    await expect(
+      c.trackBatch([
+        { event: 'p', userId: 'u1' },
+        { event: 'q', userId: 'u1' },
+      ]),
+    ).resolves.toBe(true);
+    s.mode.stale = true;
+
+    await expect(c.track('b', { userId: 'u1' })).resolves.toBe(false);
+    expect(s.seen.filter((x) => x.startsWith('stale:'))).toEqual(['stale:b', 'stale:b']);
+    // Direct mode has no queue: never-reached is reported dropped, not lost silently.
+    expect(failures.map((f) => [f.kind, f.terminal])).toEqual([['dropped', true]]);
+    await c.close();
+    await s.stop();
+  });
+
+  it('drops with no resend when a fresh socket dies after the write', async () => {
+    const s = await staleServer(() => {});
+    let first = true;
+    s.srv.removeAllListeners('request');
+    s.srv.on('request', (req: http.IncomingMessage) => {
+      s.seen.push(first ? 'fresh' : 'again');
+      first = false;
+      req.socket.destroy();
+    });
+    const { c, failures } = clientFor(s.host);
+
+    await expect(c.track('a', { userId: 'u1' })).resolves.toBe(false);
+    expect(s.seen).toEqual(['fresh']);
+    expect(failures.map((f) => [f.kind, f.status])).toEqual([['dropped', undefined]]);
+    await c.close();
+    await s.stop();
+  });
+});

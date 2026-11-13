@@ -12,7 +12,7 @@
  */
 
 import type { WireEvent } from './types';
-import { IntemptApiError } from './transport';
+import { IntemptApiError, staleSocketFailure } from './transport';
 
 /** Final outcome of one batch that did not deliver. Fired once per batch, never per attempt. */
 export interface DeliveryFailure {
@@ -51,11 +51,29 @@ const NEVER_REACHED = new Set([
   'EAI_AGAIN',
   'ECONNREFUSED',
   'ENETUNREACH',
+  'ENETDOWN',
   'EHOSTUNREACH',
+  // TLS handshake failures (ruling R5). The request body is buffered until the handshake
+  // completes, so none of it was written. EPROTO is left out: it also covers post-handshake alerts.
+  'CERT_HAS_EXPIRED',
+  'CERT_NOT_YET_VALID',
+  'CERT_REVOKED',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+  'ERR_SSL_WRONG_VERSION_NUMBER',
+  'ERR_SSL_UNSUPPORTED_PROTOCOL',
+  'ERR_SSL_TLSV1_ALERT_PROTOCOL_VERSION',
+  'ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE',
+  'ERR_SSL_TLSV1_ALERT_UNKNOWN_CA',
 ]);
 
 export function neverReached(error: IntemptApiError): boolean {
   if (error.status !== undefined) return false;
+  if (staleSocketFailure(error)) return true;
   const code = (error.cause as { code?: unknown } | undefined)?.code;
   return typeof code === 'string' && NEVER_REACHED.has(code);
 }

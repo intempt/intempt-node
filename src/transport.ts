@@ -56,6 +56,21 @@ export class IntemptApiError extends Error {
   }
 }
 
+/**
+ * How a pooled keep-alive socket the server already closed fails the next write. On a REUSED
+ * socket before any response byte this means the request never reached a live peer (ruling R5),
+ * so it is reconnected once, the way undici, URLSession and Java's HttpClient do internally.
+ */
+const STALE_SOCKET_CODES = new Set(['ECONNRESET', 'EPIPE']);
+
+/** Failures on a reused socket before any response byte, both on the first try and the reconnect. */
+const staleSocketFailures = new WeakSet<IntemptApiError>();
+
+/** True when the request and its one reconnect both died on a stale pooled socket: never reached. */
+export function staleSocketFailure(error: IntemptApiError): boolean {
+  return staleSocketFailures.has(error);
+}
+
 export interface TransportResponse<T = unknown> {
   status: number;
   body: T;
@@ -146,6 +161,21 @@ export class Transport {
       options.port = this.#config.port;
     }
 
+    try {
+      return await this.#exchange<T>(requestLib, options, payload);
+    } catch (error) {
+      if (!(error instanceof IntemptApiError) || !staleSocketFailure(error)) throw error;
+      // The agent dropped the dead socket, so this takes a fresh one unless another idle socket
+      // is also stale; that second failure leaks out still marked, and delivery keeps the batch.
+      return this.#exchange<T>(requestLib, options, payload);
+    }
+  }
+
+  #exchange<T>(
+    requestLib: typeof http | typeof https,
+    options: http.RequestOptions,
+    payload: Buffer,
+  ): Promise<TransportResponse<T>> {
     return new Promise<TransportResponse<T>>((resolveRaw, rejectRaw) => {
       // A request can end without emitting either `response` or `error`: a socket
       // destroyed elsewhere, or an error value that is not an Error instance.
@@ -163,7 +193,9 @@ export class Transport {
         rejectRaw(error);
       };
 
+      let responded = false;
       const request = requestLib.request(options, (res) => {
+        responded = true;
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => chunks.push(chunk));
         res.on('end', () => {
@@ -211,9 +243,19 @@ export class Transport {
           return;
         }
         const message = error instanceof Error ? error.message : String(error);
-        reject(
-          new IntemptApiError(`Intempt API request failed: ${message}`, { cause: error }),
-        );
+        const failure = new IntemptApiError(`Intempt API request failed: ${message}`, {
+          cause: error,
+        });
+        const code = (error as { code?: unknown } | null)?.code;
+        if (
+          request.reusedSocket &&
+          !responded &&
+          typeof code === 'string' &&
+          STALE_SOCKET_CODES.has(code)
+        ) {
+          staleSocketFailures.add(failure);
+        }
+        reject(failure);
       });
 
       // Last resort. `close` always fires, so if nothing settled the promise by

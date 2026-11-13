@@ -145,6 +145,37 @@ describe('batch mode: send once (INT-7436)', () => {
   });
 });
 
+describe('never-reached codes keep the batch (R5)', () => {
+  it.each([
+    'ENETDOWN',
+    'DEPTH_ZERO_SELF_SIGNED_CERT',
+    'CERT_HAS_EXPIRED',
+    'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+    'ERR_TLS_CERT_ALTNAME_INVALID',
+    'ERR_SSL_WRONG_VERSION_NUMBER',
+  ])('%s is never-reached', async (code) => {
+    nock(ORIGIN)
+      .post(TRACK_PATH)
+      .replyWithError(Object.assign(new Error(code), { code }));
+    const { c } = batched();
+
+    await c.track('a', { userId: 'u1' });
+    await c.flush();
+    expect(c.buffered).toBe(1);
+  });
+
+  it('EPROTO is not: it also covers alerts after the handshake', async () => {
+    nock(ORIGIN)
+      .post(TRACK_PATH)
+      .replyWithError(Object.assign(new Error('EPROTO'), { code: 'EPROTO' }));
+    const { c } = batched();
+
+    await c.track('a', { userId: 'u1' });
+    await c.flush();
+    expect(c.buffered).toBe(0);
+  });
+});
+
 describe('direct mode: send once, never reject (INT-7436)', () => {
   it('trackBatch answered 413 sends once and resolves', async () => {
     const attempts = server([413, 200, 200]);
