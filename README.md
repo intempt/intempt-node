@@ -70,26 +70,30 @@ this safe in Lambda and other short-lived processes.
 
 ## API reference
 
-| Call                               | Returns            | Endpoint                             |
-| ---------------------------------- | ------------------ | ------------------------------------ |
-| `Intempt.init(config)`             | `IntemptClient`    | —                                    |
-| `track(event, options)`            | `Promise<void>`    | `POST …/track`                       |
-| `trackBatch(events)`               | `Promise<void>`    | `POST …/track`, chunked              |
-| `identify(options)`                | `Promise<void>`    | `POST …/track` (reserved `Identify`) |
-| `group(options)`                   | `Promise<void>`    | `POST …/track` (reserved `Identify`) |
-| `consent.grant(options)`           | `Promise<void>`    | `POST …/consents/data`               |
-| `consent.revoke(options)`          | `Promise<void>`    | `POST …/consents/data`               |
-| `ecommerce.productViewed(options)` | `Promise<void>`    | `POST …/track`                       |
-| `ecommerce.addedToCart(options)`   | `Promise<void>`    | `POST …/track`                       |
-| `ecommerce.ordered(options)`       | `Promise<void>`    | `POST …/track`                       |
-| `recommend(options)`               | `Promise<unknown>` | `POST …/feeds/{id}/data`             |
-| `optIn()` / `optOut()`             | `void`             | —                                    |
-| `isOptedIn()`                      | `boolean`          | —                                    |
-| `flush()` / `close()`              | `Promise<void>`    | —                                    |
-| `setConfig(patch)`                 | `void`             | —                                    |
-| `config` / `buffered`              | getters            | —                                    |
+| Call                               | Returns                     | Endpoint                             |
+| ---------------------------------- | --------------------------- | ------------------------------------ |
+| `Intempt.init(config)`             | `IntemptClient`             | —                                    |
+| `track(event, options)`            | `Promise<boolean>`          | `POST …/track`                       |
+| `trackBatch(events)`               | `Promise<boolean>`          | `POST …/track`, chunked              |
+| `identify(options)`                | `Promise<boolean>`          | `POST …/track` (reserved `Identify`) |
+| `group(options)`                   | `Promise<boolean>`          | `POST …/track` (reserved `Identify`) |
+| `consent.grant(options)`           | `Promise<boolean>`          | `POST …/consents/data`               |
+| `consent.revoke(options)`          | `Promise<boolean>`          | `POST …/consents/data`               |
+| `ecommerce.productViewed(options)` | `Promise<void>`             | `POST …/track`                       |
+| `ecommerce.addedToCart(options)`   | `Promise<void>`             | `POST …/track`                       |
+| `ecommerce.ordered(options)`       | `Promise<void>`             | `POST …/track`                       |
+| `recommend(options)`               | `Promise<unknown>`          | `POST …/feeds/{id}/data`             |
+| `optIn()` / `optOut()`             | `void`                      | —                                    |
+| `isOptedIn()`                      | `boolean`                   | —                                    |
+| `flush()` / `close()`              | `Promise<{ sent, failed }>` | —                                    |
+| `setConfig(patch)`                 | `void`                      | —                                    |
+| `config` / `buffered`              | getters                     | —                                    |
 
-Every method rejects on failure. Nothing is swallowed.
+A delivery failure is reported, never thrown, and never silent. The `boolean`
+calls resolve `false` and the `ecommerce` helpers still resolve; the failure is
+logged at error and reaches `onDeliveryFailure` once (see [Errors](#errors)).
+Programming errors — invalid input, a closed client — reject, and so does a
+failed `recommend`.
 
 ## Configuration
 
@@ -182,8 +186,10 @@ Intempt.init({ ...config, maxConcurrentRequests: 4 });
 
 Workers pull from a shared cursor, so a slow request never stalls the others and
 no more than `maxConcurrentRequests` are ever in flight. If any chunk fails, the
-call rejects with the first error only after every sibling request has settled, so
-a rejection can never leave an unhandled promise behind.
+call resolves `false` once every sibling request has settled, and each failed chunk
+is reported once. Only a programming error (a payload that cannot be serialised)
+rejects, and it too waits for the siblings, so a rejection can never leave an
+unhandled promise behind.
 
 Identity resolution happens on the platform, so there is no merge or alias call
 here. Two identities that ever share an identifier -- the same device, email or
@@ -217,6 +223,12 @@ await intempt.consent.revoke({
 
 `validUntil` defaults to `'unlimited'`. Timestamps are converted to the epoch
 seconds the API expects.
+
+`grant` and `revoke` resolve `true` when the record was stored and `false`
+otherwise. A failure is handled like `track`: sent once (429/503 resent once),
+logged at error and reported to `onDeliveryFailure` once, never thrown. Consent
+has no queue, so a record that never reached the server is reported `dropped`
+rather than kept.
 
 ## Reading decisions
 
@@ -294,14 +306,14 @@ and reported. `flush()` applies no budget.
 
 Delivery policy (INT-7436), the same in batch and direct mode:
 
-| Outcome                                    | Behaviour                                                                       |
-| ------------------------------------------ | ------------------------------------------------------------------------------- |
-| 2xx                                        | sent                                                                            |
-| 429, 503                                   | resend once after `Retry-After` (1–60 s, 1 s if absent); a second failure drops |
-| `Retry-After` above 5 s, or past `close()` | drop instead of waiting                                                         |
-| any other status (400s, 408, 413, 5xx)     | drop, no resend                                                                 |
-| timeout or lost response after sending     | drop, no resend: the server may already have it                                 |
-| never reached the server (DNS, refused)    | batch mode keeps the batch for the next flush; direct mode drops                |
+| Outcome                                    | Behaviour                                                                                                                                             |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2xx                                        | sent                                                                                                                                                  |
+| 429, 503                                   | resend once after `Retry-After` (1–60 s, 1 s if absent); a second failure drops                                                                       |
+| `Retry-After` above 5 s, or past `close()` | drop instead of waiting                                                                                                                               |
+| any other status (400s, 408, 413, 5xx)     | drop, no resend                                                                                                                                       |
+| timeout or lost response after sending     | drop, no resend: the server may already have it                                                                                                       |
+| never reached the server (DNS, refused)    | batch mode keeps the batch until the next timed flush (`flushMs`) or `flush()`; reaching `size` meanwhile sends nothing; direct mode and consent drop |
 
 Each request is sent once because ingestion has no idempotency key: `eventId`
 travels in the payload but nothing collapses duplicates, so a resend after a
@@ -343,7 +355,9 @@ request fails; use `https.Agent` unless you set `protocol: 'http'`.
 
 A delivery problem never rejects (INT-7444). `track`, `trackBatch`, `identify`
 and `group` resolve `true` when the event was accepted — queued in batch mode,
-delivered in direct mode — and `false` otherwise. The final outcome of every
+delivered in direct mode — and `false` otherwise. `consent.grant` and
+`consent.revoke` resolve `true` when the record was stored and `false` otherwise.
+The `ecommerce` helpers resolve either way. Every failure is logged at error. The final outcome of every
 batch that did not deliver reaches one listener, once per batch, never per
 attempt:
 
@@ -387,7 +401,8 @@ Breaking changes to expect:
 | ------------------------------------------- | ----------------------------------------- |
 | `?apiKey=` query parameter                  | `Authorization: Basic` header             |
 | invalid input warns and resolves            | rejects                                   |
-| product helpers return `{ error: true }`    | reject                                    |
+| product helpers return `{ error: true }`    | reject on invalid input                   |
+| a delivery failure                          | resolves, logged at error; never rejects  |
 | `trackingClient` and friends                | removed                                   |
 | `NODE_ENV=test` targets staging             | `host` is configuration                   |
 | `optOut()` gates tracking only              | gates every write                         |
@@ -495,16 +510,16 @@ each other.
 
 Both ends of that window behave differently, and the upper one is worth knowing:
 
-| Your timestamp    | What happens                                         |
-| ----------------- | ---------------------------------------------------- |
-| before 2010-01-01 | request rejected with an error naming the threshold  |
-| 2010 to 2040      | stored as given                                      |
-| after 2040-01-18  | **silently replaced with the server's current time** |
+| Your timestamp    | What happens                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| before 2010-01-01 | refused: the server answers 400 for an event, so `track` resolves `false` and reports it; `consent` rejects before sending, naming the threshold |
+| 2010 to 2040      | stored as given                                                                                                                                  |
+| after 2040-01-18  | **silently replaced with the server's current time**                                                                                             |
 
 So a timestamp in seconds where milliseconds were meant lands in the far future,
 sails past the upper bound, and is quietly rewritten to now — no error, and the
 event looks like it just happened. The reverse mistake (milliseconds where seconds
-were meant) lands before 2010 and fails loudly instead.
+were meant) lands before 2010 and is refused and reported instead of rewritten.
 
 ## Support
 

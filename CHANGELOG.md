@@ -5,6 +5,26 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — BREAKING
+
+Both changes below alter the public contract, so under SemVer they ship in a
+new major version, not in a 3.x minor.
+
+- **Delivery failures no longer reject** (INT-7444, CONTRACT-R2 §S2). `track`,
+  `trackBatch`, `identify` and `group` resolve `true` when the event was
+  accepted (queued in batch mode, delivered in direct mode) and `false`
+  otherwise; they used to resolve `void` and reject with `IntemptApiError`.
+  The `ecommerce` helpers resolve either way. Callers that caught a rejected
+  `IntemptApiError` from these calls must move to `onDeliveryFailure` or the
+  returned boolean. Programming errors still reject.
+- **Consent failures are reported, not thrown** (ruling R2). `consent.grant`
+  and `consent.revoke` resolve `true` when the record was stored and `false`
+  otherwise; they used to resolve `void` and reject with `IntemptApiError`. A
+  failure is logged at error and fires `onDeliveryFailure` once with
+  `kind: 'terminal'` (the server answered) or `kind: 'dropped'` (timeout, or
+  never reached: consent has no queue), `eventCount: 1` and `eventIds: []`. The
+  1.x `SDK.consent`/`consents` shim resolves on a delivery failure too.
+
 ### Changed
 
 - **Every ingestion request is sent once** (INT-7436, CONTRACT-R2 §S1). 429 and
@@ -15,13 +35,9 @@ This project follows [Semantic Versioning](https://semver.org/).
   Removed: exponential backoff, the 5-failure circuit breaker, and 413 halving
   in both batch mode and direct-mode `trackBatch()` (lower `maxRequestEvents`
   instead). A batch that never reached the server (DNS, refused connection) is
-  kept for the next flush in batch mode. Consent writes follow the same policy.
-- **Delivery failures no longer reject** (INT-7444, CONTRACT-R2 §S2). `track`,
-  `trackBatch`, `identify` and `group` resolve `true` when the event was
-  accepted (queued in batch mode, delivered in direct mode) and `false`
-  otherwise; `consent.*` resolves either way. Callers that caught a rejected
-  `IntemptApiError` from these calls must move to `onDeliveryFailure`.
-  Programming errors still reject.
+  kept for the next timed flush (or an explicit `flush()`) in batch mode;
+  reaching `batch.size` meanwhile starts no resend. Consent writes follow the
+  same policy.
 - **`flush()` and `close()` resolve `{ sent, failed }`** (INT-7444). `close()`
   is the contract's `shutdown()`; events it cannot send are counted as failed.
 

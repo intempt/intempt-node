@@ -74,8 +74,9 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
 ## Errors
 
 Two tiers, and they are not interchangeable: a configuration mistake surfaces when the config is
-built, and an API failure carries the status, the body and any `Retry-After`. Ingestion writes never
-reject for a delivery failure: they are sent once (429/503 resent once), and the final outcome goes
+built, and an API failure carries the status, the body and any `Retry-After`. Ingestion writes and
+`consent.grant`/`consent.revoke` never reject for a delivery failure: they resolve `false`, log at
+error, and are sent once (429/503 resent once), and the final outcome goes
 to `onDeliveryFailure` (INT-7436/INT-7444, CONTRACT-R2 §S1/S2). A request that never reached the
 server is the one failure a batch is kept for, because nothing can have been stored.
 
