@@ -249,6 +249,34 @@ describe('a kept batch waits for the next timed flush (R4)', () => {
     await c.close();
   });
 
+  it('once the kept batch is sent, reaching batch.size sends at once again', async () => {
+    const server = unreachable();
+    const { c } = kept(60_000);
+    await c.track('a', { userId: 'u1' });
+    await c.track('b', { userId: 'u1' });
+    await settle(20);
+    expect(server.attempts()).toBe(1);
+
+    nock.cleanAll();
+    let sent = 0;
+    nock(ORIGIN)
+      .post(TRACK_PATH, () => {
+        sent += 1;
+        return true;
+      })
+      .times(5)
+      .reply(200, {});
+    await c.flush();
+    expect(sent).toBe(1);
+
+    await c.track('c', { userId: 'u1' });
+    await c.track('d', { userId: 'u1' });
+    await settle(20);
+    expect(sent).toBe(2);
+    expect(c.buffered).toBe(0);
+    await c.close();
+  });
+
   it('the timed flush still resends the kept batch after size-triggered enqueues', async () => {
     const server = unreachable();
     const { c } = kept(40);
