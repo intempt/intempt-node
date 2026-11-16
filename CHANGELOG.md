@@ -10,6 +10,11 @@ This project follows [Semantic Versioning](https://semver.org/).
 - `hasOptedOut()` on the client, the negation of `isOptedIn()`, matching the
   Android, Swift and React Native SDKs.
 
+### Fixed
+
+- `ecommerce.ordered()` gives each product line its own `eventId`. The lines
+  shared one id, as in 1.x, so the server kept only one line of the order.
+
 ## [4.0.0] - unreleased
 
 ### Changed — BREAKING
