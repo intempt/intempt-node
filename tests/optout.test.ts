@@ -11,6 +11,20 @@ import {
 
 setupNock();
 
+describe('hasOptedOut', () => {
+  // Cross-SDK parity: Android, Swift and React Native expose hasOptedOut().
+  it('is the negation of isOptedIn through optOut, optIn and close', async () => {
+    const c = client();
+    expect(c.hasOptedOut()).toBe(false);
+    c.optOut();
+    expect(c.hasOptedOut()).toBe(true);
+    c.optIn();
+    expect(c.hasOptedOut()).toBe(false);
+    await c.close();
+    expect(c.hasOptedOut()).toBe(true);
+  });
+});
+
 describe('optOut gates every write path', () => {
   it('suppresses track, trackBatch, identify and group', async () => {
     const c = client();

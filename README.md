@@ -84,7 +84,7 @@ this safe in Lambda and other short-lived processes.
 | `ecommerce.ordered(options)`       | `Promise<void>`             | `POST …/track`                       |
 | `recommend(options)`               | `Promise<unknown>`          | `POST …/feeds/{id}/data`             |
 | `optIn()` / `optOut()`             | `void`                      | —                                    |
-| `isOptedIn()`                      | `boolean`                   | —                                    |
+| `isOptedIn()` / `hasOptedOut()`    | `boolean`                   | —                                    |
 | `flush()` / `close()`              | `Promise<{ sent, failed }>` | —                                    |
 | `setConfig(patch)`                 | `void`                      | —                                    |
 | `config` / `buffered`              | getters                     | —                                    |

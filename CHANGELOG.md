@@ -3,6 +3,13 @@
 All notable changes to this package are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `hasOptedOut()` on the client, the negation of `isOptedIn()`, matching the
+  Android, Swift and React Native SDKs.
+
 ## [4.0.0] - unreleased
 
 ### Changed — BREAKING

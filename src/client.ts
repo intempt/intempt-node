@@ -269,6 +269,10 @@ export class IntemptClient {
     return this.#optedIn && !this.#closed;
   }
 
+  hasOptedOut(): boolean {
+    return !this.isOptedIn();
+  }
+
   // ---- config ----
 
   /**
