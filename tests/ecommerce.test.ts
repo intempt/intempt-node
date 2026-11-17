@@ -66,20 +66,6 @@ describe('ecommerce: 1.x wire parity', () => {
     expect(payload[1]!.data).toEqual({ productId: 'p2', quantity: 1 });
   });
 
-  it('shares one eventId across the lines, as 1.x productTrack did', async () => {
-    // Preserved deliberately. Per-line dedup cannot tell the lines apart, which
-    // is odd, but changing it would change ingestion semantics.
-    const bodies = capture();
-
-    await client().ecommerce.ordered({
-      userId: 'u1',
-      products: [{ productId: 'p1' }, { productId: 'p2' }, { productId: 'p3' }],
-    });
-
-    const ids = bodies[0]!.track[0]!.payload.map((item) => item.eventId);
-    expect(new Set(ids).size).toBe(1);
-  });
-
   it('shares one timestamp across the lines', async () => {
     const bodies = capture();
     await client().ecommerce.ordered({
@@ -94,6 +80,21 @@ describe('ecommerce: 1.x wire parity', () => {
     const bodies = capture();
     await client().ecommerce.productViewed({ userId: 'u1', productId: 'p1' });
     expect(bodies[0]!.track[0]!.payload[0]!.data).toEqual({ productId: 'p1' });
+  });
+});
+
+describe('ecommerce: line eventIds', () => {
+  it('gives each line its own eventId', async () => {
+    // A shared eventId made the server dedupe the order down to one line.
+    const bodies = capture();
+
+    await client().ecommerce.ordered({
+      userId: 'u1',
+      products: [{ productId: 'p1' }, { productId: 'p2' }, { productId: 'p3' }],
+    });
+
+    const ids = bodies[0]!.track[0]!.payload.map((item) => item.eventId);
+    expect(new Set(ids).size).toBe(3);
   });
 });
 

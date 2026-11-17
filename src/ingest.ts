@@ -83,24 +83,22 @@ export class Ingest {
   /**
    * One event carrying several payload items, one per line.
    *
-   * Kept bit-compatible with the 1.x commerce wire format: the lines share a
-   * single `eventId`, exactly as `TrackingClient.productTrack` did. That is odd
-   * — per-item dedup cannot distinguish the lines — but changing it would
-   * change ingestion semantics, which is not an SDK decision. Raised in the PR.
+   * Each line gets its own `eventId`: payload items of one request that share an
+   * id are stored as one row, so the 1.x shared id kept only one line of an order
+   * (measured 2026-11-16, INT-5415; ruling: Beso, 2026-11-16).
    */
   async trackLines(
     name: string,
     options: InternalTrackOptions,
     lines: readonly Record<string, unknown>[],
   ): Promise<boolean> {
-    const eventId = randomUUID();
     const timestamp =
       options.timestamp === undefined ? Date.now() : ensureTimestamp(options.timestamp);
     const event: WireEvent = {
       name,
       payload: lines.map((line) =>
         compact({
-          eventId,
+          eventId: randomUUID(),
           timestamp,
           profileId: options.profileId,
           userId: options.userId,

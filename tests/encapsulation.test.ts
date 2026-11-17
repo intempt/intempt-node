@@ -20,6 +20,7 @@ const PUBLIC_METHODS = [
   'optIn',
   'optOut',
   'isOptedIn',
+  'hasOptedOut',
   'flush',
   'close',
   'setConfig',

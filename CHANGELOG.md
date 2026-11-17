@@ -51,6 +51,8 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `hasOptedOut()` on the client, the negation of `isOptedIn()`, matching the
+  Android, Swift and React Native SDKs.
 - **`onDeliveryFailure(failure)` config listener** (INT-7444). Fires once per
   batch on its final outcome with `{ kind, status?, eventCount, eventIds,
 retryAfter?, terminal }`; `transport` fires once per kept batch, not on every
@@ -73,6 +75,9 @@ retryAfter?, terminal }`; `transport` fires once per kept batch, not on every
 
 ### Fixed
 
+- `ecommerce.ordered()` gives each product line its own `eventId`. The lines
+  shared one id, as in 1.x, so the server kept only one line of the order. The
+  deprecated 1.x shim's `productOrdered()` sends the new wire form too.
 - A 200 whose `choices` is not an array made `variation()` reject with
   `choices.find is not a function`; it now returns the default and reports
   `parse` (INT-7454).
