@@ -316,9 +316,10 @@ Delivery policy (INT-7436), the same in batch and direct mode:
 | never reached the server (DNS, refused, network down, TLS handshake) | batch mode keeps the batch until the next timed flush (`flushMs`) or `flush()`; reaching `size` meanwhile sends nothing; direct mode and consent drop |
 | a pooled keep-alive socket the server closed                         | reconnected once at once; if that also fails before sending, treated as never reached                                                                 |
 
-Each request is sent once because ingestion has no idempotency key: `eventId`
-travels in the payload but nothing collapses duplicates, so a resend after a
-request that actually landed produces duplicate rows. 429 and 503 are the two
+Each request is sent once because ingestion has no idempotency key. Payload
+items of one request that share an `eventId` are stored as one row (measured
+2026-11-16), so each item gets its own id; whether a resend of a request that
+already landed is collapsed is not measured, so the SDK does not risk it. 429 and 503 are the two
 answers that mean the server did not ingest, so they alone are resent. A 413 is
 not split and resent; lower `maxRequestEvents` instead.
 

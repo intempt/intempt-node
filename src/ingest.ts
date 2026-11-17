@@ -83,8 +83,9 @@ export class Ingest {
   /**
    * One event carrying several payload items, one per line.
    *
-   * Each line gets its own `eventId`: the server dedupes payload items by it,
-   * so the 1.x shared id kept only one line of an order (ruling: Beso, 2026-11-16).
+   * Each line gets its own `eventId`: payload items of one request that share an
+   * id are stored as one row, so the 1.x shared id kept only one line of an order
+   * (measured 2026-11-16, INT-5415; ruling: Beso, 2026-11-16).
    */
   async trackLines(
     name: string,
