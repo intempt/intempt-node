@@ -21,9 +21,9 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
   `{ disableExposure: true }` read go to `POST /flags/all`. choose-api stays for experiments and
   personalizations, which this SDK does not serve: an experiment key on `/flags/evaluate` is a 404
   and returns the caller's default. The evaluator lives in `src/flag-evaluator.ts` (internal) and the
-  public entry in `src/flags.ts`; both import only the
-  shared core (config, credentials, transport, utils, types) and is published alone as
-  `intempt-nodejs-sdk/flags`; `tests/flags-standalone.test.ts` runs it with tracking deleted.
+  public entry in `src/flags.ts`, published alone as `intempt-nodejs-sdk/flags`. Both import only
+  the shared core (config, credentials, transport, utils, types);
+  `tests/flags-standalone.test.ts` runs the entry with tracking deleted.
 - **`defaultValue` is REQUIRED, everywhere, and is never optional.** It is what a caller receives on
   a network failure, a timeout, an unknown key or a malformed response. A flag SDK that throws when
   the service is unreachable takes the application down with it, which is the opposite of what a
