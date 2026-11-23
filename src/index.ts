@@ -13,6 +13,7 @@ export type {
   FlagReason,
   VariationOptions,
 } from './flag-evaluator';
+export type { Choice, ChooseContext, ChooseOptions } from './choose';
 export type { DeliveryFailure } from './delivery';
 export type { FlushResult } from './batcher';
 

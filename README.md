@@ -266,16 +266,33 @@ import { IntemptFlags } from 'intempt-nodejs-sdk/flags';
 const flags = IntemptFlags.init({ org, project, apiKey, sourceId });
 ```
 
-### Why there are no experiments or personalizations
+### Experiments and personalizations
 
-They resolve a **web experience against a page**, and are served by the browser
-SDK, [intempt-js](https://github.com/intempt/intempt-js). A server has no page to
-modify, so `/optimization/choose-api` is not part of this surface.
+```ts
+const choices = await intempt.choose(
+  { userId: 'u1', sessionId: 'visit-42' },
+  { names: ['hero_banner'] }, // and/or groups: ['home']
+);
+const hero = choices.find((c) => c.name === 'hero_banner')?.body;
+```
 
-The 1.x `chooseExperimentsBy*` and `choosePersonalizationsBy*` helpers throw a
-message pointing at the browser SDK rather than returning an empty array: `[]`
-reads as "no variant assigned" and would silently disable a caller's experiment
-instead of telling them where it moved.
+`choose()` reads `POST /optimization/choose-api` on the `api` channel and resolves the served
+`{ name, group, body }` entries; `experienceId`, `variantId` and `reason` are included when the
+service sends them. Each call records an exposure unless you pass `disableExposure: true`.
+`sessionId` matters for experiences shown once per visit.
+
+It resolves `[]`, with one log line, when the service cannot answer, so render your fallback
+for an absent name. It rejects with a `TypeError` for a context that has neither a `userId` nor a
+`profileId` (with a `sourceId` on the client), for a name or group outside `[a-zA-Z0-9_-]`, and on
+a closed client.
+
+**Always pass `names` or `groups`.** With neither, the service evaluates, and so exposes, every API
+experience the person is eligible for, which fills running experiments with people who never saw a
+variant and can spend a `once` gate for good.
+
+The 1.x `chooseExperimentsBy*` and `choosePersonalizationsBy*` helpers still throw rather than
+returning an empty array, with a message pointing at `choose()`: `[]` reads as "no variant
+assigned" and would silently disable a caller's experiment.
 
 ## Privacy
 
@@ -426,7 +443,7 @@ Breaking changes to expect:
 | `optOut()` gates tracking only              | gates every write                         |
 | consent timestamp in milliseconds           | seconds, as the API expects               |
 | `profileId` required                        | any one identifier                        |
-| `choosePersonalizationsByGroups` and 3 more | throw — browser SDK only                  |
+| `choosePersonalizationsByGroups` and 3 more | throw — use `choose()` or `variation()`   |
 | `recommendation(...)`                       | `recommend({ userId, feedId, fields })`   |
 | unbounded resend, no flush                  | buffering is opt-in, with `flush`/`close` |
 

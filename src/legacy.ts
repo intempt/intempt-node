@@ -229,27 +229,17 @@ export class SDK {
   /**
    * These four 1.x helpers put the MODE in the method name, which forced a caller to know whether a
    * key was an experiment before reading it and grew combinatorially with every new mode. They are
-   * superseded by `variation()`, which asks for a key and lets the platform resolve the rest.
+   * superseded by the client's single `choose(context, { names | groups })`, which serves
+   * experiments and personalizations; flags have `variation()`.
    *
    * They still throw rather than returning an empty array: [] would read as "no variant assigned"
    * and quietly disable a caller's experiment instead of telling them where it went.
-   *
-   * The previous message said assignment was unavailable in a server SDK at all. That is no longer
-   * true: `POST /optimization/choose-api` serves a body by key on the `api` channel, and
-   * `{name, group, body}` is everything `variation()` needs, so the capability is available and the
-   * message points at it.
-   *
-   * What is still NOT available is the ability to explain an absence. The serving response carries
-   * no `reason` field - `ExperienceApiChoose` on `audience-service` main is `name`, `group`, `body`
-   * and nothing more - so an unanswered request and a deliberate off state remain the same absent
-   * entry, and `variationDetail` reports both as `off` (see `flags.ts`). That is not why these four
-   * were superseded.
    */
   static #experiencesRemoved(method: string): never {
     throw new Error(
-      `${method} was removed in 2.0. Use variation(key, context, defaultValue) - ` +
-        'it asks for a flag key instead of a mode, and returns your default when the ' +
-        'service cannot answer.',
+      `${method} was removed in 2.0. Use choose(context, { names | groups }) on the v2 client ` +
+        'for experiments and personalizations, or variation(key, context, defaultValue) for ' +
+        'flags.',
     );
   }
 

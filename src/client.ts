@@ -8,6 +8,8 @@ import { Ingest } from './ingest';
 import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
 import { Recommend } from './recommend';
+import { Choose } from './choose';
+import type { Choice, ChooseContext, ChooseOptions } from './choose';
 import { Flags } from './flag-evaluator';
 import type { FlagContext, FlagDetail, VariationOptions } from './flag-evaluator';
 import type {
@@ -32,6 +34,7 @@ export class IntemptClient {
   readonly ecommerce: Ecommerce;
   readonly #recommend: Recommend;
   readonly #flags: Flags;
+  readonly #choose: Choose;
 
   constructor(config: IntemptConfig) {
     this.#resolved = resolveConfig(config);
@@ -78,6 +81,7 @@ export class IntemptClient {
       config: configRef,
       keyPrefix: credentials.prefix,
     });
+    this.#choose = new Choose({ transport: this.#transport, config: configRef });
   }
 
   // ---- ingest, lifted to the top level so the common calls stay short ----
@@ -118,9 +122,7 @@ export class IntemptClient {
   /**
    * Product recommendations from a feed.
    *
-   * Experiments and personalizations are deliberately absent: they resolve a
-   * web experience against a page, and are served by the browser SDK. A server
-   * has no page to modify.
+   * Experiments and personalizations are read with `choose()`.
    */
   async recommend(options: RecommendOptions): Promise<unknown> {
     // Gated like every other method. It was the one public call with no check,
@@ -136,12 +138,25 @@ export class IntemptClient {
     return this.#recommend.fetch(options);
   }
 
+  // ---- experiments and personalizations ----
+
+  /**
+   * The experiments and personalizations served to this person on the `api` channel, from
+   * `/optimization/choose-api`. Pass `names` and/or `groups`: with neither, every eligible API
+   * experience is evaluated and exposed. Resolves `[]` when the service cannot answer; rejects
+   * only for a closed client, a context with no usable identity or a malformed name.
+   */
+  async choose(context: ChooseContext, options?: ChooseOptions): Promise<Choice[]> {
+    this.#assertOpen();
+    return this.#choose.choose(context, options);
+  }
+
   // ---- flags ----
 
   /**
    * The value of flag `key` for this person, or `defaultValue` if none was served or the read failed.
-   * Reads `/flags/evaluate`, which records the exposure; experiments and personalizations are not
-   * served by this SDK.
+   * Reads `/flags/evaluate`, which records the exposure; experiments and personalizations are read
+   * with `choose()`.
    */
   async variation<T>(
     key: string,

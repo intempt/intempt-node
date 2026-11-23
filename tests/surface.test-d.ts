@@ -137,3 +137,22 @@ Intempt.init({ org: 'o', project: 'p', apiKey: 'a.b', onFlagError: (e: string) =
 void client.variation('k', { userId: 'u1' }, false, { disableExposure: true });
 // @ts-expect-error disableExposure is not an identifier
 void client.variation('k', { userId: 'u1', disableExposure: true }, false);
+
+// ---- choose() has its own context: userId or profileId, never accountId (choose-api) ----
+
+import type { Choice, ChooseContext, ChooseOptions } from '../src';
+
+const chosen: Promise<Choice[]> = client.choose(
+  { userId: 'u1', sessionId: 's1' },
+  { names: ['n'], groups: ['g'], disableExposure: true },
+);
+const variantId: Promise<number | undefined> = chosen.then((c) => c[0]?.variantId);
+const choiceContext: ChooseContext = { profileId: 'p1' };
+const choiceOptions: ChooseOptions = {};
+void [variantId, choiceContext, choiceOptions];
+// @ts-expect-error accountId is not an identifier choose-api accepts
+void client.choose({ userId: 'u1', accountId: 'a1' });
+// @ts-expect-error names is an array
+void client.choose({ userId: 'u1' }, { names: 'n' });
+// @ts-expect-error a context is required
+void client.choose();

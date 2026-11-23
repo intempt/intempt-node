@@ -17,7 +17,7 @@ import type { Transport } from './transport';
  *  3. Evaluation is REMOTE only. There is no local rule engine and no flag store to poll.
  *
  * A flag is never evaluated through `/optimization/choose-api` here; that route stays for
- * experiments and personalizations, which this SDK does not serve.
+ * experiments and personalizations, read by `choose()`.
  */
 
 /**

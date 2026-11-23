@@ -11,7 +11,11 @@ This project follows [Semantic Versioning](https://semver.org/).
   calls send one key to `POST /flags/evaluate`; `allFlags` and a `disableExposure` read go to
   `POST /flags/all`, which records no exposure. Flags are never read through
   `/optimization/choose-api` any more, so a key that names an API experiment or personalization
-  rather than a flag now returns the caller's default (404 from `/flags/evaluate`).
+  rather than a flag now returns the caller's default (404 from `/flags/evaluate`). Read those
+  with the new `choose()`.
+- The four 1.x `chooseExperimentsBy*` / `choosePersonalizationsBy*` helpers still throw, but their
+  message now points at `choose(context, { names | groups })` (and `variation()` for flags)
+  instead of `variation()` alone.
 - **No flag read throws** (S11). An empty or invalid key, a context the service cannot resolve
   and a missing default used to throw a `TypeError`; they now return the default with
   `reason: 'error'` and `errorCode` `FLAG_NOT_FOUND`, `TARGETING_KEY_MISSING` or `GENERAL`
@@ -23,6 +27,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `choose(context, { names, groups, disableExposure })` reads experiments and personalizations
+  from `POST /optimization/choose-api` and resolves `Choice[]` (`name`, `group`, `body`, plus
+  `experienceId`, `variantId` and `reason` when the server sends them). It resolves `[]` and logs
+  once when the service cannot answer; it rejects with `TypeError` for a context with no usable
+  identity or a name outside `[a-zA-Z0-9_-]`. Passing neither `names` nor `groups` evaluates and
+  exposes every eligible API experience: always pass one.
 - `variationDetail` carries the server's answer (F6): `reason` passed through unmapped
   (`targeted`, `not_targeted`, `not_in_rollout`, `off`, `not_client_side`, ...), plus
   `variationId` and `valueType` when sent. `FlagReason` is now open to reasons added later. An
