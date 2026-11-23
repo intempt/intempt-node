@@ -153,3 +153,62 @@ describe('the flags-only client (intempt-nodejs-sdk/flags)', () => {
     await expect(flags.variation('k', ctx, 0)).rejects.toThrow(/closed/);
   });
 });
+
+describe('every flags-only client method reaches the flag module', () => {
+  afterEach(() => nock.cleanAll());
+
+  function flagsClient() {
+    return IntemptFlags.init({
+      org: ORG,
+      project: PROJECT,
+      apiKey: API_KEY,
+      sourceId: SOURCE,
+      host: HOST,
+      logger: testLogger(),
+    });
+  }
+
+  it.each([
+    ['variation', 'x', 'd', 'x'],
+    [
+      'variationDetail',
+      'x',
+      'd',
+      { value: 'x', reason: 'targeted', valueType: 'string' },
+    ],
+    ['stringVariation', 'x', 'd', 'x'],
+    ['numberVariation', 3, 0, 3],
+    ['boolVariation', true, false, true],
+    ['jsonVariation', [1], [], [1]],
+  ] as const)('%s', async (method, value, dflt, want) => {
+    nock(ORIGIN)
+      .post(FLAG_EVALUATE_PATH)
+      .reply(200, {
+        key: 'k',
+        value,
+        valueType: Array.isArray(value) ? 'json' : typeof value,
+        reason: 'targeted',
+      });
+    const flags = flagsClient();
+    const call = flags[method] as (
+      k: string,
+      c: typeof ctx,
+      d: unknown,
+    ) => Promise<unknown>;
+    await expect(call.call(flags, 'k', ctx, dflt)).resolves.toEqual(want);
+    await flags.close();
+    await expect(call.call(flags, 'k', ctx, dflt)).rejects.toThrow(
+      /flags client is closed/,
+    );
+  });
+
+  it('allFlags, and refuses it after close', async () => {
+    nock(ORIGIN)
+      .post(FLAG_ALL_PATH)
+      .reply(200, { flags: [{ key: 'a', value: 1 }] });
+    const flags = flagsClient();
+    await expect(flags.allFlags(ctx)).resolves.toEqual({ a: 1 });
+    await flags.close();
+    await expect(flags.allFlags(ctx)).rejects.toThrow(/closed/);
+  });
+});
