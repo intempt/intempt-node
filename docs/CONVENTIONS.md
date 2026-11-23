@@ -37,6 +37,12 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
   server's `reason` (passed through unmapped, F6), `variationId` and `valueType`; an older server
   that sends no reason reads `off`. A 401/403 is logged at
   error once per client, naming the key prefix and sourceId, and at debug after.
+- **Last-known value on failure** (F15, no-stream mode; Beso 2026-11-18). Every read asks the
+  server. When a read fails with a timeout, a network error, a 5xx, 429 or 408, or an unparseable
+  answer, the last value served for that key and identity (source + profile, else user) is returned
+  with `reason: 'cached'`, for up to 24 h; at most 10,000 entries per client, oldest dropped. A 400,
+  401/403 or 404 never falls back, and an answer that serves nothing (off, killed, not targeted) or
+  a 404 forgets the entry. The 60 s cache of F15 needs the X6 change stream, which is not built.
 - **Exposure is chosen by route** (F32 hybrid exposure, Beso 2026-11-17). `/flags/evaluate` records
   the exposure on the server, at the moment code reads the flag, so a single read records.
   `/flags/all` publishes nothing: `allFlags()` and a `{ disableExposure: true }` read (sent as

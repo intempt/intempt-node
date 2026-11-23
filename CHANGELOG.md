@@ -32,6 +32,10 @@ This project follows [Semantic Versioning](https://semver.org/).
   `reason: 'error'` and `errorCode: 'TYPE_MISMATCH'` in `variationDetail`. This also applies to
   `variation`/`variationDetail` with a boolean, string, number or object default; a `null` default
   expects no type. `jsonVariation` accepts any JSON value, arrays and scalars included.
+- Last-known value on failure (F15): when a flag read times out, cannot connect, gets a 5xx,
+  429 or 408, or an unparseable answer, the last value served for that key and identity in the
+  last 24 h is returned with `reason: 'cached'` (at most 10,000 entries per client). A 400, 401,
+  403 or 404 never falls back; an unserved answer or a 404 forgets the entry.
 - `intempt-nodejs-sdk/flags`: a flags-only entry (`IntemptFlags.init`) that loads the flag module
   and the shared core only, never the batcher, ingest or consent.
 

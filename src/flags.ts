@@ -125,6 +125,8 @@ export interface FlagsDeps {
   config(): ResolvedConfig;
   /** Named in the 401/403 log; the secret half never reaches this class. */
   keyPrefix: string;
+  /** Overrides CACHE_MAX; exists so the eviction order can be tested without 10,000 requests. */
+  cacheMax?: number;
 }
 
 /**
@@ -185,6 +187,61 @@ function matches(expected: FlagValueType, value: unknown, valueType?: string): b
 
 const WARNED_MAX = 1_000;
 
+/**
+ * F15 without a stream (X6 is not built): the last-known value is served only when a read fails,
+ * for up to 24 h, at most 10,000 entries per client. The 60 s cache of the row is only valid while
+ * a stream can drop changed keys, so it is not used here.
+ */
+export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+export const CACHE_MAX = 10_000;
+
+/**
+ * Failures the service may recover from. Not a 400/404 (the request or the flag is wrong, and a
+ * deleted flag must stop serving) and not a 401/403 (a misconfigured key is not an outage).
+ */
+const FALLBACK_KINDS: ReadonlySet<FlagErrorKind> = new Set([
+  'timeout',
+  'network',
+  'server',
+  'parse',
+]);
+
+/**
+ * The identity the server buckets on: source + profile when both are present, else the user
+ * (`Identification.hasProfile`). JSON-encoded so no key/id pair can collide with another.
+ */
+function cacheKey(
+  key: string,
+  context: FlagContext,
+  sourceId: string | undefined,
+): string {
+  const profileId = context.profileId;
+  return typeof profileId === 'string' &&
+    profileId.trim() !== '' &&
+    sourceId !== undefined
+    ? JSON.stringify([key, 'profile', sourceId, profileId])
+    : JSON.stringify([key, 'user', context.userId]);
+}
+
+/** The detail for an answered (or cached) flag, with the F30 type check against the default. */
+function typed<T>(flag: RawFlag, defaultValue: T, reason?: FlagReason): FlagDetail<T> {
+  const value = flag.value;
+  const fields = { ...answer(flag), ...(reason === undefined ? {} : { reason }) };
+  if (value === undefined || value === null) {
+    return { value: defaultValue, ...fields };
+  }
+  const expected = expectedType(defaultValue);
+  if (expected !== undefined && !matches(expected, value, fields.valueType)) {
+    return {
+      value: defaultValue,
+      ...fields,
+      reason: 'error',
+      errorCode: 'TYPE_MISMATCH',
+    };
+  }
+  return { value: value as T, ...fields };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -193,9 +250,12 @@ export class Flags {
   readonly #deps: FlagsDeps;
   #authLogged = false;
   readonly #warned = new Set<string>();
+  readonly #cache = new Map<string, { flag: RawFlag; at: number }>();
+  readonly #cacheMax: number;
 
   constructor(deps: FlagsDeps) {
     this.#deps = deps;
+    this.#cacheMax = deps.cacheMax ?? CACHE_MAX;
   }
 
   async detail<T>(
@@ -228,30 +288,47 @@ export class Flags {
       options?.disableExposure === true
         ? await this.#unexposed(context, key)
         : await this.#evaluate(context, key);
+    const id = cacheKey(key, context, this.#deps.config().sourceId);
     if (error) {
+      const cached = FALLBACK_KINDS.has(error.kind) ? this.#recall(id) : undefined;
+      if (cached) return typed(cached, defaultValue, 'cached');
       const errorCode = error.status === 404 ? 'FLAG_NOT_FOUND' : 'GENERAL';
+      // A deleted flag must not come back from the cache during a later outage.
+      if (errorCode === 'FLAG_NOT_FOUND') this.#cache.delete(id);
       return { value: defaultValue, reason: 'error', errorCode, error };
     }
     if (flag === undefined) {
       // Only a disableExposure read gets here: `/flags/all` leaves an unknown key out of its answer
       // where `/flags/evaluate` would answer 404.
+      this.#cache.delete(id);
       return { value: defaultValue, reason: 'error', errorCode: 'FLAG_NOT_FOUND' };
     }
-    const value = flag.value;
-    const fields = answer(flag);
-    if (value === undefined || value === null) {
-      return { value: defaultValue, ...fields };
+    if (flag.value === undefined || flag.value === null) {
+      // Off, killed or not targeted: forgotten, so an outage cannot serve the old value again.
+      this.#cache.delete(id);
+    } else {
+      this.#remember(id, flag);
     }
-    const expected = expectedType(defaultValue);
-    if (expected !== undefined && !matches(expected, value, fields.valueType)) {
-      return {
-        value: defaultValue,
-        ...fields,
-        reason: 'error',
-        errorCode: 'TYPE_MISMATCH',
-      };
+    return typed(flag, defaultValue);
+  }
+
+  /** Re-inserted on every write so Map order is age order and the first key is the oldest. */
+  #remember(id: string, flag: RawFlag): void {
+    this.#cache.delete(id);
+    this.#cache.set(id, { flag, at: Date.now() });
+    if (this.#cache.size > this.#cacheMax) {
+      this.#cache.delete(this.#cache.keys().next().value as string);
     }
-    return { value: value as T, ...fields };
+  }
+
+  #recall(id: string): RawFlag | undefined {
+    const entry = this.#cache.get(id);
+    if (entry === undefined) return undefined;
+    if (Date.now() - entry.at > CACHE_TTL_MS) {
+      this.#cache.delete(id);
+      return undefined;
+    }
+    return entry.flag;
   }
 
   async value<T>(
