@@ -11,7 +11,7 @@ than obeyed blindly.
 | Direction | Surface                                                           |
 | --------- | ----------------------------------------------------------------- |
 | in        | `track` `trackBatch` `identify` `group` `consent.*` `ecommerce.*` |
-| out       | `recommend`                                                       |
+| out       | `choose` `variation` `recommend`                                  |
 
 Configuration and analysis operations belong to `@intempt/cli` and
 `@intempt/mcp-server`, which already carry ~202 of them. If an operation is not

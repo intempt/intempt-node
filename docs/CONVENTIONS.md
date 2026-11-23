@@ -18,9 +18,10 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
 
 - **Flags are read from the flag routes, never from choose-api** (F32/F33, Beso 2026-11-17/20).
   `variation()` and the typed calls send one key to `POST /flags/evaluate`; `allFlags()` and a
-  `{ disableExposure: true }` read go to `POST /flags/all`. choose-api stays for experiments and
-  personalizations, which this SDK does not serve: an experiment key on `/flags/evaluate` is a 404
-  and returns the caller's default. The evaluator lives in `src/flag-evaluator.ts` (internal) and the
+  `{ disableExposure: true }` read go to `POST /flags/all`. `choose()` serves experiments and
+  personalizations over choose-api (one method; the four 1.x choose methods stay removed and their
+  error points at `choose()`). An experiment key on `/flags/evaluate` is a 404 and returns the
+  caller's default. The evaluator lives in `src/flag-evaluator.ts` (internal) and the
   public entry in `src/flags.ts`, published alone as `intempt-nodejs-sdk/flags`. Both import only
   the shared core (config, credentials, transport, utils, types);
   `tests/flags-standalone.test.ts` runs the entry with tracking deleted.
