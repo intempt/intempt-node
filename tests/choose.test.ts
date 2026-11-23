@@ -9,7 +9,6 @@ import {
   setupNock,
   testLogger,
 } from './helpers';
-import { SDK } from '../src';
 
 setupNock();
 
@@ -412,20 +411,5 @@ describe('one client, two routes', () => {
     await c.choose({ userId: 'u-1' }, { names: ['hero'] });
     expect(choose.isDone()).toBe(true);
     await c.close();
-  });
-});
-
-describe('legacy choose helpers point at choose()', () => {
-  it.each([
-    'chooseExperimentsByGroups',
-    'chooseExperimentsByNames',
-    'choosePersonalizationsByGroups',
-    'choosePersonalizationsByNames',
-  ] as const)('%s names choose()', (method) => {
-    const sdk = new SDK('acme', 'web', 'pfx0123456789abcdef.sec0123456789abcdef', SOURCE);
-    expect(() => sdk[method]()).toThrow(/choose\(context, \{ names \| groups \}\)/);
-    expect(() => sdk[method]()).toThrow(/variation\(key, context, defaultValue\)/);
-    expect(() => sdk[method]()).toThrow(/ for flags\.$/);
-    void sdk.close();
   });
 });

@@ -5,6 +5,14 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **The four 1.x choose helpers are restored** (D12): `chooseExperimentsByNames`,
+  `chooseExperimentsByGroups`, `choosePersonalizationsByNames` and
+  `choosePersonalizationsByGroups`, on the client and on the `SDK` shim. They send the 1.x
+  request (`profileId`, `optimizationType`, `names` or `groups`) through `choose()`'s path and
+  resolve `Choice[]`. A blank `profileId` or a malformed name rejects; a failed read resolves `[]`.
+
 ### Changed
 
 - **Flags are read from the flag routes** (F32/F33). `variation`, `variationDetail` and the typed
@@ -13,9 +21,6 @@ This project follows [Semantic Versioning](https://semver.org/).
   `/optimization/choose-api` any more, so a key that names an API experiment or personalization
   rather than a flag now returns the caller's default (404 from `/flags/evaluate`). Read those
   with the new `choose()`.
-- The four 1.x `chooseExperimentsBy*` / `choosePersonalizationsBy*` helpers still throw, but their
-  message now points at `choose(context, { names | groups })` (and `variation()` for flags)
-  instead of `variation()` alone.
 - **No flag read throws** (S11). An empty or invalid key, a context the service cannot resolve
   and a missing default used to throw a `TypeError`; they now return the default with
   `reason: 'error'` and `errorCode` `FLAG_NOT_FOUND`, `TARGETING_KEY_MISSING` or `GENERAL`

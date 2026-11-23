@@ -165,23 +165,6 @@ describe('legacy SDK: forwarding', () => {
     );
   });
 
-  it('refuses the four choose helpers and points at choose() and variation()', () => {
-    // Returning [] would read as "no variant assigned" and silently disable a caller's experiment.
-    // Throwing tells them where it went.
-    const sdk = legacy();
-    for (const method of [
-      'chooseExperimentsByGroups',
-      'chooseExperimentsByNames',
-      'choosePersonalizationsByGroups',
-      'choosePersonalizationsByNames',
-    ] as const) {
-      expect(() => sdk[method]()).toThrow(/was removed in 2\.0/);
-      expect(() => sdk[method]()).toThrow(/choose\(context, \{ names \| groups \}\)/);
-      expect(() => sdk[method]()).toThrow(/variation\(key, context, defaultValue\)/);
-    }
-    expect(nock.pendingMocks()).toEqual([]);
-  });
-
   it('maps recommendation onto an id/type feed lookup', async () => {
     // 1.x passed a profileId, which the feeds API never read.
     const bodies: Record<string, unknown>[] = [];
