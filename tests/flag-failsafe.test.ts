@@ -213,3 +213,70 @@ describe('flag timeout (S11 #3)', () => {
     expect(c.config.flagTimeout).toBe(750);
   });
 });
+
+describe('pinned by mutation testing', () => {
+  afterEach(() => nock.cleanAll());
+
+  it('a non-string key is FLAG_NOT_FOUND without reaching the wire', async () => {
+    const { c, errors } = hooked();
+    await expect(c.variationDetail(42 as never, ctx, 'd')).resolves.toEqual({
+      value: 'd',
+      reason: 'error',
+      errorCode: 'FLAG_NOT_FOUND',
+    });
+    expect(errors).toEqual([]);
+    await c.close();
+  });
+
+  it('allFlags with no identity sends nothing and warns naming allFlags', async () => {
+    const { c, errors, logger } = hooked();
+    await c.allFlags({});
+    expect(errors).toEqual([]);
+    expect(warnings(logger)[0]).toContain('"(allFlags)"');
+    await c.close();
+  });
+
+  it('the warnings say what was wrong', async () => {
+    const { c, logger } = hooked();
+    await c.variation('bad key', ctx, 0);
+    await c.variation('k', ctx, undefined as unknown as number);
+    const w = warnings(logger);
+    expect(w[0]).toContain("(the platform's own pattern); returning the default");
+    expect(w[1]).toBe('[intempt] flag "k" was read without a default');
+    await c.close();
+  });
+
+  it('remembers more than one key: A, B, A warns twice, not three times', async () => {
+    const { c, logger } = hooked();
+    await c.variation('a a', ctx, 0);
+    await c.variation('b b', ctx, 0);
+    await c.variation('a a', ctx, 0);
+    await c.variation('k', {}, 0);
+    await c.variation('k', ctx, undefined as unknown as number);
+    await c.variation('k', {}, 0);
+    expect(warnings(logger)).toHaveLength(4);
+    await c.close();
+  });
+
+  it('an answer with no value field keeps the server reason, not a type error', async () => {
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, { key: 'k', reason: 'killed' });
+    const { c } = hooked();
+    await expect(c.variationDetail('k', ctx, false)).resolves.toEqual({
+      value: false,
+      reason: 'killed',
+    });
+    await c.close();
+  });
+
+  it("an empty reason reads 'off'", async () => {
+    nock(ORIGIN)
+      .post(FLAG_EVALUATE_PATH)
+      .reply(200, { key: 'k', value: 'x', reason: '' });
+    const { c } = hooked();
+    await expect(c.variationDetail('k', ctx, 'd')).resolves.toEqual({
+      value: 'x',
+      reason: 'off',
+    });
+    await c.close();
+  });
+});

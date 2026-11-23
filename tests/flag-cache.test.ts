@@ -281,3 +281,38 @@ describe('bounded at 10,000 entries', () => {
     transport.destroy();
   });
 });
+
+describe('cache key edge cases', () => {
+  afterEach(() => nock.cleanAll());
+
+  it('a blank profileId keys on the user, as the server does', async () => {
+    served('mine');
+    down();
+    const c = client();
+    await c.variation('k', { userId: 'u-1', profileId: '  ' }, 'd');
+    await expect(c.variation('k', { userId: 'u-1' }, 'd')).resolves.toBe('mine');
+    await c.close();
+  });
+
+  it('without a configured sourceId a profileId cannot key, so the user does', async () => {
+    served('mine');
+    down();
+    const c = client({ sourceId: undefined });
+    await c.variation('k', { userId: 'u-1', profileId: 'p-1' }, 'd');
+    await expect(
+      c.variation('k', { userId: 'u-1', profileId: 'p-2' }, 'd'),
+    ).resolves.toBe('mine');
+    await c.close();
+  });
+
+  it('a 400 does not fall back, and does not erase the last-known value either', async () => {
+    served('mine');
+    down(400);
+    down(503);
+    const c = client();
+    await c.variation('k', user, 'd');
+    await expect(c.variation('k', user, 'd')).resolves.toBe('d');
+    await expect(c.variation('k', user, 'd')).resolves.toBe('mine');
+    await c.close();
+  });
+});
