@@ -16,7 +16,13 @@
 
 import { Agent } from 'node:http';
 import { Intempt, SDK } from '../src';
-import type { FlagError, FlagErrorKind, FlagReason, TrackOptions } from '../src';
+import type {
+  FlagError,
+  FlagErrorCode,
+  FlagErrorKind,
+  FlagReason,
+  TrackOptions,
+} from '../src';
 
 const client = Intempt.init({
   org: 'o',
@@ -113,7 +119,12 @@ async function detailIsTyped(): Promise<void> {
   const future: FlagReason = 'some_future_reason';
   const variationId: number | undefined = detail.variationId;
   const valueType: string | undefined = detail.valueType;
-  void [value, reason, kind, future, variationId, valueType];
+  const code: FlagErrorCode | undefined = detail.errorCode;
+  // @ts-expect-error an error code outside the OpenFeature set is not part of the union
+  const badCode: FlagErrorCode = 'WRONG_TYPE';
+  // F30 #4: jsonVariation takes any JSON value as its default, arrays and scalars included.
+  const list: string[] = await client.jsonVariation('k', { userId: 'u1' }, ['a']);
+  void [value, reason, kind, future, variationId, valueType, code, badCode, list];
 }
 void detailIsTyped;
 

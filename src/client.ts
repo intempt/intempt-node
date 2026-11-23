@@ -198,7 +198,7 @@ export class IntemptClient {
     return this.#flags.number(key, context, defaultValue, options);
   }
 
-  async jsonVariation<T extends object>(
+  async jsonVariation<T = unknown>(
     key: string,
     context: FlagContext,
     defaultValue: T,

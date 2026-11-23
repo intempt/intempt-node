@@ -89,9 +89,14 @@ export interface VariationOptions {
   disableExposure?: boolean;
 }
 
+/** OpenFeature error codes, set with `reason: 'error'` when the default came back for a known cause. */
+export type FlagErrorCode =
+  'FLAG_NOT_FOUND' | 'TYPE_MISMATCH' | 'TARGETING_KEY_MISSING' | 'GENERAL';
+
 export interface FlagDetail<T> {
   value: T;
   reason: FlagReason;
+  errorCode?: FlagErrorCode;
   /** The served variation; absent when nothing was served or the server did not send it. */
   variationId?: number;
   /** The flag's declared type: `boolean`, `string`, `number` or `json`. */
@@ -154,6 +159,30 @@ function answer(flag: RawFlag | undefined): Omit<FlagDetail<unknown>, 'value' | 
 /** The platform's own key pattern (`FlagEvaluateRequest.key`), tightened to `+`: blank is rejected first. */
 const KEY_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
+type FlagValueType = 'boolean' | 'string' | 'number' | 'json';
+
+/**
+ * The type a read expects, from its default (F30 #2). A `null` default expects nothing in
+ * particular: it is the caller saying "absent", not naming a type, so any served value is returned.
+ */
+function expectedType(defaultValue: unknown): FlagValueType | undefined {
+  const type = typeof defaultValue;
+  if (type === 'boolean' || type === 'string' || type === 'number') return type;
+  return type === 'object' && defaultValue !== null ? 'json' : undefined;
+}
+
+/**
+ * The server's declared `valueType` decides when sent (F30 #3); the JavaScript type is checked as
+ * well, so a malformed answer cannot pass as its declared type. Any JSON value, arrays and scalars
+ * included, is a `json` value (F30 #4).
+ */
+function matches(expected: FlagValueType, value: unknown, valueType?: string): boolean {
+  if (valueType !== undefined && valueType !== expected) return false;
+  if (expected === 'json') return true;
+  if (expected === 'number') return typeof value === 'number' && Number.isFinite(value);
+  return typeof value === expected;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -195,10 +224,20 @@ export class Flags {
       return { value: defaultValue, reason: 'error', error };
     }
     const value = flag?.value;
+    const fields = answer(flag);
     if (value === undefined || value === null) {
-      return { value: defaultValue, ...answer(flag) };
+      return { value: defaultValue, ...fields };
     }
-    return { value: value as T, ...answer(flag) };
+    const expected = expectedType(defaultValue);
+    if (expected !== undefined && !matches(expected, value, fields.valueType)) {
+      return {
+        value: defaultValue,
+        ...fields,
+        reason: 'error',
+        errorCode: 'TYPE_MISMATCH',
+      };
+    }
+    return { value: value as T, ...fields };
   }
 
   async value<T>(
@@ -211,46 +250,43 @@ export class Flags {
     return value;
   }
 
-  async bool(
+  // The typed calls are `value` with a typed default: the default's type is the expected type, so
+  // a wrong-typed value comes back as the default and is never coerced (`!!"false"` is true).
+  bool(
     key: string,
     context: FlagContext,
     defaultValue: boolean,
     options?: VariationOptions,
   ): Promise<boolean> {
-    const value = await this.value<unknown>(key, context, defaultValue, options);
-    // A served value of the wrong type is a misconfiguration, not something to coerce: `!!"false"`
-    // is true, and a silent coercion would be indistinguishable from a correct answer.
-    return typeof value === 'boolean' ? value : defaultValue;
+    return this.value(key, context, defaultValue, options);
   }
 
-  async string(
+  string(
     key: string,
     context: FlagContext,
     defaultValue: string,
     options?: VariationOptions,
   ): Promise<string> {
-    const value = await this.value<unknown>(key, context, defaultValue, options);
-    return typeof value === 'string' ? value : defaultValue;
+    return this.value(key, context, defaultValue, options);
   }
 
-  async number(
+  number(
     key: string,
     context: FlagContext,
     defaultValue: number,
     options?: VariationOptions,
   ): Promise<number> {
-    const value = await this.value<unknown>(key, context, defaultValue, options);
-    return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue;
+    return this.value(key, context, defaultValue, options);
   }
 
-  async json<T extends object>(
+  /** Any JSON value, arrays and scalars included (F30 #4); `T` is the caller's assertion of shape. */
+  json<T = unknown>(
     key: string,
     context: FlagContext,
     defaultValue: T,
     options?: VariationOptions,
   ): Promise<T> {
-    const value = await this.value<unknown>(key, context, defaultValue, options);
-    return value !== null && typeof value === 'object' ? (value as T) : defaultValue;
+    return this.value(key, context, defaultValue, options);
   }
 
   /**
@@ -473,7 +509,7 @@ export class IntemptFlagsClient {
     return this.#flags.number(key, context, defaultValue, options);
   }
 
-  async jsonVariation<T extends object>(
+  async jsonVariation<T = unknown>(
     key: string,
     context: FlagContext,
     defaultValue: T,

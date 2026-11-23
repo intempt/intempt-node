@@ -20,6 +20,11 @@ This project follows [Semantic Versioning](https://semver.org/).
   (`targeted`, `not_targeted`, `not_in_rollout`, `off`, `not_client_side`, ...), plus
   `variationId` and `valueType` when sent. `FlagReason` is now open to reasons added later. An
   answer without a reason still reads `off`.
+- Typed reads check the type (F30): the expected type is the default's type, checked against the
+  server's `valueType` when sent, else the JavaScript type. A mismatch returns the default with
+  `reason: 'error'` and `errorCode: 'TYPE_MISMATCH'` in `variationDetail`. This also applies to
+  `variation`/`variationDetail` with a boolean, string, number or object default; a `null` default
+  expects no type. `jsonVariation` accepts any JSON value, arrays and scalars included.
 - `intempt-nodejs-sdk/flags`: a flags-only entry (`IntemptFlags.init`) that loads the flag module
   and the shared core only, never the batcher, ingest or consent.
 

@@ -8,6 +8,7 @@ export type {
   FlagContext,
   FlagDetail,
   FlagError,
+  FlagErrorCode,
   FlagErrorKind,
   FlagReason,
   VariationOptions,
