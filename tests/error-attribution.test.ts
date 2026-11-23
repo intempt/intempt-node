@@ -159,18 +159,15 @@ describe('the legacy shim names the exact helper that moved', () => {
     'chooseExperimentsByNames',
     'choosePersonalizationsByGroups',
     'choosePersonalizationsByNames',
-  ] as const)(
-    '%s blames itself for a bad argument, so a caller can find the call site',
-    async (method) => {
-      const sdk = new SDK(ORG, PROJECT, API_KEY, SOURCE);
-      sdk.v2.setConfig({ host: HOST });
-      await expect(sdk[method]('')).rejects.toThrow(new RegExp(`^${method}: profileId`));
-      await expect(sdk[method]('p-1', ['bad name'])).rejects.toThrow(
-        new RegExp(`^${method}: (names|groups) entries`),
-      );
-      await sdk.close();
-    },
-  );
+  ] as const)('%s names itself, so a caller can find the call site', (method) => {
+    // All four throw the same sentence apart from the method name. Asserting only
+    // the shared part let a mutant swap one name for another undetected, which
+    // would point a caller at a function they never called.
+    const sdk = new SDK(ORG, PROJECT, API_KEY, SOURCE);
+    sdk.v2.setConfig({ host: HOST });
+    expect(() => sdk[method]()).toThrow(new RegExp(`^${method} was removed in 2\\.0\\.`));
+    void sdk.close();
+  });
 
   it('rejects an unknown consent action with the exact allowed values', async () => {
     const sdk = new SDK(ORG, PROJECT, API_KEY, SOURCE);

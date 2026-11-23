@@ -156,17 +156,3 @@ void client.choose({ userId: 'u1', accountId: 'a1' });
 void client.choose({ userId: 'u1' }, { names: 'n' });
 // @ts-expect-error a context is required
 void client.choose();
-
-// ---- the four 1.x choose helpers: a profileId and an optional filter ----
-
-const legacyChosen: Promise<Choice[]> = client.chooseExperimentsByNames('p1', ['n']);
-void [
-  legacyChosen,
-  client.chooseExperimentsByGroups('p1'),
-  client.choosePersonalizationsByNames('p1', []),
-  client.choosePersonalizationsByGroups('p1', ['g']),
-];
-// @ts-expect-error a profileId is required
-void client.chooseExperimentsByNames();
-// @ts-expect-error the filter is an array
-void client.choosePersonalizationsByGroups('p1', 'g');

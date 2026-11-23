@@ -41,12 +41,6 @@ export interface ChooseDeps {
   config: () => ResolvedConfig;
 }
 
-/**
- * The 1.x helpers put this on the wire; `choose()` never does. Kept exactly as 1.x sent it
- * (Beso, D12, 2026-11-23).
- */
-export type OptimizationType = 'experiment' | 'personalization';
-
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 const present = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
@@ -66,21 +60,16 @@ export class Choose {
     this.#deps = deps;
   }
 
-  async choose(
-    context: ChooseContext,
-    options: ChooseOptions = {},
-    optimizationType?: OptimizationType,
-    caller = 'choose',
-  ): Promise<Choice[]> {
-    this.#validate(context, options, caller);
+  async choose(context: ChooseContext, options: ChooseOptions = {}): Promise<Choice[]> {
+    this.#validate(context, options);
     const { logger } = this.#deps.config();
 
     let reply: unknown;
     try {
-      reply = (await this.#request(context, options, optimizationType)).body;
+      reply = (await this.#request(context, options)).body;
     } catch (error) {
       const status = error instanceof IntemptApiError ? error.status : undefined;
-      const message = `[intempt] ${caller}: request failed, returning no choices (${
+      const message = `[intempt] choose: request failed, returning no choices (${
         error instanceof Error ? error.message : String(error)
       })`;
       if (status === 401 || status === 403) logger.error(message);
@@ -90,9 +79,7 @@ export class Choose {
 
     const choices = (reply as { choices?: unknown } | null)?.choices;
     if (!Array.isArray(choices)) {
-      logger.warn(
-        `[intempt] ${caller}: reply has no choices array, returning no choices`,
-      );
+      logger.warn('[intempt] choose: reply has no choices array, returning no choices');
       return [];
     }
     return choices.flatMap((item): Choice[] => {
@@ -113,14 +100,14 @@ export class Choose {
   }
 
   /** Same identity rule as the flag routes: a non-blank `userId`, or a `profileId` with a configured `sourceId`. */
-  #validate(context: ChooseContext, options: ChooseOptions, caller: string): void {
+  #validate(context: ChooseContext, options: ChooseOptions): void {
     const { sourceId } = this.#deps.config();
     if (
       !present(context?.userId) &&
       !(present(context?.profileId) && present(sourceId))
     ) {
       throw new TypeError(
-        `${caller}: context needs either userId, or profileId together with a sourceId configured on the client`,
+        'choose: context needs either userId, or profileId together with a sourceId configured on the client',
       );
     }
     for (const [field, values] of [
@@ -129,12 +116,12 @@ export class Choose {
     ] as const) {
       if (values === undefined) continue;
       if (!Array.isArray(values)) {
-        throw new TypeError(`${caller}: ${field} must be an array of strings`);
+        throw new TypeError(`choose: ${field} must be an array of strings`);
       }
       for (const value of values) {
         if (typeof value !== 'string' || !NAME_PATTERN.test(value)) {
           throw new TypeError(
-            `${caller}: ${field} entries must match ${NAME_PATTERN.source}, got ${JSON.stringify(value)}`,
+            `choose: ${field} entries must match ${NAME_PATTERN.source}, got ${JSON.stringify(value)}`,
           );
         }
       }
@@ -167,7 +154,6 @@ export class Choose {
   async #request(
     context: ChooseContext,
     options: ChooseOptions,
-    optimizationType: OptimizationType | undefined,
   ): Promise<{ body: unknown }> {
     const { sourceId } = this.#deps.config();
     const body = compact({
@@ -178,7 +164,6 @@ export class Choose {
       }),
       names: options.names,
       groups: options.groups,
-      optimizationType,
       device: 'all',
       sessionId: context.sessionId,
       exposure: options.disableExposure === true ? false : undefined,

@@ -290,12 +290,9 @@ a closed client.
 experience the person is eligible for, which fills running experiments with people who never saw a
 variant and can spend a `once` gate for good.
 
-The four 1.x helpers are back on the client and on the deprecated `SDK` shim:
-`chooseExperimentsByNames(profileId, names?)`, `chooseExperimentsByGroups(profileId, groups?)` and
-the two `choosePersonalizationsBy*` twins. Each is `choose()` for that `profileId` with the 1.x
-`optimizationType` (`experiment` or `personalization`) on the request, so they follow `choose()`'s
-rules: `[]` when the service cannot answer, a `TypeError` for a blank `profileId` or a malformed
-name (1.x logged a warning and resolved `undefined`). Prefer `choose()` in new code.
+The 1.x `chooseExperimentsBy*` and `choosePersonalizationsBy*` helpers still throw rather than
+returning an empty array, with a message pointing at `choose()`: `[]` reads as "no variant
+assigned" and would silently disable a caller's experiment.
 
 ## Privacy
 
@@ -446,7 +443,7 @@ Breaking changes to expect:
 | `optOut()` gates tracking only              | gates every write                         |
 | consent timestamp in milliseconds           | seconds, as the API expects               |
 | `profileId` required                        | any one identifier                        |
-| `choosePersonalizationsByGroups` and 3 more | kept; reject bad input, `[]` on failure   |
+| `choosePersonalizationsByGroups` and 3 more | throw — use `choose()` or `variation()`   |
 | `recommendation(...)`                       | `recommend({ userId, feedId, fields })`   |
 | unbounded resend, no flush                  | buffering is opt-in, with `flush`/`close` |
 

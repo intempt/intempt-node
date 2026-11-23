@@ -9,7 +9,7 @@ import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
 import { Recommend } from './recommend';
 import { Choose } from './choose';
-import type { Choice, ChooseContext, ChooseOptions, OptimizationType } from './choose';
+import type { Choice, ChooseContext, ChooseOptions } from './choose';
 import { Flags } from './flag-evaluator';
 import type { FlagContext, FlagDetail, VariationOptions } from './flag-evaluator';
 import type {
@@ -149,62 +149,6 @@ export class IntemptClient {
   async choose(context: ChooseContext, options?: ChooseOptions): Promise<Choice[]> {
     this.#assertOpen();
     return this.#choose.choose(context, options);
-  }
-
-  /**
-   * The four 1.x helpers, restored by ruling (Beso, D12): they take a `profileId` and put the mode
-   * in the name. Each is `choose()` with the 1.x `optimizationType` on the wire, so the service can
-   * narrow to experiments or to personalizations. Same results and failure rules as `choose()`;
-   * a blank `profileId` rejects where 1.x warned and resolved `undefined`.
-   */
-  chooseExperimentsByNames(profileId: string, names?: string[]): Promise<Choice[]> {
-    return this.#legacyChoose('chooseExperimentsByNames', 'experiment', profileId, {
-      names,
-    });
-  }
-
-  chooseExperimentsByGroups(profileId: string, groups?: string[]): Promise<Choice[]> {
-    return this.#legacyChoose('chooseExperimentsByGroups', 'experiment', profileId, {
-      groups,
-    });
-  }
-
-  choosePersonalizationsByNames(profileId: string, names?: string[]): Promise<Choice[]> {
-    return this.#legacyChoose(
-      'choosePersonalizationsByNames',
-      'personalization',
-      profileId,
-      {
-        names,
-      },
-    );
-  }
-
-  choosePersonalizationsByGroups(
-    profileId: string,
-    groups?: string[],
-  ): Promise<Choice[]> {
-    return this.#legacyChoose(
-      'choosePersonalizationsByGroups',
-      'personalization',
-      profileId,
-      {
-        groups,
-      },
-    );
-  }
-
-  async #legacyChoose(
-    method: string,
-    type: OptimizationType,
-    profileId: string,
-    filter: ChooseOptions,
-  ): Promise<Choice[]> {
-    this.#assertOpen();
-    if (typeof profileId !== 'string' || profileId.trim() === '') {
-      throw new TypeError(`${method}: profileId must be a non-blank string`);
-    }
-    return this.#choose.choose({ profileId }, filter, type, method);
   }
 
   // ---- flags ----

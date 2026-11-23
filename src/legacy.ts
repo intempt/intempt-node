@@ -1,5 +1,4 @@
 import { IntemptClient } from './client';
-import type { Choice } from './choose';
 import type { Logger, ProductLine } from './types';
 
 /**
@@ -227,23 +226,37 @@ export class SDK {
     });
   }
 
-  choosePersonalizationsByGroups(
-    profileId: string,
-    groups?: string[],
-  ): Promise<Choice[]> {
-    return this.#client.choosePersonalizationsByGroups(profileId, groups);
+  /**
+   * These four 1.x helpers put the MODE in the method name, which forced a caller to know whether a
+   * key was an experiment before reading it and grew combinatorially with every new mode. They are
+   * superseded by the client's single `choose(context, { names | groups })`, which serves
+   * experiments and personalizations; flags have `variation()`.
+   *
+   * They still throw rather than returning an empty array: [] would read as "no variant assigned"
+   * and quietly disable a caller's experiment instead of telling them where it went.
+   */
+  static #experiencesRemoved(method: string): never {
+    throw new Error(
+      `${method} was removed in 2.0. Use choose(context, { names | groups }) on the v2 client ` +
+        'for experiments and personalizations, or variation(key, context, defaultValue) for ' +
+        'flags.',
+    );
   }
 
-  choosePersonalizationsByNames(profileId: string, names?: string[]): Promise<Choice[]> {
-    return this.#client.choosePersonalizationsByNames(profileId, names);
+  choosePersonalizationsByGroups(): Promise<never> {
+    return SDK.#experiencesRemoved('choosePersonalizationsByGroups');
   }
 
-  chooseExperimentsByGroups(profileId: string, groups?: string[]): Promise<Choice[]> {
-    return this.#client.chooseExperimentsByGroups(profileId, groups);
+  choosePersonalizationsByNames(): Promise<never> {
+    return SDK.#experiencesRemoved('choosePersonalizationsByNames');
   }
 
-  chooseExperimentsByNames(profileId: string, names?: string[]): Promise<Choice[]> {
-    return this.#client.chooseExperimentsByNames(profileId, names);
+  chooseExperimentsByGroups(): Promise<never> {
+    return SDK.#experiencesRemoved('chooseExperimentsByGroups');
+  }
+
+  chooseExperimentsByNames(): Promise<never> {
+    return SDK.#experiencesRemoved('chooseExperimentsByNames');
   }
 
   optIn(): void {

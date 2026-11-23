@@ -27,10 +27,6 @@ const PUBLIC_METHODS = [
   'setConfig',
   'recommend',
   'choose',
-  'chooseExperimentsByNames',
-  'chooseExperimentsByGroups',
-  'choosePersonalizationsByNames',
-  'choosePersonalizationsByGroups',
   // The cross-SDK flag surface. Listed one by one on purpose: this gate exists so a new public
   // method cannot appear without someone deciding it should be public.
   'variation',
