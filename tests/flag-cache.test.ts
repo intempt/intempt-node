@@ -13,7 +13,7 @@ import {
   setupNock,
   testLogger,
 } from './helpers';
-import { CACHE_MAX, CACHE_TTL_MS, Flags } from '../src/flags';
+import { CACHE_MAX, CACHE_TTL_MS, Flags } from '../src/flag-evaluator';
 import { resolveConfig } from '../src/config';
 import { ApiKeyCredentials } from '../src/credentials';
 import { Transport } from '../src/transport';

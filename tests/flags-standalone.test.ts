@@ -78,7 +78,8 @@ server.listen(0, '127.0.0.1', async () => {
   const loaded = Object.keys(require.cache)
     .filter((p) => p.startsWith(process.argv[1]))
     .map((p) => require('node:path').basename(p, '.js'));
-  process.stdout.write(JSON.stringify({ value, seen, loaded }));
+  const exported = Object.keys(require(process.argv[1] + '/flags.js')).sort();
+  process.stdout.write(JSON.stringify({ value, seen, loaded, exported }));
 });
 `;
 
@@ -97,7 +98,12 @@ describe('the flags module with tracking removed', () => {
         // The build lives outside the repo, so its one runtime dependency resolves through here.
         env: { ...process.env, NODE_PATH: join(ROOT, 'node_modules') },
       }),
-    ) as { value: unknown; seen: { url: string; body: unknown }[]; loaded: string[] };
+    ) as {
+      value: unknown;
+      seen: { url: string; body: unknown }[];
+      loaded: string[];
+      exported: string[];
+    };
 
     expect(result.value).toBe(true);
     expect(result.seen).toEqual([
@@ -111,6 +117,14 @@ describe('the flags module with tracking removed', () => {
       },
     ]);
     expect(result.loaded).toContain('flags');
+    expect(result.loaded).toContain('flag-evaluator');
+    // The entry is public npm API: the evaluator, its cache constants and its test hook stay
+    // internal, so they can change without a breaking release.
+    expect(result.exported).toEqual([
+      'IntemptApiError',
+      'IntemptFlags',
+      'IntemptFlagsClient',
+    ]);
     for (const name of TRACKING) expect(result.loaded).not.toContain(name);
   });
 });

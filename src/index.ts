@@ -12,7 +12,7 @@ export type {
   FlagErrorKind,
   FlagReason,
   VariationOptions,
-} from './flags';
+} from './flag-evaluator';
 export type { DeliveryFailure } from './delivery';
 export type { FlushResult } from './batcher';
 

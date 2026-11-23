@@ -212,3 +212,27 @@ describe('every flags-only client method reaches the flag module', () => {
     await expect(flags.allFlags(ctx)).rejects.toThrow(/closed/);
   });
 });
+
+describe('IntemptClient refuses every flag call after close()', () => {
+  // Each typed call guards itself now that it no longer goes through variation(): a call after
+  // close() would otherwise open a socket that nothing releases (see recommend()).
+  it.each([
+    ['variation', 'd'],
+    ['variationDetail', 'd'],
+    ['boolVariation', false],
+    ['stringVariation', 'd'],
+    ['numberVariation', 0],
+    ['jsonVariation', {}],
+  ] as const)('%s', async (method, dflt) => {
+    const c = client();
+    await c.close();
+    const call = c[method] as (k: string, x: typeof ctx, d: unknown) => Promise<unknown>;
+    await expect(call.call(c, 'k', ctx, dflt)).rejects.toThrow(/client is closed/);
+  });
+
+  it('allFlags', async () => {
+    const c = client();
+    await c.close();
+    await expect(c.allFlags(ctx)).rejects.toThrow(/client is closed/);
+  });
+});

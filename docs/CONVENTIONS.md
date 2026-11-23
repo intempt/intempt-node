@@ -20,7 +20,8 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
   `variation()` and the typed calls send one key to `POST /flags/evaluate`; `allFlags()` and a
   `{ disableExposure: true }` read go to `POST /flags/all`. choose-api stays for experiments and
   personalizations, which this SDK does not serve: an experiment key on `/flags/evaluate` is a 404
-  and returns the caller's default. All flag code lives in `src/flags.ts`, which imports only the
+  and returns the caller's default. The evaluator lives in `src/flag-evaluator.ts` (internal) and the
+  public entry in `src/flags.ts`; both import only the
   shared core (config, credentials, transport, utils, types) and is published alone as
   `intempt-nodejs-sdk/flags`; `tests/flags-standalone.test.ts` runs it with tracking deleted.
 - **`defaultValue` is REQUIRED, everywhere, and is never optional.** It is what a caller receives on

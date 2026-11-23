@@ -8,8 +8,8 @@ import { Ingest } from './ingest';
 import { Consent } from './consent';
 import { Ecommerce } from './ecommerce';
 import { Recommend } from './recommend';
-import { Flags } from './flags';
-import type { FlagContext, FlagDetail, VariationOptions } from './flags';
+import { Flags } from './flag-evaluator';
+import type { FlagContext, FlagDetail, VariationOptions } from './flag-evaluator';
 import type {
   GroupOptions,
   IdentifyOptions,

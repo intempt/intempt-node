@@ -1,6 +1,6 @@
 import type { Agent } from 'node:http';
 import type { DeliveryFailure } from './delivery';
-import type { FlagError } from './flags';
+import type { FlagError } from './flag-evaluator';
 
 /** Minimal logger contract. `console` satisfies it. */
 export interface Logger {
