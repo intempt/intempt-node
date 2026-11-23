@@ -16,11 +16,13 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
 
 ## The rules that come from the contract
 
-- **A caller asks for a KEY, never a mode.** There is no `flagVariation` / `experimentVariation`
-  split. The platform resolves whether a key is an experiment, a personalization or a flag; its
-  serving query filters on channel and status and never on mode. A method name that encodes the
-  mode forces an integrator to know the answer before they can ask the question, and grows
-  combinatorially with every mode added.
+- **Flags are read from the flag routes, never from choose-api** (F32/F33, Beso 2026-11-17/20).
+  `variation()` and the typed calls send one key to `POST /flags/evaluate`; `allFlags()` and a
+  `{ disableExposure: true }` read go to `POST /flags/all`. choose-api stays for experiments and
+  personalizations, which this SDK does not serve: an experiment key on `/flags/evaluate` is a 404
+  and returns the caller's default. All flag code lives in `src/flags.ts`, which imports only the
+  shared core (config, credentials, transport, utils, types) and is published alone as
+  `intempt-nodejs-sdk/flags`; `tests/flags-standalone.test.ts` runs it with tracking deleted.
 - **`defaultValue` is REQUIRED, everywhere, and is never optional.** It is what a caller receives on
   a network failure, a timeout, an unknown key or a malformed response. A flag SDK that throws when
   the service is unreachable takes the application down with it, which is the opposite of what a
@@ -35,25 +37,12 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
   whether or not a value was served: the serving response sends no reason, so "off" and "not
   targeted" cannot be told apart and the SDK does not guess (INT-7457). A 401/403 is logged at
   error once per client, naming the key prefix and sourceId, and at debug after.
-- **On a request path, every read names its keys. `allFlags()` exists, and it is a hazard.** On this
-  endpoint an evaluation _is_ an exposure: `POST /optimization/choose-api` publishes a Kafka event
-  per experience it evaluates, and omitting `names` makes it evaluate every experience the person is
-  eligible for. So a read-everything call marks one person exposed to every running server
-  experiment in the project — inflating each denominator uniformly, which shows up as an experiment
-  that stopped detecting rather than one that broke — and, for a `once` display, spends their
-  display budget on keys nobody rendered, after which `variation()` on those keys returns the
-  caller's default permanently. `allFlags()` sends `exposure: false`, and a single read takes
-  `{ disableExposure: true }` for a read that shows nothing (INT-7456, CONTRACT-R2 §S4). Absent,
-  the field means "record", so a default read is unchanged. **The field takes effect only once
-  audience-service honours it**; today the service ignores unknown fields and records anyway. The
-  SDK keeps no `allFlags` result and serves no read from one, so there is no exposure dedupe to do.
-
-  `allFlags()` is nevertheless part of this SDK's surface, by ruling (Beso, 2026-09-01): php,
-  python, swift, java and reactnative all ship it, and a method that exists in five SDKs and not the
-  sixth is its own defect — a customer switching languages should not find the surface changed
-  underneath them. It is documented as a hazard rather than withheld. **Use it to enumerate — a
-  debug endpoint, an admin view, a one-off audit. Two keys on a request path is two `variation()`
-  calls, not one `allFlags()`.**
+- **Exposure is chosen by route** (F32 hybrid exposure, Beso 2026-11-17). `/flags/evaluate` records
+  the exposure on the server, at the moment code reads the flag, so a single read records.
+  `/flags/all` publishes nothing: `allFlags()` and a `{ disableExposure: true }` read (sent as
+  `/flags/all` with that one key) never mark anyone exposed. Neither route has an `exposure` field.
+  Exposure-on-read for a prefetched set (`/flags/expose`) is not built on the server, so the SDK
+  keeps no `allFlags` result and serves no read from one.
 
 - **`profileId` outranks `userId`, and callers must be told so.** The platform resolves a PROFILE
   entity keyed on `profileId` whenever it is non-blank and only falls through to `userId` when it is

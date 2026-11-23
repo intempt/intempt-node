@@ -249,6 +249,22 @@ The feeds API identifies an entity by an `{id, type}` pair rather than by
 `type: 'account'`. That is why the two are mutually exclusive here, unlike on the
 tracking calls.
 
+### Feature flags
+
+```ts
+const on = await intempt.boolVariation('new_checkout', { userId: 'u1' }, false);
+```
+
+Each read sends one key to `POST /flags/evaluate`, which records the exposure; the default is
+returned whenever no value was served or the read failed. `allFlags(context)` reads every served
+flag from `/flags/all`, which records nothing. A backend that only checks flags can load the
+flags entry alone, without the batcher:
+
+```ts
+import { IntemptFlags } from 'intempt-nodejs-sdk/flags';
+const flags = IntemptFlags.init({ org, project, apiKey, sourceId });
+```
+
 ### Why there are no experiments or personalizations
 
 They resolve a **web experience against a page**, and are served by the browser

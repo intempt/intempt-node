@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  CHOOSE_PATH,
+  FLAG_ALL_PATH,
+  FLAG_EVALUATE_PATH,
   ORIGIN,
   SOURCE,
   client,
@@ -43,7 +44,7 @@ describe('onFlagError classifies the failure and the default is still returned',
     [500, 'server'],
     [503, 'server'],
   ] as const)('status %i is kind %s', async (status, kind) => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(status, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(status, {});
     const { c, errors } = hooked();
 
     await expect(c.variation('k', ctx, 'safe')).resolves.toBe('safe');
@@ -52,7 +53,10 @@ describe('onFlagError classifies the failure and the default is still returned',
   });
 
   it('a request that timed out is kind timeout, with no status', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).delay(200).reply(200, { choices: [] });
+    nock(ORIGIN)
+      .post(FLAG_EVALUATE_PATH)
+      .delay(200)
+      .reply(200, { key: 'k', value: null });
     const errors: FlagError[] = [];
     const c = client({ timeout: 50, onFlagError: (e) => errors.push(e) });
 
@@ -63,7 +67,7 @@ describe('onFlagError classifies the failure and the default is still returned',
 
   it('a request that never reached the service is kind network', async () => {
     nock(ORIGIN)
-      .post(CHOOSE_PATH)
+      .post(FLAG_EVALUATE_PATH)
       .replyWithError(
         Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
       );
@@ -79,9 +83,8 @@ describe('onFlagError classifies the failure and the default is still returned',
     ['an empty body', ''],
     ['a JSON array', '[]'],
     ['a JSON null', 'null'],
-    ['choices that is not an array', '{"choices":"x"}'],
   ])('a 200 with %s is kind parse', async (_label, raw) => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(200, raw);
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, raw);
     const { c, errors } = hooked();
 
     await expect(c.variation('k', ctx, 'safe')).resolves.toBe('safe');
@@ -89,9 +92,9 @@ describe('onFlagError classifies the failure and the default is still returned',
     await c.close();
   });
 
-  it('a 200 with no choices field, or no choice for the key, is not an error', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(200, {});
-    nock(ORIGIN).post(CHOOSE_PATH).reply(200, { choices: [] });
+  it('a 200 with no value, or a null value, is not an error', async () => {
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, { key: 'k', value: null });
     const { c, errors } = hooked();
 
     await expect(c.variation('k', ctx, 'safe')).resolves.toBe('safe');
@@ -101,7 +104,7 @@ describe('onFlagError classifies the failure and the default is still returned',
   });
 
   it('allFlags reports with a null key and returns an empty map', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(500, {});
+    nock(ORIGIN).post(FLAG_ALL_PATH).reply(500, {});
     const { c, errors } = hooked();
 
     await expect(c.allFlags(ctx)).resolves.toEqual({});
@@ -109,8 +112,17 @@ describe('onFlagError classifies the failure and the default is still returned',
     await c.close();
   });
 
+  it('allFlags with a flags field that is not an array is kind parse', async () => {
+    nock(ORIGIN).post(FLAG_ALL_PATH).reply(200, '{"flags":"x"}');
+    const { c, errors } = hooked();
+
+    await expect(c.allFlags(ctx)).resolves.toEqual({});
+    expect(errors).toEqual([{ key: null, kind: 'parse' }]);
+    await c.close();
+  });
+
   it('a hook that throws is logged and the default is still returned', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(500, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(500, {});
     const logger = testLogger();
     const c = client({
       logger,
@@ -146,7 +158,7 @@ describe('onFlagError classifies the failure and the default is still returned',
   });
 
   it('a setConfig that does not name the hook keeps it', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(500, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(500, {});
     const errors: FlagError[] = [];
     const c = client({ onFlagError: (e) => errors.push(e) });
     c.setConfig({ debug: false });
@@ -157,7 +169,7 @@ describe('onFlagError classifies the failure and the default is still returned',
   });
 
   it('setConfig replaces the hook, because flags read the config at call time', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(500, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(500, {});
     const first: FlagError[] = [];
     const second: FlagError[] = [];
     const c = client({ onFlagError: (e) => first.push(e) });
@@ -174,7 +186,8 @@ describe('logging', () => {
   afterEach(() => nock.cleanAll());
 
   it('the first 401/403 is an error naming the key prefix and source, later ones are debug', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).times(3).reply(401, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).times(2).reply(401, {});
+    nock(ORIGIN).post(FLAG_ALL_PATH).reply(401, {});
     const { c, logger } = hooked();
 
     await c.variation('a', ctx, 0);
@@ -194,7 +207,7 @@ describe('logging', () => {
   });
 
   it('the latch is per client instance', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).times(2).reply(403, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).times(2).reply(403, {});
     const a = hooked();
     const b = hooked();
 
@@ -208,7 +221,7 @@ describe('logging', () => {
   });
 
   it('never logs the secret half of the key', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(401, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(401, {});
     const { c, logger } = hooked();
 
     await c.variation('k', ctx, 0);
@@ -219,7 +232,7 @@ describe('logging', () => {
   });
 
   it('any other failure warns with its kind', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(500, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(500, {});
     const { c, logger } = hooked();
 
     await c.variation('k', ctx, 0);
@@ -236,7 +249,7 @@ describe('variationDetail', () => {
   afterEach(() => nock.cleanAll());
 
   it("returns the default with reason 'error' and the error on a failure", async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(503, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(503, {});
     const c = client();
 
     await expect(c.variationDetail('k', ctx, 'safe')).resolves.toEqual({
@@ -248,9 +261,7 @@ describe('variationDetail', () => {
   });
 
   it("a served value reads 'off' with no error: the platform sends no reason (INT-7457)", async () => {
-    nock(ORIGIN)
-      .post(CHOOSE_PATH)
-      .reply(200, { choices: [{ name: 'k', body: 'on' }] });
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, { key: 'k', value: 'on' });
     const c = client();
 
     const detail = await c.variationDetail('k', ctx, 'safe');
@@ -259,8 +270,8 @@ describe('variationDetail', () => {
     await c.close();
   });
 
-  it("a 200 with no choice for the key reads 'off', not 'error'", async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(200, { choices: [] });
+  it("a 200 with a null value reads 'off', not 'error'", async () => {
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, { key: 'k', value: null });
     const c = client();
 
     await expect(c.variationDetail('k', ctx, 'safe')).resolves.toEqual({

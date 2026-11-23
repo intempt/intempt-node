@@ -3,6 +3,22 @@
 All notable changes to this package are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Flags are read from the flag routes** (F32/F33). `variation`, `variationDetail` and the typed
+  calls send one key to `POST /flags/evaluate`; `allFlags` and a `disableExposure` read go to
+  `POST /flags/all`, which records no exposure. Flags are never read through
+  `/optimization/choose-api` any more, so a key that names an API experiment or personalization
+  rather than a flag now returns the caller's default (404 from `/flags/evaluate`).
+- `FlagContext.sessionId` is deprecated and no longer sent: the flag routes take no session.
+
+### Added
+
+- `intempt-nodejs-sdk/flags`: a flags-only entry (`IntemptFlags.init`) that loads the flag module
+  and the shared core only, never the batcher, ingest or consent.
+
 ## [4.1.0] - unreleased
 
 ### Added

@@ -30,19 +30,30 @@ export async function startMockApi(): Promise<MockApi> {
       }
 
       let body: string = '{}';
-      if (url.includes('/optimization/choose-api')) {
-        // The real wire shape: name / group / body, and nothing else. `ExperienceApiChoose` on
-        // `audience-service` main declares exactly those three fields — there is no `reason`, and a
-        // fixture that invents one is how the PREVIOUS fixture bug happened: it said `variant` and
-        // `payload`, which no serving response has ever sent, so the sample looked like it worked
-        // while variation() returned the caller's default every time. A fixture asserts what the
-        // service sends today, never what a branch might send later.
-        body = JSON.stringify({
-          choices: [
-            { name: 'pricing_cta', group: 'b', body: 'Start free' },
-            { name: 'new_checkout', group: 'control', body: null },
-          ],
-        });
+      if (url.includes('/flags/evaluate')) {
+        // audience-service `FlagValue` (358d07d): key, value, variationId, valueType, reason. A
+        // fixture asserts what the service sends today, never what a branch might send later.
+        const key = (
+          JSON.parse(Buffer.concat(chunks).toString('utf8')) as { key: string }
+        ).key;
+        const served: Record<string, unknown> = {
+          pricing_cta: {
+            key,
+            value: 'Start free',
+            variationId: 2,
+            valueType: 'string',
+            reason: 'targeted',
+          },
+        };
+        body = JSON.stringify(
+          served[key] ?? {
+            key,
+            value: null,
+            variationId: null,
+            valueType: 'boolean',
+            reason: 'off',
+          },
+        );
       } else if (url.includes('/feeds/')) {
         body = JSON.stringify({
           items: [

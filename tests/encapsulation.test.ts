@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SDK } from '../src';
+import { IntemptFlags } from '../src/flags';
 import { API_KEY, ORG, PROJECT, SOURCE, client, setupNock } from './helpers';
 
 setupNock();
@@ -176,5 +177,35 @@ describe('the credential is unreachable from the public graph', () => {
     expect(JSON.stringify(c)).not.toContain(
       Buffer.from('pfx0123456789abcdef:sec0123456789abcdef').toString('base64'),
     );
+  });
+});
+
+describe('the flags-only client (F33) exposes only the flag surface', () => {
+  const flags = IntemptFlags.init({
+    org: ORG,
+    project: PROJECT,
+    apiKey: API_KEY,
+    sourceId: SOURCE,
+    host: 'api.test.local',
+  });
+
+  it('has only the flag methods and close, and no own properties', () => {
+    expect(prototypeNames(flags)).toEqual(
+      [
+        'variation',
+        'variationDetail',
+        'boolVariation',
+        'stringVariation',
+        'numberVariation',
+        'jsonVariation',
+        'allFlags',
+        'close',
+      ].sort(),
+    );
+    expect(Object.keys(flags)).toEqual([]);
+  });
+
+  it('does not serialise the credential', () => {
+    expect(JSON.stringify(flags)).not.toContain('sec0123456789abcdef');
   });
 });

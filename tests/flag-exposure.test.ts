@@ -1,26 +1,42 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { CHOOSE_PATH, ORIGIN, client, nock, setupNock } from './helpers';
+import {
+  FLAG_ALL_PATH,
+  FLAG_EVALUATE_PATH,
+  ORIGIN,
+  client,
+  nock,
+  setupNock,
+} from './helpers';
 
 setupNock();
 
 /**
- * INT-7456 (CONTRACT-R2 §S4, research Q13): evaluation is separated from exposure. A bulk read
- * asks the service not to record; a single read records unless the caller opts out. An absent
- * `exposure` field is today's recording behaviour, so a default read must not send the key at all.
+ * Evaluation is separated from exposure by ROUTE (F32 hybrid exposure, Beso 2026-11-17):
+ * `/flags/evaluate` records the exposure on the server, `/flags/all` publishes nothing. A single
+ * read records unless the caller opts out; an opted-out read and `allFlags` go to `/flags/all`.
+ * Neither route has an `exposure` field, so the SDK never sends one.
  */
 const ctx = { userId: 'u-1' };
 const opt = { disableExposure: true };
 
-async function bodySentBy(
+type Sent = { path: string; body: Record<string, unknown> };
+
+async function sentBy(
   call: (c: ReturnType<typeof client>) => Promise<unknown>,
-): Promise<Record<string, unknown>> {
-  let sent: Record<string, unknown> = {};
+): Promise<Sent> {
+  let sent: Sent = { path: '', body: {} };
   nock(ORIGIN)
-    .post(CHOOSE_PATH, (b) => {
-      sent = b as Record<string, unknown>;
+    .post(FLAG_EVALUATE_PATH, (b) => {
+      sent = { path: FLAG_EVALUATE_PATH, body: b as Record<string, unknown> };
       return true;
     })
-    .reply(200, { choices: [{ name: 'k', body: true }] });
+    .reply(200, { key: 'k', value: true });
+  nock(ORIGIN)
+    .post(FLAG_ALL_PATH, (b) => {
+      sent = { path: FLAG_ALL_PATH, body: b as Record<string, unknown> };
+      return true;
+    })
+    .reply(200, { flags: [{ key: 'k', value: true }] });
 
   const c = client();
   await call(c);
@@ -28,24 +44,26 @@ async function bodySentBy(
   return sent;
 }
 
-describe('exposure on the choose request', () => {
+describe('exposure is chosen by route', () => {
   afterEach(() => nock.cleanAll());
 
-  it('allFlags evaluates without recording an exposure', async () => {
-    const body = await bodySentBy((c) => c.allFlags(ctx));
-    expect(body.exposure).toBe(false);
+  it('allFlags reads /flags/all, which publishes nothing', async () => {
+    const { path, body } = await sentBy((c) => c.allFlags(ctx));
+    expect(path).toBe(FLAG_ALL_PATH);
+    expect('exposure' in body).toBe(false);
   });
 
-  it('a single read records as before: no exposure field at all', async () => {
-    const body = await bodySentBy((c) => c.variation('k', ctx, false));
+  it('a single read records: /flags/evaluate, no exposure field', async () => {
+    const { path, body } = await sentBy((c) => c.variation('k', ctx, false));
+    expect(path).toBe(FLAG_EVALUATE_PATH);
     expect('exposure' in body).toBe(false);
   });
 
   it('disableExposure: false is the same as omitting it', async () => {
-    const body = await bodySentBy((c) =>
+    const { path } = await sentBy((c) =>
       c.variation('k', ctx, false, { disableExposure: false }),
     );
-    expect('exposure' in body).toBe(false);
+    expect(path).toBe(FLAG_EVALUATE_PATH);
   });
 
   it.each([
@@ -70,16 +88,20 @@ describe('exposure on the choose request', () => {
       'jsonVariation',
       (c: ReturnType<typeof client>) => c.jsonVariation('k', ctx, {}, opt),
     ],
-  ])('%s with disableExposure sends exposure: false', async (_name, call) => {
-    const body = await bodySentBy(call);
-    expect(body.exposure).toBe(false);
-    expect(body.names).toEqual(['k']);
-  });
+  ])(
+    '%s with disableExposure reads /flags/all with only that key',
+    async (_name, call) => {
+      const { path, body } = await sentBy(call);
+      expect(path).toBe(FLAG_ALL_PATH);
+      expect(body.keys).toEqual(['k']);
+      expect('exposure' in body).toBe(false);
+    },
+  );
 
   it('opting out of the exposure still returns the served value', async () => {
     nock(ORIGIN)
-      .post(CHOOSE_PATH)
-      .reply(200, { choices: [{ name: 'k', body: 'on' }] });
+      .post(FLAG_ALL_PATH)
+      .reply(200, { flags: [{ key: 'k', value: 'on' }] });
     const c = client();
     await expect(c.variation('k', ctx, 'off', opt)).resolves.toBe('on');
     await c.close();

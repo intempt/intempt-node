@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { CHOOSE_PATH, ORIGIN, client, nock, setupNock, testLogger } from './helpers';
+import {
+  FLAG_ALL_PATH,
+  FLAG_EVALUATE_PATH,
+  ORIGIN,
+  client,
+  nock,
+  setupNock,
+  testLogger,
+} from './helpers';
 
 setupNock();
 
@@ -15,28 +23,23 @@ describe('variation', () => {
   const ctx = { userId: 'u-1', profileId: 'p-1' };
 
   it('returns the served value and its reason', async () => {
-    nock(ORIGIN)
-      .post(CHOOSE_PATH)
-      .reply(200, {
-        choices: [{ name: 'checkout_v2', group: 'B', body: true, reason: 'targeted' }],
-      });
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, {
+      key: 'checkout_v2',
+      value: true,
+      variationId: 11,
+      valueType: 'boolean',
+      reason: 'targeted',
+    });
 
-    // `variation`, not `variationDetail`: the platform sends no reason, so the detail would read
-    // `off` either way (INT-7457, see tests/flag-errors.test.ts). `group` IS on the wire (`ExperienceApiChoose` declares name, group, body); `reason`
-    // is not, on any merged branch. So asserting on the reason here would prove nothing, and the
-    // mock carries it only to show that an unknown field is ignored rather than trusted.
     const c = client();
     await expect(c.variation('checkout_v2', ctx, false)).resolves.toBe(true);
     await c.close();
   });
 
-  it('returns the default when the served body is null', async () => {
-    // NOT the holdout case, which cannot be asserted: a held-back person's experience is absent
-    // from the response entirely rather than present with a cause. Telling a holdout from an
-    // outage needs a reason the platform does not send, so neither is claimed here.
+  it('returns the default when the served value is null', async () => {
     nock(ORIGIN)
-      .post(CHOOSE_PATH)
-      .reply(200, { choices: [{ name: 'checkout_v2', body: null }] });
+      .post(FLAG_EVALUATE_PATH)
+      .reply(200, { key: 'checkout_v2', value: null, reason: 'not_targeted' });
 
     const c = client();
     await expect(c.variation('checkout_v2', ctx, 'fallback')).resolves.toBe('fallback');
@@ -44,7 +47,7 @@ describe('variation', () => {
   });
 
   it('returns the default when the service is unreachable', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(500, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(500, {});
 
     const c = client();
     await expect(c.variation('checkout_v2', ctx, 'safe')).resolves.toBe('safe');
@@ -52,7 +55,7 @@ describe('variation', () => {
   });
 
   it('returns the default when the key is unknown to the service', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(200, { choices: [] });
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(404, { message: 'Flag not found' });
 
     const c = client();
     await expect(c.variation('never_created', ctx, 'safe')).resolves.toBe('safe');
@@ -60,9 +63,9 @@ describe('variation', () => {
   });
 
   it('throws on a key the service would reject rather than returning the default', async () => {
-    // L2. The service declares `Set<@Pattern("^[a-zA-Z0-9_-]*$") String> names`, so a key with a
-    // dot, colon or space comes back a validation error — which `#chooseOrEmpty` absorbs into a
-    // warn and the caller's default, making a typo indistinguishable from an outage. No nock
+    // L2. The service declares `@Pattern("^[a-zA-Z0-9_-]*$") String key`, so a key with a dot,
+    // colon or space comes back a validation error, which would be absorbed into a warn and the
+    // caller's default, making a typo indistinguishable from an outage. No nock
     // interceptor is registered here on purpose: if the SDK let one of these reach the wire,
     // `disableNetConnect` would fail the test rather than let it pass quietly.
     const c = client();
@@ -75,8 +78,8 @@ describe('variation', () => {
 
   it('accepts the characters the pattern allows', async () => {
     nock(ORIGIN)
-      .post(CHOOSE_PATH)
-      .reply(200, { choices: [{ name: 'New_checkout-v2', body: 'yes' }] });
+      .post(FLAG_EVALUATE_PATH)
+      .reply(200, { key: 'New_checkout-v2', value: 'yes' });
 
     const c = client();
     await expect(c.variation('New_checkout-v2', ctx, 'd')).resolves.toBe('yes');
@@ -107,8 +110,8 @@ describe('typed helpers', () => {
     // `!!"false"` is true. A silent coercion here would be indistinguishable from a correct answer,
     // which is worse than returning the default the caller chose.
     nock(ORIGIN)
-      .post(CHOOSE_PATH)
-      .reply(200, { choices: [{ name: 'f', body: 'false', reason: 'targeted' }] });
+      .post(FLAG_EVALUATE_PATH)
+      .reply(200, { key: 'f', value: 'false', reason: 'targeted' });
 
     const c = client();
     await expect(c.boolVariation('f', ctx, false)).resolves.toBe(false);
@@ -117,8 +120,8 @@ describe('typed helpers', () => {
 
   it('accepts a correctly typed value', async () => {
     nock(ORIGIN)
-      .post(CHOOSE_PATH)
-      .reply(200, { choices: [{ name: 'f', body: 42, reason: 'targeted' }] });
+      .post(FLAG_EVALUATE_PATH)
+      .reply(200, { key: 'f', value: 42, reason: 'targeted' });
 
     const c = client();
     await expect(c.numberVariation('f', ctx, 0)).resolves.toBe(42);
@@ -126,29 +129,19 @@ describe('typed helpers', () => {
   });
 });
 
-/**
- * There is no read-everything call, and this is the test that keeps it that way.
- *
- * `POST /optimization/choose-api` publishes a Kafka exposure per experience it evaluates, and it
- * evaluates EVERY eligible experience when `names` is omitted. So a convenience `allFlags()` marks
- * the person exposed to every running server experiment (inflating every denominator uniformly,
- * which reads as an experiment that stopped detecting rather than a broken one) and spends the
- * `once` display budget for keys nobody rendered, after which `variation()` on those keys returns
- * the caller's default forever. The request carries no exposure-suppression field, so the only
- * lever the SDK has is declining to evaluate what nobody asked for.
- */
+/** `allFlags` reads `/flags/all` without keys: only the served flags, and no exposure (F32). */
 describe('allFlags', () => {
   afterEach(() => nock.cleanAll());
 
   const ctx = { userId: 'u-1' };
 
-  it('returns every served key as a name -> value map', async () => {
+  it('returns every served key as a key -> value map', async () => {
     nock(ORIGIN)
-      .post(CHOOSE_PATH)
+      .post(FLAG_ALL_PATH)
       .reply(200, {
-        choices: [
-          { name: 'pricing_cta', body: 'Get started' },
-          { name: 'rate_limits', body: { perMinute: 60 } },
+        flags: [
+          { key: 'pricing_cta', value: 'Get started', valueType: 'string' },
+          { key: 'rate_limits', value: { perMinute: 60 }, valueType: 'json' },
         ],
       });
 
@@ -160,40 +153,41 @@ describe('allFlags', () => {
     await c.close();
   });
 
-  it('omits names entirely, which is what makes it evaluate everything', async () => {
-    // The one field that distinguishes this call from variation(), and the reason it is a hazard.
-    // Sending `names: []` instead would be a different request the service reads differently, and
-    // sending `names: null` would be an explicit null rather than an absent key.
+  it('omits keys entirely, so the server answers only the served flags', async () => {
+    // `keys: []` would be the same answer on 358d07d, but an absent field is the documented
+    // "everything served" form; an explicit null would be a different request.
     let sent: Record<string, unknown> = {};
     nock(ORIGIN)
-      .post(CHOOSE_PATH, (b) => {
+      .post(FLAG_ALL_PATH, (b) => {
         sent = b as Record<string, unknown>;
         return true;
       })
-      .reply(200, { choices: [] });
+      .reply(200, { flags: [] });
 
     const c = client();
     await c.allFlags(ctx);
     await c.close();
 
-    expect(Object.keys(sent)).not.toContain('names');
+    expect(Object.keys(sent)).not.toContain('keys');
     expect(sent.device).toBe('all');
   });
 
-  it('maps a key with no body to null rather than dropping it', async () => {
+  it('maps a flag with no value to null rather than dropping it', async () => {
     nock(ORIGIN)
-      .post(CHOOSE_PATH)
-      .reply(200, { choices: [{ name: 'held_back' }] });
+      .post(FLAG_ALL_PATH)
+      .reply(200, { flags: [{ key: 'held_back' }] });
 
     const c = client();
     await expect(c.allFlags(ctx)).resolves.toEqual({ held_back: null });
     await c.close();
   });
 
-  it('skips a choice with no usable name rather than keying on undefined', async () => {
+  it('skips an entry with no usable key, and a non-object entry, rather than keying on undefined', async () => {
     nock(ORIGIN)
-      .post(CHOOSE_PATH)
-      .reply(200, { choices: [{ body: 'orphan' }, { name: '', body: 'blank' }] });
+      .post(FLAG_ALL_PATH)
+      .reply(200, {
+        flags: [{ value: 'orphan' }, { key: '', value: 'blank' }, 'junk', null],
+      });
 
     const c = client();
     await expect(c.allFlags(ctx)).resolves.toEqual({});
@@ -201,8 +195,7 @@ describe('allFlags', () => {
   });
 
   it('returns an empty map when the service is unreachable', async () => {
-    // Same discipline as variation(): a personalization outage is not an application outage.
-    nock(ORIGIN).post(CHOOSE_PATH).reply(500, {});
+    nock(ORIGIN).post(FLAG_ALL_PATH).reply(500, {});
 
     const c = client();
     await expect(c.allFlags(ctx)).resolves.toEqual({});
@@ -229,10 +222,10 @@ describe('waitForInitialization', () => {
  *
  * Added after a mutation run scored flags.ts at 58.33 with ten survivors. Every test above asserts
  * what comes BACK; none asserted what goes OUT, so a mutant could empty the identification object,
- * drop the names array, or change the device literal and every one of them still passed. What the
+ * drop the key, or change the device literal and every one of them still passed. What the
  * SDK sends is half of a wire contract, and it was the unasserted half.
  */
-describe('the choose request body', () => {
+describe('the /flags/evaluate request body', () => {
   afterEach(() => nock.cleanAll());
 
   /** Captures the body nock received, so each assertion below names one field. */
@@ -241,11 +234,11 @@ describe('the choose request body', () => {
   ): Promise<Record<string, unknown>> {
     let sent: Record<string, unknown> = {};
     nock(ORIGIN)
-      .post(CHOOSE_PATH, (b) => {
+      .post(FLAG_EVALUATE_PATH, (b) => {
         sent = b as Record<string, unknown>;
         return true;
       })
-      .reply(200, { choices: [] });
+      .reply(200, { key: 'k', value: null });
 
     const c = client();
     await call(c);
@@ -338,7 +331,7 @@ describe('the choose request body', () => {
   });
 
   it('refuses accountId, which the serving endpoint never receives', async () => {
-    // `FlagContext extends Identifiers`, so accountId type-checks -- and `#choose` sends only
+    // `FlagContext extends Identifiers`, so accountId type-checks -- and the request sends only
     // userId/profileId/sourceId, so it was dropped in silence. The message says so explicitly.
     const c = client();
     await expect(c.variation('k', { accountId: 'acme' } as never, 'd')).rejects.toThrow(
@@ -376,43 +369,22 @@ describe('the choose request body', () => {
     expect(body.identification).toMatchObject({ profileId: 'p-1' });
   });
 
-  it('asks for exactly the keys requested', async () => {
+  it('asks for exactly the one key requested, as `key`', async () => {
     const body = await bodySentBy((c) =>
       c.variation('checkout_v2', { userId: 'u' }, 'd'),
     );
 
-    // Kills the ArrayDeclaration mutant: [key] emptied to [] asks the service for every flag,
-    // which still answers, and the caller still gets its default.
-    expect(body.names).toEqual(['checkout_v2']);
+    // /flags/evaluate takes exactly one key (F32): several keys would mark flags the code never
+    // reads as exposed. choose-api's `names` must not leak onto this route.
+    expect(body.key).toBe('checkout_v2');
+    expect(Object.keys(body)).not.toContain('names');
+    expect(Object.keys(body)).not.toContain('keys');
   });
 
-  it('always names the keys it evaluates, and never omits names', async () => {
-    // The C1/H1 guard on the wire itself. An omitted or emptied `names` makes the service
-    // evaluate — and record an exposure against — every eligible experience, so the assertion is
-    // that a bounded, non-empty list goes out on every evaluation. Kills a mutant that drops the
-    // field or empties the array: the service answers either way and the caller still gets a
-    // value, so nothing else in this suite would notice.
-    const body = await bodySentBy((c) =>
-      c.variation('checkout_v2', { userId: 'u' }, 'd'),
-    );
-
-    expect(body.names).toBeDefined();
-    expect(Array.isArray(body.names)).toBe(true);
-    expect((body.names as string[]).length).toBeGreaterThan(0);
-  });
-
-  it('sends sessionId when the caller supplies one', async () => {
-    // H2: without it the platform stores the literal "default", so `once_per_visit` degrades to
-    // "once, then never" and every exposure event is stamped "default".
+  it('never sends sessionId, even when the caller supplies one (F32)', async () => {
     const body = await bodySentBy((c) =>
       c.variation('k', { userId: 'u', sessionId: 's-42' }, 'd'),
     );
-
-    expect(body.sessionId).toBe('s-42');
-  });
-
-  it('omits sessionId rather than sending null when the caller has none', async () => {
-    const body = await bodySentBy((c) => c.variation('k', { userId: 'u' }, 'd'));
 
     expect(Object.keys(body)).not.toContain('sessionId');
   });
@@ -420,8 +392,8 @@ describe('the choose request body', () => {
   it("sends device 'all'", async () => {
     const body = await bodySentBy((c) => c.variation('k', { userId: 'u' }, 'd'));
 
-    // Kills the StringLiteral mutant on line 142. A mutated device value changes which
-    // experiences the service considers eligible — silently, and only in production.
+    // A mutated device value changes which flags the service considers eligible — silently, and
+    // only in production.
     expect(body.device).toBe('all');
   });
 });
@@ -430,7 +402,7 @@ describe('when the service cannot be reached', () => {
   afterEach(() => nock.cleanAll());
 
   it('warns through the configured logger and still returns the default', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(503, {});
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(503, {});
 
     const logger = testLogger();
     const c = client({ logger });
@@ -443,10 +415,9 @@ describe('when the service cannot be reached', () => {
     await c.close();
   });
 
-  it('treats a response with no choices array as no answer', async () => {
-    nock(ORIGIN).post(CHOOSE_PATH).reply(200, {});
+  it('treats an answer with no value as no answer', async () => {
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, {});
 
-    // Kills the OptionalChaining mutant on line 149: response.body?.choices ?? [].
     const c = client();
     await expect(c.variation('k', { userId: 'u' }, 7)).resolves.toBe(7);
     await c.close();

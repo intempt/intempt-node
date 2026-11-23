@@ -139,10 +139,9 @@ export class IntemptClient {
   // ---- flags ----
 
   /**
-   * The value assigned to this person for `key`, or `defaultValue` if the service did not answer.
-   *
-   * Ask for a key, never a mode. Whether the key names an experiment, a personalization or a flag
-   * is the platform's business - its serving query filters on channel and status and never on mode.
+   * The value of flag `key` for this person, or `defaultValue` if none was served or the read failed.
+   * Reads `/flags/evaluate`, which records the exposure; experiments and personalizations are not
+   * served by this SDK.
    */
   async variation<T>(
     key: string,
@@ -175,10 +174,8 @@ export class IntemptClient {
     defaultValue: boolean,
     options?: VariationOptions,
   ): Promise<boolean> {
-    const value = await this.variation<unknown>(key, context, defaultValue, options);
-    // A served value of the wrong type is a misconfiguration, not something to coerce: `!!"false"`
-    // is true, and a silent coercion would be indistinguishable from a correct answer.
-    return typeof value === 'boolean' ? value : defaultValue;
+    this.#assertOpen();
+    return this.#flags.bool(key, context, defaultValue, options);
   }
 
   async stringVariation(
@@ -187,8 +184,8 @@ export class IntemptClient {
     defaultValue: string,
     options?: VariationOptions,
   ): Promise<string> {
-    const value = await this.variation<unknown>(key, context, defaultValue, options);
-    return typeof value === 'string' ? value : defaultValue;
+    this.#assertOpen();
+    return this.#flags.string(key, context, defaultValue, options);
   }
 
   async numberVariation(
@@ -197,8 +194,8 @@ export class IntemptClient {
     defaultValue: number,
     options?: VariationOptions,
   ): Promise<number> {
-    const value = await this.variation<unknown>(key, context, defaultValue, options);
-    return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue;
+    this.#assertOpen();
+    return this.#flags.number(key, context, defaultValue, options);
   }
 
   async jsonVariation<T extends object>(
@@ -207,24 +204,13 @@ export class IntemptClient {
     defaultValue: T,
     options?: VariationOptions,
   ): Promise<T> {
-    const value = await this.variation<unknown>(key, context, defaultValue, options);
-    return value !== null && typeof value === 'object' ? (value as T) : defaultValue;
+    this.#assertOpen();
+    return this.#flags.json(key, context, defaultValue, options);
   }
 
   /**
-   * Every key assigned to this person, in one call.
-   *
-   * ⚠ **Not for a request path.** It names no keys, so the service evaluates every experience the
-   * person is eligible for — and on this endpoint an evaluation is an **exposure**. That inflates
-   * the denominator of every running server experiment with people who saw nothing, and spends the
-   * `once` display budget for keys nobody rendered, after which `variation()` on those keys returns
-   * your default forever. Two keys on a request path is two `variation()` calls, not one
-   * `allFlags()`. Use this to enumerate: a debug endpoint, an admin view, a one-off audit.
-   *
-   * It sends `exposure: false` (INT-7456), which takes effect once audience-service honours the
-   * field; until then the service ignores it and the costs above still apply.
-   *
-   * See `docs/CONVENTIONS.md` for the full trace and the platform change that would make it safe.
+   * Every flag served to this person, in one call, from `/flags/all`, which publishes no exposure.
+   * A flag that was not served is absent from the map.
    */
   async allFlags(context: FlagContext): Promise<Record<string, unknown>> {
     this.#assertOpen();

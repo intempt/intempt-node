@@ -19,6 +19,7 @@
  * accepted with a 201 and proves nothing about your catalog.
  */
 import { Intempt, IntemptApiError, type IntemptClient } from 'intempt-nodejs-sdk';
+import { IntemptFlags } from 'intempt-nodejs-sdk/flags';
 import { startMockApi } from './mock-api';
 
 const useMock = !process.env.INTEMPT_API_KEY;
@@ -111,8 +112,7 @@ async function main(): Promise<void> {
     );
 
     // ---- flags ----
-    // Ask for a KEY. Whether it names an experiment, a personalization or a flag is the
-    // platform's business, and the method name does not change when that changes.
+    // Each read asks /flags/evaluate for one flag key, which records the exposure.
     //
     // ONE identifier, held constant. `profileId` outranks `userId` on the platform, so passing
     // both means assignment is device-scoped and `userId` is ignored — and the day you stop
@@ -127,9 +127,15 @@ async function main(): Promise<void> {
     const checkout = await intempt.boolVariation('new_checkout', context, false);
     log(`boolVariation new_checkout -> ${checkout}`);
 
-    // Read the keys you use, one call per key. There is no read-everything call: evaluating a
-    // key records an exposure against it, so asking for every key marks this person exposed to
-    // every running experiment in the project.
+    // A backend that only checks flags can load the flags entry alone: no batcher, no queue.
+    const flagsOnly = IntemptFlags.init(baseConfig(mock?.host));
+    const ctaOnly = await flagsOnly.stringVariation(
+      'pricing_cta',
+      context,
+      'Get started',
+    );
+    log(`flags-only client pricing_cta -> ${ctaOnly}`);
+    await flagsOnly.close();
 
     // What happens when Intempt is unreachable. No throw, no null — the value you chose.
     const offline = Intempt.init({ ...baseConfig('127.0.0.1:1'), timeout: 200 });

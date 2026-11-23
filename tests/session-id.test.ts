@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SDK } from '../src';
 import {
   API_KEY,
-  CHOOSE_PATH,
+  FLAG_EVALUATE_PATH,
   HOST,
   ORG,
   ORIGIN,
@@ -19,8 +19,9 @@ setupNock();
 
 /**
  * INT-7446, CONTRACT-R2 §S5: a server SDK has no session, so it sends NO sessionId on any
- * ingestion write and never invents one. A caller-supplied sessionId is accepted on flag calls
- * only. A guard, not a fix: no write path emitted one when this was checked.
+ * ingestion write and never invents one. A guard, not a fix: no write path emitted one when this was
+ * checked. Flag calls send none either: the flag routes have no session field (F32), so a
+ * caller-supplied `FlagContext.sessionId` is accepted for compatibility and dropped.
  */
 describe('sessionId on the wire (INT-7446)', () => {
   function captureTrack(times: number): unknown[] {
@@ -65,30 +66,31 @@ describe('sessionId on the wire (INT-7446)', () => {
     expect(payload).not.toHaveProperty('sessionId');
   });
 
-  it('is forwarded on a flag call when the caller supplies one', async () => {
+  it('is dropped from a flag call even when the caller supplies one (F32)', async () => {
     let sent: Record<string, unknown> | undefined;
     nock(ORIGIN)
-      .post(CHOOSE_PATH, (body: Record<string, unknown>) => {
+      .post(FLAG_EVALUATE_PATH, (body: Record<string, unknown>) => {
         sent = body;
         return true;
       })
-      .reply(200, { choices: [] });
+      .reply(200, { key: 'k', value: null });
 
     const c = client();
     await c.variation('k', { userId: 'u1', sessionId: 'visit-7' }, false);
     await c.close();
 
-    expect(sent?.sessionId).toBe('visit-7');
+    expect(sent).toBeDefined();
+    expect(sent).not.toHaveProperty('sessionId');
   });
 
   it('is not invented on a flag call when the caller supplies none', async () => {
     let sent: Record<string, unknown> | undefined;
     nock(ORIGIN)
-      .post(CHOOSE_PATH, (body: Record<string, unknown>) => {
+      .post(FLAG_EVALUATE_PATH, (body: Record<string, unknown>) => {
         sent = body;
         return true;
       })
-      .reply(200, { choices: [] });
+      .reply(200, { key: 'k', value: null });
 
     const c = client();
     await c.variation('k', { userId: 'u1' }, false);

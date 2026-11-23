@@ -20,6 +20,8 @@ export const TRACK_PATH = `/v1/${ORG}/projects/${PROJECT}/sources/${SOURCE}/trac
 export const TRACK_PATH_NO_SOURCE = `/v1/${ORG}/projects/${PROJECT}/track`;
 export const CONSENT_PATH = `/v1/${ORG}/projects/${PROJECT}/consents/data`;
 export const CHOOSE_PATH = `/v1/${ORG}/projects/${PROJECT}/optimization/choose-api`;
+export const FLAG_EVALUATE_PATH = `/v1/${ORG}/projects/${PROJECT}/flags/evaluate`;
+export const FLAG_ALL_PATH = `/v1/${ORG}/projects/${PROJECT}/flags/all`;
 
 export function feedPath(id: string): string {
   return `/v1/${ORG}/projects/${PROJECT}/feeds/${id}/data`;

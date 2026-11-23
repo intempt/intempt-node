@@ -13,10 +13,21 @@
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "flags": [
+        "dist/flags.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./flags": {
+      "types": "./dist/flags.d.ts",
+      "default": "./dist/flags.js"
     },
     "./package.json": "./package.json"
   },
