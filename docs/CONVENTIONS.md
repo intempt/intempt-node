@@ -56,9 +56,13 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
 - **Evaluation is REMOTE only.** No local rule engine, no flag store to poll, and no hashing
   utility: the server buckets, so no second implementation can disagree with it. `check-no-local-bucketing.mjs`
   enforces this in CI and a new bucketing helper will fail the build.
-- **A validation mistake throws; a service problem does not.** A blank key or a missing default is a
-  programming error the caller can fix, so it fails loudly at the call site. A 5xx is a runtime
-  condition to absorb.
+- **No flag read throws** (S11, Beso 2026-11-18). A caller mistake returns the default with
+  `reason: 'error'` and an OpenFeature code, and logs one warning per key so a typo stays visible:
+  an empty or invalid key is `FLAG_NOT_FOUND` (as is a 404 from `/flags/evaluate`), a context the
+  service cannot resolve is `TARGETING_KEY_MISSING`, a missing default resolves `undefined` with
+  `GENERAL`. A service failure is `GENERAL` and also reaches `onFlagError`. Only a closed client
+  still rejects: that is a lifecycle error, not a flag read. Flag reads time out after
+  `flagTimeout` (2 s by default, the same in every SDK); tracking keeps its 10 s `timeout`.
 
 ## Errors
 

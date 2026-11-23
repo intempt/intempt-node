@@ -58,7 +58,7 @@ describe('onFlagError classifies the failure and the default is still returned',
       .delay(200)
       .reply(200, { key: 'k', value: null });
     const errors: FlagError[] = [];
-    const c = client({ timeout: 50, onFlagError: (e) => errors.push(e) });
+    const c = client({ flagTimeout: 50, onFlagError: (e) => errors.push(e) });
 
     await expect(c.variation('k', ctx, 'safe')).resolves.toBe('safe');
     expect(errors).toEqual([{ key: 'k', kind: 'timeout' }]);
@@ -138,11 +138,11 @@ describe('onFlagError classifies the failure and the default is still returned',
     await c.close();
   });
 
-  it('a programming error still throws and never reaches the hook', async () => {
+  it('a caller mistake returns the default (S11) and never reaches the hook', async () => {
     const { c, errors } = hooked();
 
-    await expect(c.variation('has.dot', ctx, 'd')).rejects.toThrow(TypeError);
-    await expect(c.variation('k', {}, 'd')).rejects.toThrow(TypeError);
+    await expect(c.variation('has.dot', ctx, 'd')).resolves.toBe('d');
+    await expect(c.variation('k', {}, 'd')).resolves.toBe('d');
     expect(errors).toEqual([]);
     await c.close();
   });
@@ -255,6 +255,7 @@ describe('variationDetail', () => {
     await expect(c.variationDetail('k', ctx, 'safe')).resolves.toEqual({
       value: 'safe',
       reason: 'error',
+      errorCode: 'GENERAL',
       error: { key: 'k', kind: 'server', status: 503 },
     });
     await c.close();
@@ -283,7 +284,10 @@ describe('variationDetail', () => {
 
   it('validates like variation and refuses a closed client', async () => {
     const c = client();
-    await expect(c.variationDetail('has.dot', ctx, 'd')).rejects.toThrow(TypeError);
+    await expect(c.variationDetail('has.dot', ctx, 'd')).resolves.toMatchObject({
+      value: 'd',
+      errorCode: 'FLAG_NOT_FOUND',
+    });
     await c.close();
     await expect(c.variationDetail('k', ctx, 'd')).rejects.toThrow(/closed/);
   });

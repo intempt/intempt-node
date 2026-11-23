@@ -62,17 +62,18 @@ describe('variation', () => {
     await c.close();
   });
 
-  it('throws on a key the service would reject rather than returning the default', async () => {
-    // L2. The service declares `@Pattern("^[a-zA-Z0-9_-]*$") String key`, so a key with a dot,
-    // colon or space comes back a validation error, which would be absorbed into a warn and the
-    // caller's default, making a typo indistinguishable from an outage. No nock
-    // interceptor is registered here on purpose: if the SDK let one of these reach the wire,
-    // `disableNetConnect` would fail the test rather than let it pass quietly.
-    const c = client();
+  it('returns the default for a key the service would reject, without sending it (S11)', async () => {
+    // L2. The service declares `@Pattern("^[a-zA-Z0-9_-]*$") String key`. S11 (Beso 2026-11-18)
+    // reversed the old throw: the read returns the default with FLAG_NOT_FOUND and one warning per
+    // key. No nock interceptor is registered on purpose: `disableNetConnect` fails the test if one
+    // of these reaches the wire.
+    const logger = testLogger();
+    const c = client({ logger });
     for (const bad of ['has.dot', 'has:colon', 'has space', 'has/slash']) {
-      await expect(c.variation(bad, ctx, 'd')).rejects.toThrow(TypeError);
-      await expect(c.variation(bad, ctx, 'd')).rejects.toThrow(/\^\[a-zA-Z0-9_-\]\+\$/);
+      await expect(c.variation(bad, ctx, 'd')).resolves.toBe('d');
     }
+    expect(logger.calls.warn.map((a) => String(a[0]))).toHaveLength(4);
+    expect(String(logger.calls.warn[0]?.[0])).toContain('^[a-zA-Z0-9_-]+$');
     await c.close();
   });
 
@@ -86,18 +87,16 @@ describe('variation', () => {
     await c.close();
   });
 
-  it('refuses a call with no defaultValue', async () => {
+  it('a call with no defaultValue resolves undefined instead of throwing (S11)', async () => {
     const c = client();
     // @ts-expect-error defaultValue is required - this is the point of the assertion
-    await expect(c.variation('checkout_v2', ctx)).rejects.toThrow(
-      /defaultValue is required/,
-    );
+    await expect(c.variation('checkout_v2', ctx)).resolves.toBeUndefined();
     await c.close();
   });
 
-  it('refuses an empty key', async () => {
+  it('an empty key returns the default (S11)', async () => {
     const c = client();
-    await expect(c.variation('  ', ctx, 'x')).rejects.toThrow(/key is required/);
+    await expect(c.variation('  ', ctx, 'x')).resolves.toBe('x');
     await c.close();
   });
 });
@@ -202,9 +201,9 @@ describe('allFlags', () => {
     await c.close();
   });
 
-  it('applies the same identity guard as variation', async () => {
+  it('applies the same identity guard as variation, returning an empty map (S11)', async () => {
     const c = client();
-    await expect(c.allFlags({})).rejects.toThrow(/context needs either userId/);
+    await expect(c.allFlags({})).resolves.toEqual({});
     await c.close();
   });
 });
@@ -269,75 +268,49 @@ describe('the /flags/evaluate request body', () => {
     expect(Object.keys(body.identification as object)).not.toContain('profileId');
   });
 
-  it('refuses a call with no context at all, rather than defaulting forever', async () => {
-    // This used to assert the opposite -- that the call "survives" and sends
-    // `identification: {sourceId}` alone. That shape is one the serving endpoint cannot resolve:
-    // `buildAudienceRequest` matches neither its PROFILE nor its USER branch and throws, and
-    // `#chooseOrEmpty` absorbs a service failure by design, so the caller received their default
-    // for every key, forever, behind one warn line. The old test was locking in the bug.
-    const c = client();
-
-    // The message matters, not just the type. `Cannot read properties of undefined` is ALSO a
-    // TypeError, so asserting the class alone would let the optional chaining in
-    // `#assertAnswerable` be deleted -- the guard would still "throw", for entirely the wrong
-    // reason, and a caller would get a stack trace instead of an explanation. Stryker survived
-    // exactly that mutant until this assertion named the text.
-    await expect(
-      c.variation('k', undefined as unknown as { userId: string }, 'd'),
-    ).rejects.toThrow(/context needs either userId/);
-    await c.close();
-  });
-
   // -- the identity the serving endpoint can actually resolve -------------------------------
   //
-  // `buildAudienceRequest` resolves a PROFILE entity from a non-blank profileId plus a configured
-  // sourceId, falls through to a USER entity from userId, and throws when neither matches. Since
-  // `#chooseOrEmpty` absorbs a service failure by design, an unresolvable context used to come back
-  // as the caller's default -- for every key, forever, behind one warn line.
-  //
-  // Measured on this branch before the guard existed: all four shapes below returned "THE-DEFAULT"
-  // and threw nothing. Both directions are asserted, because a guard that also rejected a LEGAL
-  // context would be invisible from the refusal tests alone.
+  // The flag routes answer 400 unless the Identification names a visitor: a non-blank userId, or a
+  // sourceId with a non-blank profileId. S11 (Beso 2026-11-18) reversed the old TypeError: each
+  // unresolvable shape returns the default with TARGETING_KEY_MISSING, sends nothing, and warns once
+  // per key with the explanation. Both directions are asserted, because a guard that also rejected
+  // a LEGAL context would be invisible from the refusal tests alone.
 
-  it('refuses an empty context, and says what a usable one needs', async () => {
-    // The whole message is asserted, not just that something threw. This error is the only thing
-    // a caller sees at the moment they are stuck, so its text is behaviour: it has to name both
-    // acceptable shapes and say why the service rejects anything else. Asserting only /userId/
-    // left three string mutants alive that blanked the explanation and kept the test green.
-    const c = client();
-    await expect(c.variation('k', {}, 'd')).rejects.toThrow(
+  async function refused(context: unknown) {
+    const logger = testLogger();
+    const c = client({ logger });
+    const detail = await c.variationDetail('k', context as never, 'd');
+    await c.close();
+    return { detail, warning: String(logger.calls.warn[0]?.[0]) };
+  }
+
+  it('refuses a call with no context at all, and says what a usable one needs', async () => {
+    const { detail, warning } = await refused(undefined);
+    expect(detail).toEqual({
+      value: 'd',
+      reason: 'error',
+      errorCode: 'TARGETING_KEY_MISSING',
+    });
+    expect(warning).toMatch(
       /context needs either userId, or profileId together with a sourceId configured on the client/,
     );
-    await expect(c.variation('k', {}, 'd')).rejects.toThrow(
-      /resolves an entity by one or the other and rejects anything else/,
-    );
-    await c.close();
   });
 
-  it('does not mention accountId when the caller never passed one', async () => {
-    // The other half of the accountId branch. Without this, appending the accountId sentence
-    // unconditionally would pass every other test -- the message would simply be wrong for the
-    // common case, telling a caller about a field they never used.
-    const c = client();
-    await expect(c.variation('k', {}, 'd')).rejects.toThrow(/rejects anything else$/);
-    await c.close();
+  it('refuses an empty context, and does not mention accountId when none was passed', async () => {
+    const { detail, warning } = await refused({});
+    expect(detail.errorCode).toBe('TARGETING_KEY_MISSING');
+    expect(warning).toMatch(/returning the default$/);
   });
 
   it('refuses a blank userId rather than sending whitespace as an identity', async () => {
-    // Truthiness is not identity: '   ' is truthy and the service tests isBlank().
-    const c = client();
-    await expect(c.variation('k', { userId: '   ' }, 'd')).rejects.toThrow(TypeError);
-    await c.close();
+    const { detail } = await refused({ userId: '   ' });
+    expect(detail.errorCode).toBe('TARGETING_KEY_MISSING');
   });
 
   it('refuses accountId, which the serving endpoint never receives', async () => {
-    // `FlagContext extends Identifiers`, so accountId type-checks -- and the request sends only
-    // userId/profileId/sourceId, so it was dropped in silence. The message says so explicitly.
-    const c = client();
-    await expect(c.variation('k', { accountId: 'acme' } as never, 'd')).rejects.toThrow(
-      /accountId is not an identifier/,
-    );
-    await c.close();
+    const { detail, warning } = await refused({ accountId: 'acme' });
+    expect(detail.errorCode).toBe('TARGETING_KEY_MISSING');
+    expect(warning).toMatch(/accountId is not an identifier/);
   });
 
   it('accepts a userId alone', async () => {
@@ -350,14 +323,13 @@ describe('the /flags/evaluate request body', () => {
 
   it('refuses a profileId when the client has no sourceId configured', async () => {
     // The PROFILE branch needs BOTH halves. Without a configured sourceId this context satisfies
-    // neither branch, so the service throws and every read would silently default.
-    //
-    // This test exists because a planted mutation survived without it: dropping `&& present(
-    // sourceId)` from the guard left all 410 other tests green, since every other case either
-    // carries a userId or runs against a client that happens to configure a source.
+    // neither branch, so the service would 400 and every read would silently default.
     const c = client({ sourceId: undefined });
-
-    await expect(c.variation('k', { profileId: 'p-1' }, 'd')).rejects.toThrow(/sourceId/);
+    await expect(
+      c.variationDetail('k', { profileId: 'p-1' }, 'd'),
+    ).resolves.toMatchObject({
+      errorCode: 'TARGETING_KEY_MISSING',
+    });
     await c.close();
   });
 

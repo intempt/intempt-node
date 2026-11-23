@@ -12,6 +12,13 @@ This project follows [Semantic Versioning](https://semver.org/).
   `POST /flags/all`, which records no exposure. Flags are never read through
   `/optimization/choose-api` any more, so a key that names an API experiment or personalization
   rather than a flag now returns the caller's default (404 from `/flags/evaluate`).
+- **No flag read throws** (S11). An empty or invalid key, a context the service cannot resolve
+  and a missing default used to throw a `TypeError`; they now return the default with
+  `reason: 'error'` and `errorCode` `FLAG_NOT_FOUND`, `TARGETING_KEY_MISSING` or `GENERAL`
+  (missing default: `undefined`), with one warning per key. `allFlags` returns `{}` instead of
+  throwing. A 404 is `FLAG_NOT_FOUND`, any other failure `GENERAL`.
+- Flag reads time out after `flagTimeout`, 2 s by default (new option, also on `setConfig`);
+  tracking keeps `timeout` (10 s).
 - `FlagContext.sessionId` is deprecated and no longer sent: the flag routes take no session.
 
 ### Added

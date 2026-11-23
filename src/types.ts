@@ -38,6 +38,11 @@ export interface IntemptConfig {
   path?: string;
   /** Per-request timeout in milliseconds. */
   timeout?: number;
+  /**
+   * Timeout for a flag read, in milliseconds. Default 2000, the same in every SDK (S11); a flag
+   * read sits on the caller's request path, where tracking's 10 s would stall a page.
+   */
+  flagTimeout?: number;
   keepAlive?: boolean;
   logger?: Logger;
   debug?: boolean;
@@ -90,6 +95,7 @@ export interface ResolvedConfig {
   protocol: 'http' | 'https';
   path: string;
   timeout: number;
+  flagTimeout: number;
   keepAlive: boolean;
   logger: Logger;
   debug: boolean;

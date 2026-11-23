@@ -18,6 +18,7 @@ const DEFAULT_CONFIG = {
   protocol: 'https' as const,
   path: '',
   timeout: 10_000,
+  flagTimeout: 2_000,
   keepAlive: true,
   debug: false,
   batch: false as const,
@@ -115,6 +116,9 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     throw new RangeError('timeout must be a positive number of milliseconds');
   }
 
+  const flagTimeout = config.flagTimeout ?? DEFAULT_CONFIG.flagTimeout;
+  assertFlagTimeout(flagTimeout);
+
   const maxRequestEvents = config.maxRequestEvents ?? DEFAULT_CONFIG.maxRequestEvents;
   if (!Number.isInteger(maxRequestEvents) || maxRequestEvents < 1) {
     throw new RangeError('maxRequestEvents must be a positive integer');
@@ -145,6 +149,7 @@ export function resolveConfig(config: IntemptConfig): ResolvedConfig {
     protocol,
     path: config.path ?? DEFAULT_CONFIG.path,
     timeout,
+    flagTimeout,
     keepAlive: config.keepAlive ?? DEFAULT_CONFIG.keepAlive,
     logger,
     debug: config.debug ?? DEFAULT_CONFIG.debug,
@@ -226,6 +231,10 @@ export function mergeConfig(
     }
     next.timeout = patch.timeout;
   }
+  if (patch.flagTimeout !== undefined) {
+    assertFlagTimeout(patch.flagTimeout);
+    next.flagTimeout = patch.flagTimeout;
+  }
   if (patch.debug !== undefined) next.debug = patch.debug;
   if (patch.onFlagError !== undefined) {
     assertFlagHook(patch.onFlagError);
@@ -233,6 +242,12 @@ export function mergeConfig(
   }
 
   return next;
+}
+
+function assertFlagTimeout(value: number): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new RangeError('flagTimeout must be a positive number of milliseconds');
+  }
 }
 
 function assertFlagHook(hook: unknown): void {

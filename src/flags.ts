@@ -183,6 +183,8 @@ function matches(expected: FlagValueType, value: unknown, valueType?: string): b
   return typeof value === expected;
 }
 
+const WARNED_MAX = 1_000;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -190,6 +192,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export class Flags {
   readonly #deps: FlagsDeps;
   #authLogged = false;
+  readonly #warned = new Set<string>();
 
   constructor(deps: FlagsDeps) {
     this.#deps = deps;
@@ -201,29 +204,40 @@ export class Flags {
     defaultValue: T,
     options?: VariationOptions,
   ): Promise<FlagDetail<T>> {
-    if (typeof key !== 'string' || !key.trim()) {
-      throw new TypeError('variation: key is required');
-    }
-    if (!KEY_PATTERN.test(key)) {
-      // A key the service will reject is a programming error, and it must fail here rather than
-      // 400 downstream, where it would be indistinguishable from an outage.
-      throw new TypeError(
-        `variation: key must match ${KEY_PATTERN.source} (the platform's own pattern); got "${key}"`,
+    // S11: a caller mistake returns the default, never throws; one warning per key keeps it visible.
+    if (typeof key !== 'string' || !KEY_PATTERN.test(key)) {
+      this.#warnOnce(
+        `key:${String(key)}`,
+        `[intempt] flag key "${String(key)}" is empty or does not match ${KEY_PATTERN.source} ` +
+          "(the platform's own pattern); returning the default",
       );
+      return { value: defaultValue, reason: 'error', errorCode: 'FLAG_NOT_FOUND' };
     }
     if (defaultValue === undefined) {
-      throw new TypeError('variation: defaultValue is required');
+      this.#warnOnce(
+        `default:${key}`,
+        `[intempt] flag "${key}" was read without a default`,
+      );
+      return { value: defaultValue, reason: 'error', errorCode: 'GENERAL' };
     }
-    this.#assertAnswerable(context);
+    if (!this.#answerable(context, key)) {
+      return { value: defaultValue, reason: 'error', errorCode: 'TARGETING_KEY_MISSING' };
+    }
 
     const { flag, error } =
       options?.disableExposure === true
         ? await this.#unexposed(context, key)
         : await this.#evaluate(context, key);
     if (error) {
-      return { value: defaultValue, reason: 'error', error };
+      const errorCode = error.status === 404 ? 'FLAG_NOT_FOUND' : 'GENERAL';
+      return { value: defaultValue, reason: 'error', errorCode, error };
     }
-    const value = flag?.value;
+    if (flag === undefined) {
+      // Only a disableExposure read gets here: `/flags/all` leaves an unknown key out of its answer
+      // where `/flags/evaluate` would answer 404.
+      return { value: defaultValue, reason: 'error', errorCode: 'FLAG_NOT_FOUND' };
+    }
+    const value = flag.value;
     const fields = answer(flag);
     if (value === undefined || value === null) {
       return { value: defaultValue, ...fields };
@@ -294,7 +308,7 @@ export class Flags {
    * this is safe to call; a flag that was not served is absent rather than mapped to a value.
    */
   async all(context: FlagContext): Promise<Record<string, unknown>> {
-    this.#assertAnswerable(context);
+    if (!this.#answerable(context, null)) return {};
 
     const out: Record<string, unknown> = {};
     const { flags } = await this.#all(context, undefined, null);
@@ -307,33 +321,44 @@ export class Flags {
   }
 
   /**
-   * A context the service cannot resolve is a caller mistake, so it throws here.
-   *
-   * The flag routes take choose-api's `Identification` and answer 400 unless it names a visitor:
-   * a non-blank `userId`, or a `sourceId` with a non-blank `profileId` (`hasAnonymousId`). Without
-   * this check that 400 would be absorbed into the caller's default for every key, forever.
+   * Whether the service can resolve this context. The flag routes take choose-api's
+   * `Identification` and answer 400 unless it names a visitor: a non-blank `userId`, or a `sourceId`
+   * with a non-blank `profileId` (`hasAnonymousId`). Checked here so the caller is told why, once
+   * per key, instead of a 400 per call (S11: TARGETING_KEY_MISSING, never a throw).
    *
    * `accountId` is the trap worth naming: `FlagContext extends Identifiers`, so TypeScript accepts
    * it, and the request carries only `userId`/`profileId`/`sourceId`.
    */
-  #assertAnswerable(context: FlagContext): void {
+  #answerable(context: FlagContext, key: string | null): boolean {
     const present = (v: unknown): boolean => typeof v === 'string' && v.trim() !== '';
     const { sourceId } = this.#deps.config();
 
-    if (present(context?.userId)) return;
-    if (present(context?.profileId) && present(sourceId)) return;
+    if (present(context?.userId)) return true;
+    if (present(context?.profileId) && present(sourceId)) return true;
 
     const hadAccountOnly = present(
       (context as { accountId?: string } | undefined)?.accountId,
     );
-    throw new TypeError(
-      'variation: context needs either userId, or profileId together with a sourceId configured ' +
-        'on the client — the serving endpoint resolves an entity by one or the other and rejects ' +
-        'anything else' +
+    this.#warnOnce(
+      `identity:${key}`,
+      `[intempt] flag "${key ?? '(allFlags)'}": context needs either userId, or profileId ` +
+        'together with a sourceId configured on the client; returning the default' +
         (hadAccountOnly
-          ? '. accountId is not an identifier the serving endpoint accepts; it is dropped from the request'
+          ? '. accountId is not an identifier the serving endpoint accepts'
           : ''),
     );
+    return false;
+  }
+
+  /**
+   * Bounded so a stream of distinct bad keys cannot grow memory: when full it starts over, and a
+   * key seen long ago may warn once more rather than never.
+   */
+  #warnOnce(id: string, message: string): void {
+    if (this.#warned.has(id)) return;
+    if (this.#warned.size >= WARNED_MAX) this.#warned.clear();
+    this.#warned.add(id);
+    this.#deps.config().logger.warn(message);
   }
 
   /** `/flags/evaluate`: exactly one key; the server records the exposure. */
@@ -417,7 +442,7 @@ export class Flags {
 
   /**
    * choose-api's `Identification` minus `masterId` (Beso, 2026-11-20). No optional chaining on
-   * `context`: `#assertAnswerable` has already rejected an absent one.
+   * `context`: `#answerable` has already rejected an absent one.
    */
   #request(context: FlagContext): Record<string, unknown> {
     const { sourceId } = this.#deps.config();
@@ -435,6 +460,9 @@ export class Flags {
     return this.#deps.transport.post(
       this.#deps.transport.projectPath(route),
       compact(body),
+      {
+        timeout: this.#deps.config().flagTimeout,
+      },
     );
   }
 }

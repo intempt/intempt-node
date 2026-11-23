@@ -108,6 +108,7 @@ Intempt.init({
   protocol: 'https',
   path: '', // prefix before /v1, for a gateway
   timeout: 10_000,
+  flagTimeout: 2_000, // flag reads only; tracking uses timeout
   keepAlive: true,
 
   logger: console, // needs trace/debug/info/warn/error

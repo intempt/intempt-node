@@ -132,7 +132,12 @@ export class Transport {
     return `${path}/v1/${encodeURIComponent(org)}/projects/${encodeURIComponent(project)}${suffix}`;
   }
 
-  async post<T = unknown>(path: string, body: unknown): Promise<TransportResponse<T>> {
+  /** `timeout` overrides the client-wide one for this request: flag reads use `flagTimeout`. */
+  async post<T = unknown>(
+    path: string,
+    body: unknown,
+    { timeout = this.#config.timeout }: { timeout?: number } = {},
+  ): Promise<TransportResponse<T>> {
     const payload = Buffer.from(JSON.stringify(body), 'utf8');
     const requestLib = this.#config.protocol === 'https' ? https : http;
     // Always defined: #agents is only null when config.agent was supplied, and a
@@ -149,7 +154,7 @@ export class Transport {
       method: 'POST',
       path,
       agent,
-      timeout: this.#config.timeout,
+      timeout,
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': payload.byteLength,
@@ -231,7 +236,7 @@ export class Transport {
       request.on('timeout', () => {
         request.destroy(
           new IntemptApiError(
-            `Intempt API request timed out after ${this.#config.timeout}ms`,
+            `Intempt API request timed out after ${options.timeout}ms`,
             { timedOut: true },
           ),
         );
