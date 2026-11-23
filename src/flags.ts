@@ -33,10 +33,20 @@ import { IntemptApiError, Transport } from './transport';
 const FLAG_ROUTES = { evaluate: '/flags/evaluate', all: '/flags/all' } as const;
 
 /**
- * Why an evaluation returned the value it did. Mirrors the platform's `ChoiceReason`, plus
- * `error`. Only `off` and `error` are produced today: the serving response carries no reason.
+ * Why an evaluation returned the value it did: the server's reason, passed through unmapped (F6),
+ * or `error` when the read failed. Open to strings this SDK has not seen, so a reason the server
+ * adds later reaches the caller instead of failing a type guard.
  */
-export type FlagReason = 'targeted' | 'holdout' | 'not_targeted' | 'off' | 'error';
+export type FlagReason =
+  | 'targeted'
+  | 'not_targeted'
+  | 'not_in_rollout'
+  | 'off'
+  | 'killed'
+  | 'not_client_side'
+  | 'holdout'
+  | 'error'
+  | (string & {});
 
 /** The same kinds in every SDK (CONTRACT-R2 §S3). */
 export type FlagErrorKind =
@@ -82,6 +92,10 @@ export interface VariationOptions {
 export interface FlagDetail<T> {
   value: T;
   reason: FlagReason;
+  /** The served variation; absent when nothing was served or the server did not send it. */
+  variationId?: number;
+  /** The flag's declared type: `boolean`, `string`, `number` or `json`. */
+  valueType?: string;
   /** Present only when `reason` is `error`. */
   error?: FlagError;
 }
@@ -90,6 +104,9 @@ export interface FlagDetail<T> {
 interface RawFlag {
   key?: unknown;
   value?: unknown;
+  variationId?: unknown;
+  valueType?: unknown;
+  reason?: unknown;
 }
 
 /** Config for the flags-only client: the shared core, without the tracking options. */
@@ -121,8 +138,18 @@ function classify(key: string | null, error: unknown): FlagError {
   return { key, kind: 'bad_request', status };
 }
 
-/** A response the service did not answer is reported as such rather than guessed at. */
+/** An answer without a reason (an older server, F6 #4) reads `off`, as every answer did before. */
 const UNANSWERED: FlagReason = 'off';
+
+/** The answer fields of a well-formed `FlagValue`; a field of the wrong type is dropped, not trusted. */
+function answer(flag: RawFlag | undefined): Omit<FlagDetail<unknown>, 'value' | 'error'> {
+  return {
+    reason:
+      typeof flag?.reason === 'string' && flag.reason !== '' ? flag.reason : UNANSWERED,
+    ...(typeof flag?.variationId === 'number' ? { variationId: flag.variationId } : {}),
+    ...(typeof flag?.valueType === 'string' ? { valueType: flag.valueType } : {}),
+  };
+}
 
 /** The platform's own key pattern (`FlagEvaluateRequest.key`), tightened to `+`: blank is rejected first. */
 const KEY_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -169,9 +196,9 @@ export class Flags {
     }
     const value = flag?.value;
     if (value === undefined || value === null) {
-      return { value: defaultValue, reason: UNANSWERED };
+      return { value: defaultValue, ...answer(flag) };
     }
-    return { value: value as T, reason: UNANSWERED };
+    return { value: value as T, ...answer(flag) };
   }
 
   async value<T>(

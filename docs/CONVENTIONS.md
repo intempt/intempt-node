@@ -33,9 +33,9 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
 - **`variationDetail` reports a failure, not a cause** (INT-7454, CONTRACT-R2 §S3). A read that
   failed returns the default with `reason: 'error'` and a `FlagError`
   `{key, kind: auth|bad_request|server|timeout|network|parse, status?}`, which also reaches the
-  `onFlagError` hook. 408 is `timeout` and 429 is `server`, as in php. An answered read is `off`
-  whether or not a value was served: the serving response sends no reason, so "off" and "not
-  targeted" cannot be told apart and the SDK does not guess (INT-7457). A 401/403 is logged at
+  `onFlagError` hook. 408 is `timeout` and 429 is `server`, as in php. An answered read carries the
+  server's `reason` (passed through unmapped, F6), `variationId` and `valueType`; an older server
+  that sends no reason reads `off`. A 401/403 is logged at
   error once per client, naming the key prefix and sourceId, and at debug after.
 - **Exposure is chosen by route** (F32 hybrid exposure, Beso 2026-11-17). `/flags/evaluate` records
   the exposure on the server, at the moment code reads the flag, so a single read records.

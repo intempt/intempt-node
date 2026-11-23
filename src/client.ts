@@ -154,9 +154,9 @@ export class IntemptClient {
   }
 
   /**
-   * The value plus why it was returned (INT-7454). `reason` is `'error'`, with `error` set, when the
-   * read failed and `defaultValue` came back; otherwise it is `'off'` whether or not a value was
-   * served, because the platform sends no reason to tell "off" from "not targeted" (INT-7457).
+   * The value plus why it was returned (INT-7454, F6): the server's `reason`, `variationId` and
+   * `valueType` when it sent them, or `reason: 'error'` with `error` set when the read failed and
+   * `defaultValue` came back.
    */
   async variationDetail<T>(
     key: string,

@@ -16,6 +16,10 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `variationDetail` carries the server's answer (F6): `reason` passed through unmapped
+  (`targeted`, `not_targeted`, `not_in_rollout`, `off`, `not_client_side`, ...), plus
+  `variationId` and `valueType` when sent. `FlagReason` is now open to reasons added later. An
+  answer without a reason still reads `off`.
 - `intempt-nodejs-sdk/flags`: a flags-only entry (`IntemptFlags.init`) that loads the flag module
   and the shared core only, never the batcher, ingest or consent.
 

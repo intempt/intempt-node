@@ -109,9 +109,11 @@ async function detailIsTyped(): Promise<void> {
   const value: boolean = detail.value;
   const reason: FlagReason = detail.reason;
   const kind: FlagErrorKind | undefined = detail.error?.kind;
-  // @ts-expect-error a reason the SDK never produces is not part of the union
-  const invented: FlagReason = 'unknown';
-  void [value, reason, kind, invented];
+  // F6: the server's reason is passed through, so the type is open to reasons added later.
+  const future: FlagReason = 'some_future_reason';
+  const variationId: number | undefined = detail.variationId;
+  const valueType: string | undefined = detail.valueType;
+  void [value, reason, kind, future, variationId, valueType];
 }
 void detailIsTyped;
 

@@ -260,7 +260,7 @@ describe('variationDetail', () => {
     await c.close();
   });
 
-  it("a served value reads 'off' with no error: the platform sends no reason (INT-7457)", async () => {
+  it("a served value without a reason (an older server) reads 'off' with no error (F6 #4)", async () => {
     nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, { key: 'k', value: 'on' });
     const c = client();
 
