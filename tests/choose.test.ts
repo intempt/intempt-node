@@ -186,11 +186,36 @@ describe('choose() failure resolves []', () => {
     },
   );
 
-  it('a timeout resolves [] and warns, using the client timeout', async () => {
+  it('a timeout resolves [] and warns at flagTimeout, even when timeout is longer', async () => {
     nock(ORIGIN).post(CHOOSE_PATH).delay(300).reply(200, { choices: [] });
     const logger = testLogger();
-    const c = client({ logger, timeout: 50 });
+    const c = client({ logger, timeout: 10_000, flagTimeout: 50 });
     await expect(c.choose({ userId: 'u-1' }, { names: ['hero'] })).resolves.toEqual([]);
+    expect(logger.calls.warn).toHaveLength(1);
+    await c.close();
+  });
+
+  it('is not cut short by a shorter timeout when flagTimeout allows the reply', async () => {
+    nock(ORIGIN)
+      .post(CHOOSE_PATH)
+      .delay(300)
+      .reply(200, { choices: [{ name: 'hero', variant: 'a', payload: {} }] });
+    const logger = testLogger();
+    const c = client({ logger, timeout: 50, flagTimeout: 5_000 });
+    await expect(c.choose({ userId: 'u-1' }, { names: ['hero'] })).resolves.toHaveLength(
+      1,
+    );
+    expect(logger.calls.warn).toHaveLength(0);
+    await c.close();
+  });
+
+  it('gives up after the default 2 s flagTimeout, not the 10 s timeout', async () => {
+    nock(ORIGIN).post(CHOOSE_PATH).delay(2_600).reply(200, { choices: [] });
+    const logger = testLogger();
+    const c = client({ logger });
+    const started = Date.now();
+    await expect(c.choose({ userId: 'u-1' }, { names: ['hero'] })).resolves.toEqual([]);
+    expect(Date.now() - started).toBeLessThan(2_500);
     expect(logger.calls.warn).toHaveLength(1);
     await c.close();
   });

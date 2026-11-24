@@ -148,8 +148,8 @@ export class Choose {
    * (CONTRACT-R2 §S4); a backend that predates the field ignores it and records anyway. Always pass
    * `names` or `groups` on anything that runs per request.
    *
-   * No timeout override: this is a render-path read like `track`, so it uses `config.timeout`
-   * rather than the 2 s `flagTimeout`.
+   * Bounded by `flagTimeout`, not `timeout`: this is a render-path read, so it must fall back to
+   * `[]` as fast as a flag read does (D19).
    */
   async #request(
     context: ChooseContext,
@@ -171,6 +171,7 @@ export class Choose {
     return this.#deps.transport.post(
       this.#deps.transport.projectPath('/optimization/choose-api'),
       body,
+      { timeout: this.#deps.config().flagTimeout },
     );
   }
 }
