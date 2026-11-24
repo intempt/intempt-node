@@ -38,6 +38,44 @@ describe('variationDetail reads the answer fields', () => {
     await c.close();
   });
 
+  it('a served flag carries the matched rule position and the variant name', async () => {
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, {
+      key: 'new-checkout',
+      value: true,
+      variationId: 31,
+      valueType: 'boolean',
+      reason: 'targeted',
+      rule: 2,
+      variant: 'on',
+    });
+    const c = client();
+    await expect(c.variationDetail('new-checkout', ctx, false)).resolves.toEqual({
+      value: true,
+      reason: 'targeted',
+      variationId: 31,
+      valueType: 'boolean',
+      rule: 2,
+      variant: 'on',
+    });
+    await c.close();
+  });
+
+  it('rule and variant of the wrong type are dropped, never failing the read', async () => {
+    nock(ORIGIN).post(FLAG_EVALUATE_PATH).reply(200, {
+      key: 'k',
+      value: 'x',
+      reason: 'targeted',
+      rule: '2',
+      variant: 5,
+    });
+    const c = client();
+    await expect(c.variationDetail('k', ctx, 'd')).resolves.toEqual({
+      value: 'x',
+      reason: 'targeted',
+    });
+    await c.close();
+  });
+
   it.each(['not_targeted', 'not_in_rollout', 'off', 'killed', 'not_client_side'])(
     'an unserved flag returns the default with the server reason %s',
     async (reason) => {

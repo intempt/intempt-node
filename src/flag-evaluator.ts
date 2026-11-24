@@ -44,7 +44,6 @@ export type FlagReason =
   | 'off'
   | 'killed'
   | 'not_client_side'
-  | 'holdout'
   | 'error'
   | (string & {});
 
@@ -101,6 +100,10 @@ export interface FlagDetail<T> {
   variationId?: number;
   /** The flag's declared type: `boolean`, `string`, `number` or `json`. */
   valueType?: string;
+  /** The matched rule's 1-based position; absent when nothing was served or the server did not send it. */
+  rule?: number;
+  /** The served variant's name; absent when nothing was served or the server did not send it. */
+  variant?: string;
   /** Present only when `reason` is `error`. */
   error?: FlagError;
 }
@@ -112,6 +115,8 @@ interface RawFlag {
   variationId?: unknown;
   valueType?: unknown;
   reason?: unknown;
+  rule?: unknown;
+  variant?: unknown;
 }
 
 export interface FlagsDeps {
@@ -149,6 +154,8 @@ function answer(flag: RawFlag | undefined): Omit<FlagDetail<unknown>, 'value' | 
       typeof flag?.reason === 'string' && flag.reason !== '' ? flag.reason : UNANSWERED,
     ...(typeof flag?.variationId === 'number' ? { variationId: flag.variationId } : {}),
     ...(typeof flag?.valueType === 'string' ? { valueType: flag.valueType } : {}),
+    ...(typeof flag?.rule === 'number' ? { rule: flag.rule } : {}),
+    ...(typeof flag?.variant === 'string' ? { variant: flag.variant } : {}),
   };
 }
 
