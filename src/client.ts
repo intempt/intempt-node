@@ -356,6 +356,7 @@ export class IntemptClient {
     if (this.#closed) return { sent: 0, failed: 0 };
     const result = this.#batcher ? await this.#batcher.close() : { sent: 0, failed: 0 };
     this.#closed = true;
+    this.#flags.close();
     this.#transport.destroy();
     return result;
   }

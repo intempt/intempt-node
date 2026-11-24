@@ -2,6 +2,7 @@ import type { Identifiers, ResolvedConfig } from './types';
 import { compact } from './utils';
 import { IntemptApiError } from './transport';
 import type { Transport } from './transport';
+import { FlagStream } from './flag-stream';
 
 /**
  * The flag evaluator behind `IntemptClient` and the `./flags` entry. Internal: not exported from
@@ -25,7 +26,11 @@ import type { Transport } from './transport';
  * (`OptimizationChooserRoutes`, 358d07d). The gateway routes for them are not built yet, so the
  * external path is unsettled: if the gateway exposes them elsewhere, this is the one place to change.
  */
-const FLAG_ROUTES = { evaluate: '/flags/evaluate', all: '/flags/all' } as const;
+const FLAG_ROUTES = {
+  evaluate: '/flags/evaluate',
+  all: '/flags/all',
+  stream: '/flags/stream',
+} as const;
 
 /**
  * Why an evaluation returned the value it did: the server's reason, passed through unmapped (F6),
@@ -176,12 +181,24 @@ function matches(expected: FlagValueType, value: unknown, valueType?: string): b
 
 const WARNED_MAX = 1_000;
 
+interface CacheEntry {
+  key: string;
+  flag: RawFlag;
+  at: number;
+  /** When the read that produced it began: an answer older than the current connection is not fresh. */
+  started: number;
+  /** False when the stream was down, or dropped the key, while the read was in flight. */
+  trusted: boolean;
+}
+
 /**
- * F15 without a stream (X6 is not built): the last-known value is served only when a read fails,
- * for up to 24 h, at most 10,000 entries per client. The 60 s cache of the row is only valid while
- * a stream can drop changed keys, so it is not used here.
+ * F15: the last-known value is served when a read fails, for up to 24 h. While the X6 stream is
+ * connected an answer younger than FRESH_TTL_MS is served without asking, because the stream drops
+ * a changed key at once; without a stream the server is asked on every call. At most 10,000
+ * entries per client, oldest dropped.
  */
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+export const FRESH_TTL_MS = 60 * 1000;
 export const CACHE_MAX = 10_000;
 
 /**
@@ -239,12 +256,56 @@ export class Flags {
   readonly #deps: FlagsDeps;
   #authLogged = false;
   readonly #warned = new Set<string>();
-  readonly #cache = new Map<string, { flag: RawFlag; at: number }>();
+  readonly #cache = new Map<string, CacheEntry>();
   readonly #cacheMax: number;
+  readonly #stream: FlagStream;
+  /** Reads in flight, so a drop that lands mid-request keeps its answer from being trusted as fresh. */
+  readonly #pending = new Set<{ key: string; stale: boolean }>();
+  #connectedAt = 0;
 
   constructor(deps: FlagsDeps) {
     this.#deps = deps;
     this.#cacheMax = deps.cacheMax ?? CACHE_MAX;
+    this.#stream = new FlagStream({
+      open: (handlers) =>
+        deps.transport.openStream(
+          deps.transport.projectPath(FLAG_ROUTES.stream),
+          handlers,
+        ),
+      onChange: (keys) => this.#drop(keys),
+      onState: (connected) => {
+        if (connected) this.#connectedAt = Date.now();
+        for (const read of this.#pending) read.stale = true;
+      },
+    });
+  }
+
+  /** Ends the stream; later reads ask the server every time. */
+  close(): void {
+    this.#stream.close();
+  }
+
+  #drop(keys: string[]): void {
+    for (const read of this.#pending) {
+      if (keys.length === 0 || keys.includes(read.key)) read.stale = true;
+    }
+    if (keys.length === 0) {
+      this.#cache.clear();
+      return;
+    }
+    for (const [id, entry] of this.#cache) {
+      if (keys.includes(entry.key)) this.#cache.delete(id);
+    }
+  }
+
+  #fresh(id: string): RawFlag | undefined {
+    if (!this.#stream.connected) return undefined;
+    const entry = this.#cache.get(id);
+    if (entry === undefined || !entry.trusted) return undefined;
+    if (entry.started < this.#connectedAt || Date.now() - entry.at > FRESH_TTL_MS) {
+      return undefined;
+    }
+    return entry.flag;
   }
 
   async detail<T>(
@@ -273,11 +334,25 @@ export class Flags {
       return { value: defaultValue, reason: 'error', errorCode: 'TARGETING_KEY_MISSING' };
     }
 
-    const { flag, error } =
-      options?.disableExposure === true
-        ? await this.#unexposed(context, key)
-        : await this.#evaluate(context, key);
+    this.#stream.start();
     const id = cacheKey(key, context, this.#deps.config().sourceId);
+    const fresh = this.#fresh(id);
+    if (fresh !== undefined) return typed(fresh, defaultValue);
+
+    const read = { key, stale: false };
+    const started = Date.now();
+    const trusted = this.#stream.connected;
+    this.#pending.add(read);
+    let outcome: { flag?: RawFlag; error?: FlagError };
+    try {
+      outcome =
+        options?.disableExposure === true
+          ? await this.#unexposed(context, key)
+          : await this.#evaluate(context, key);
+    } finally {
+      this.#pending.delete(read);
+    }
+    const { flag, error } = outcome;
     if (error) {
       const cached = FALLBACK_KINDS.has(error.kind) ? this.#recall(id) : undefined;
       if (cached) return typed(cached, defaultValue, 'cached');
@@ -296,15 +371,21 @@ export class Flags {
       // Off, killed or not targeted: forgotten, so an outage cannot serve the old value again.
       this.#cache.delete(id);
     } else {
-      this.#remember(id, flag);
+      this.#remember(id, key, flag, started, trusted && !read.stale);
     }
     return typed(flag, defaultValue);
   }
 
   /** Re-inserted on every write so Map order is age order and the first key is the oldest. */
-  #remember(id: string, flag: RawFlag): void {
+  #remember(
+    id: string,
+    key: string,
+    flag: RawFlag,
+    started: number,
+    trusted: boolean,
+  ): void {
     this.#cache.delete(id);
-    this.#cache.set(id, { flag, at: Date.now() });
+    this.#cache.set(id, { key, flag, at: Date.now(), started, trusted });
     if (this.#cache.size > this.#cacheMax) {
       this.#cache.delete(this.#cache.keys().next().value as string);
     }

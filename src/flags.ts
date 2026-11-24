@@ -117,6 +117,7 @@ export class IntemptFlagsClient {
   /** Releases keep-alive sockets. The client is unusable after. */
   async close(): Promise<void> {
     this.#closed = true;
+    this.#flags.close();
     this.#transport.destroy();
   }
 

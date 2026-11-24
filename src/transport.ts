@@ -15,6 +15,19 @@ import type { ApiKeyCredentials } from './credentials';
 import type { ResolvedConfig } from './types';
 import { LIB_HEADER, LIB_NAME, LIB_VERSION } from './stamp';
 
+/** Three missed 15 s heartbeats (contract C2): the stream is treated as dead and reopened. */
+export const STREAM_IDLE_MS = 45_000;
+
+export interface StreamHandlers {
+  onOpen(): void;
+  onMessage(event: string, data: string): void;
+  onClose(): void;
+}
+
+export interface StreamHandle {
+  close(): void;
+}
+
 /** A non-2xx response, or a transport failure with no response at all. */
 export class IntemptApiError extends Error {
   readonly status?: number;
@@ -277,6 +290,85 @@ export class Transport {
       request.write(payload);
       request.end();
     });
+  }
+
+  /**
+   * A long-lived GET read as server-sent events. `onClose` fires exactly once, for a refused
+   * status, a socket error, an idle stream (no bytes, heartbeat comments included, for
+   * STREAM_IDLE_MS) or the server ending it; `close()` ends it without firing `onClose`.
+   */
+  openStream(path: string, handlers: StreamHandlers): StreamHandle {
+    const requestLib = this.#config.protocol === 'https' ? https : http;
+    const agent: http.Agent =
+      this.#config.agent ?? this.#proxyAgent ?? this.#agents![this.#config.protocol];
+    const options: http.RequestOptions = {
+      host: this.#config.host,
+      method: 'GET',
+      path,
+      agent,
+      headers: {
+        Accept: 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Authorization: this.#credentials.toAuthorizationHeader(),
+        [LIB_HEADER]: `${LIB_NAME}/${LIB_VERSION}`,
+      },
+    };
+    if (this.#config.port !== undefined) {
+      options.port = this.#config.port;
+    }
+
+    let finished = false;
+    let idle: NodeJS.Timeout | undefined;
+    const finish = (notify: boolean): void => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(idle);
+      request.destroy();
+      if (notify) handlers.onClose();
+    };
+    const armIdle = (): void => {
+      clearTimeout(idle);
+      idle = setTimeout(() => finish(true), STREAM_IDLE_MS);
+      idle.unref();
+    };
+
+    const request = requestLib.request(options, (res) => {
+      if (res.statusCode !== 200) {
+        this.#config.logger.debug(`[intempt] flag stream refused with ${res.statusCode}`);
+        res.resume();
+        finish(true);
+        return;
+      }
+      res.setEncoding('utf8');
+      armIdle();
+      handlers.onOpen();
+      let buffer = '';
+      let event = '';
+      let data: string[] = [];
+      res.on('data', (chunk: string) => {
+        armIdle();
+        buffer += chunk;
+        let at: number;
+        while ((at = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, at).replace(/\r$/, '');
+          buffer = buffer.slice(at + 1);
+          if (line === '') {
+            if (data.length > 0) handlers.onMessage(event || 'message', data.join('\n'));
+            event = '';
+            data = [];
+          } else if (line.startsWith('event:')) {
+            event = line.slice(6).trim();
+          } else if (line.startsWith('data:')) {
+            data.push(line.slice(5).replace(/^ /, ''));
+          }
+        }
+      });
+      res.on('end', () => finish(true));
+      res.on('error', () => finish(true));
+    });
+    request.on('error', () => finish(true));
+    request.end();
+    return { close: () => finish(false) };
   }
 
   /** Releases keep-alive sockets so a process can exit promptly. */

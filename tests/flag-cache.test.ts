@@ -21,7 +21,7 @@ import { Transport } from '../src/transport';
 setupNock();
 
 /**
- * F15, the no-stream half (X6 is not built, so this is every read today): ask the server every
+ * F15, the no-stream half (tests/flag-stream.test.ts covers the stream): ask the server every
  * time; serve the last-known value per (key, identity) only when a call fails, for up to 24 h,
  * with reason `cached`; at most 10,000 entries, oldest dropped. A 404 or 400 never falls back, and
  * an answer that serves nothing (off, killed, not targeted) forgets the entry, so an outage cannot

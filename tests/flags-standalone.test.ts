@@ -57,6 +57,10 @@ const CHILD = `
 const http = require('node:http');
 const seen = [];
 const server = http.createServer((req, res) => {
+  if (req.method === 'GET') {
+    res.writeHead(404).end();
+    return;
+  }
   let raw = '';
   req.on('data', (c) => (raw += c));
   req.on('end', () => {
