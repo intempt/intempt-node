@@ -258,7 +258,12 @@ const on = await intempt.boolVariation('new_checkout', { userId: 'u1' }, false);
 
 Each read sends one key to `POST /flags/evaluate`, which records the exposure; the default is
 returned whenever no value was served or the read failed. `allFlags(context)` reads every served
-flag from `/flags/all`, which records nothing. A backend that only checks flags can load the
+flag from `/flags/all`, which records nothing on fetch; the first time code reads each served key
+from the returned map, the SDK reports that one exposure to `POST /flags/expose` in the
+background (once per key per map, bounded by `flagTimeout`, never throwing or delaying the read).
+So a request that prefetches 12 flags and reads one records one exposure. `Object.keys` and `in`
+record nothing; spreading the map, `Object.entries` or `JSON.stringify` read every value and
+expose every served key. A backend that only checks flags can load the
 flags entry alone, without the batcher:
 
 ```ts

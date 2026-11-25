@@ -5,6 +5,15 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`allFlags` reports exposure on first read** (F32 hybrid exposure). The map `allFlags` returns
+  sends `POST /flags/expose {identification, key, variationId}` the first time each served key is
+  read from it, once per key per map, so a page that prefetches 12 flags and reads one records one
+  exposure. Fire-and-forget, bounded by `flagTimeout`; a failure is logged once and never throws or
+  delays the read. `Object.keys` and `in` record nothing; spreading, `Object.entries` or
+  `JSON.stringify` read every value and so expose every served key.
+
 ### Changed
 
 - **Flags are read from the flag routes** (F32/F33). `variation`, `variationDetail` and the typed

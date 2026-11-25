@@ -225,6 +225,8 @@ export class IntemptClient {
 
   /**
    * Every flag served to this person, in one call, from `/flags/all`, which publishes no exposure.
+   * The first read of each served key from the returned map reports that exposure to
+   * `/flags/expose` in the background, once per key per map (F32); `Object.keys` and `in` do not.
    * A flag that was not served is absent from the map.
    */
   async allFlags(context: FlagContext): Promise<Record<string, unknown>> {

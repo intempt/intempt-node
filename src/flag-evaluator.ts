@@ -23,12 +23,12 @@ import { FlagStream } from './flag-stream';
 
 /**
  * Route suffixes under `/v1/{org}/projects/{project}`, as audience-service declares them
- * (`OptimizationChooserRoutes`, 358d07d). The gateway routes for them are not built yet, so the
- * external path is unsettled: if the gateway exposes them elsewhere, this is the one place to change.
+ * (`OptimizationChooserRoutes`) and the gateway routes them.
  */
 const FLAG_ROUTES = {
   evaluate: '/flags/evaluate',
   all: '/flags/all',
+  expose: '/flags/expose',
   stream: '/flags/stream',
 } as const;
 
@@ -269,6 +269,7 @@ export class Flags {
   /** Reads in flight, so a drop that lands mid-request keeps its answer from being trusted as fresh. */
   readonly #pending = new Set<{ key: string; stale: boolean }>();
   #connectedAt = 0;
+  #closed = false;
 
   constructor(deps: FlagsDeps) {
     this.#deps = deps;
@@ -289,6 +290,7 @@ export class Flags {
 
   /** Ends the stream; later reads ask the server every time. */
   close(): void {
+    this.#closed = true;
     this.#stream.close();
   }
 
@@ -458,20 +460,73 @@ export class Flags {
   }
 
   /**
-   * Every flag served to this person, as a key -> value map. `/flags/all` publishes no exposure, so
-   * this is safe to call; a flag that was not served is absent rather than mapped to a value.
+   * Every flag served to this person, as a key -> value map. `/flags/all` publishes nothing (F32
+   * hybrid exposure), so the map reports the exposure itself: the first read of each served key
+   * sends `/flags/expose` once for this map. Counting the prefetch would mark every page load as
+   * exposed and dilute the experiment. Only a property read counts; `Object.keys` and `in` do not,
+   * but anything that reads every value (spread, `Object.entries`, `JSON.stringify`) exposes every
+   * served key.
    */
   async all(context: FlagContext): Promise<Record<string, unknown>> {
     if (!this.#answerable(context, null)) return {};
 
     const out: Record<string, unknown> = {};
+    const served = new Map<string, number>();
     const { flags } = await this.#all(context, undefined, null);
     for (const flag of flags) {
       if (typeof flag.key === 'string' && flag.key !== '') {
         out[flag.key] = flag.value ?? null;
+        // Nothing served (off, killed, not targeted) or no variation named: there is no exposure
+        // the server could record, and /flags/expose requires a variationId.
+        if (
+          flag.value !== undefined &&
+          flag.value !== null &&
+          typeof flag.variationId === 'number'
+        ) {
+          served.set(flag.key, flag.variationId);
+        }
       }
     }
-    return out;
+    if (served.size === 0) return out;
+
+    const request = this.#request(context);
+    return new Proxy(out, {
+      get: (target, property, receiver) => {
+        if (typeof property === 'string') {
+          const variationId = served.get(property);
+          if (variationId !== undefined) {
+            served.delete(property);
+            this.#expose(request, property, variationId);
+          }
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+  }
+
+  /**
+   * Fire-and-forget: the read has already been answered, so a lost exposure costs one data point
+   * and must never cost the caller a value, a throw or a wait. Not an `onFlagError`: no read failed.
+   * After `close()` the transport is gone, so nothing is sent.
+   */
+  #expose(request: Record<string, unknown>, key: string, variationId: number): void {
+    if (this.#closed) return;
+    try {
+      this.#post(FLAG_ROUTES.expose, { ...request, key, variationId }).catch(
+        (error: unknown) => this.#exposeFailed(key, error),
+      );
+    } catch (error) {
+      this.#exposeFailed(key, error);
+    }
+  }
+
+  #exposeFailed(key: string, error: unknown): void {
+    const { kind, status } = classify(key, error);
+    this.#warnOnce(
+      `expose:${kind}`,
+      `[intempt] flag exposure for "${key}" was not recorded (${kind}` +
+        `${status === undefined ? '' : ` ${status}`}); further ${kind} failures are not logged`,
+    );
   }
 
   /**

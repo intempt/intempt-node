@@ -47,10 +47,15 @@ to this repo. Where the two disagree, the contract wins and this file is the bug
   a 404 forgets the entry. The 60 s cache of F15 needs the X6 change stream, which is not built.
 - **Exposure is chosen by route** (F32 hybrid exposure, Beso 2026-11-17). `/flags/evaluate` records
   the exposure on the server, at the moment code reads the flag, so a single read records.
-  `/flags/all` publishes nothing: `allFlags()` and a `{ disableExposure: true }` read (sent as
-  `/flags/all` with that one key) never mark anyone exposed. Neither route has an `exposure` field.
-  Exposure-on-read for a prefetched set (`/flags/expose`) is not built on the server, so the SDK
-  keeps no `allFlags` result and serves no read from one.
+  `/flags/all` publishes nothing: the fetch behind `allFlags()` and a `{ disableExposure: true }`
+  read (sent as `/flags/all` with that one key) never mark anyone exposed. Neither route has an
+  `exposure` field. The map `allFlags()` returns reports exposure on read instead: the first
+  property read of each served key sends `POST /flags/expose {identification, key, variationId}`
+  once for that map (same identification as evaluate, the variationId the server assigned).
+  Fire-and-forget, bounded by `flagTimeout`, never throws, never delays the read, never reaches
+  `onFlagError`. A key served nothing or without a variationId sends nothing. The server dedupes per
+  visitor + flag + variation and answers 202 with nothing published for a shipped/off flag (D3,
+  D14). A `disableExposure` read keeps no set and never exposes.
 
 - **`profileId` outranks `userId`, and callers must be told so.** The platform resolves a PROFILE
   entity keyed on `profileId` whenever it is non-blank and only falls through to `userId` when it is
