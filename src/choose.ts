@@ -3,7 +3,7 @@ import { compact } from './utils';
 import { IntemptApiError } from './transport';
 import type { Transport } from './transport';
 
-/** Who is being served. Not `FlagContext`: its `sessionId` is deprecated and never sent, and choose-api needs it for `once_per_visit`. */
+/** Who is being served. Not `FlagContext`: choose-api also needs `sessionId` for `once_per_visit`. */
 export interface ChooseContext {
   userId?: string;
   /** Paired with the client's `sourceId`. When both ids are sent the server decides which one buckets. */

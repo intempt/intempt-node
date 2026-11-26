@@ -69,9 +69,10 @@ describe('allFlags reports an exposure on first read (F32, /flags/expose)', () =
         device: 'all',
         key: 'new-checkout',
         variationId: 100,
+        sessionId: 's-1',
       },
     ]);
-    expect(JSON.stringify(sent[0])).not.toMatch(/masterId|sessionId|exposure/);
+    expect(JSON.stringify(sent[0])).not.toMatch(/masterId|exposure/);
     await c.close();
   });
 

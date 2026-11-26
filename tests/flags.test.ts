@@ -353,12 +353,12 @@ describe('the /flags/evaluate request body', () => {
     expect(Object.keys(body)).not.toContain('keys');
   });
 
-  it('never sends sessionId, even when the caller supplies one (F32)', async () => {
+  it("sends the caller's sessionId, which the exposure records (F32, Beso 2026-11-26)", async () => {
     const body = await bodySentBy((c) =>
       c.variation('k', { userId: 'u', sessionId: 's-42' }, 'd'),
     );
 
-    expect(Object.keys(body)).not.toContain('sessionId');
+    expect(body.sessionId).toBe('s-42');
   });
 
   it("sends device 'all'", async () => {

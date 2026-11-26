@@ -71,9 +71,9 @@ export interface FlagContext extends Identifiers {
   profileId?: string;
 
   /**
-   * @deprecated Ignored. The flag routes take no session (F32: F7 forbids a session fallback for
-   * flags, so the field was removed rather than ignored on the server). Kept so existing callers
-   * still compile.
+   * Recorded on the flag's exposure, as `choose` records it on an experience's (F32, Beso
+   * 2026-11-26). Never an identifier: a context with only a `sessionId` still returns the default.
+   * Sent to `/flags/evaluate` and `/flags/expose`; `/flags/all` records nothing and gets none.
    */
   sessionId?: string;
 }
@@ -489,7 +489,7 @@ export class Flags {
     }
     if (served.size === 0) return out;
 
-    const request = this.#request(context);
+    const request = { ...this.#request(context), sessionId: context.sessionId };
     return new Proxy(out, {
       get: (target, property, receiver) => {
         if (typeof property === 'string') {
@@ -577,8 +577,13 @@ export class Flags {
   ): Promise<{ flag?: RawFlag; error?: FlagError }> {
     let body: unknown;
     try {
-      body = (await this.#post(FLAG_ROUTES.evaluate, { ...this.#request(context), key }))
-        .body;
+      body = (
+        await this.#post(FLAG_ROUTES.evaluate, {
+          ...this.#request(context),
+          sessionId: context.sessionId,
+          key,
+        })
+      ).body;
     } catch (error) {
       return { error: this.#failed(classify(key, error), error) };
     }

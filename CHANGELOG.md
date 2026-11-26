@@ -32,7 +32,9 @@ This project follows [Semantic Versioning](https://semver.org/).
   throwing. A 404 is `FLAG_NOT_FOUND`, any other failure `GENERAL`.
 - Flag reads time out after `flagTimeout`, 2 s by default (new option, also on `setConfig`);
   tracking keeps `timeout` (10 s).
-- `FlagContext.sessionId` is deprecated and no longer sent: the flag routes take no session.
+- `FlagContext.sessionId` is sent to `/flags/evaluate` and `/flags/expose`, so the flag's exposure
+  records the session as an experience's does (Beso 2026-11-26). It is never an identifier, and
+  `/flags/all` gets none.
 
 ### Added
 

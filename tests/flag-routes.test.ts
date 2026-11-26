@@ -17,7 +17,7 @@ setupNock();
 /**
  * F32/F33: flags are read from audience-service's flag routes, never from choose-api.
  * `/flags/evaluate` takes exactly one key and records the exposure on the server; `/flags/all`
- * publishes nothing (FlagEvaluateRequest / FlagAllRequest / FlagValue at audience-service 358d07d).
+ * publishes nothing (FlagEvaluateRequest / FlagAllRequest / FlagValue at audience-service e10de6d).
  */
 const ctx = { userId: 'u-1' };
 
@@ -56,12 +56,29 @@ describe('variation reads /flags/evaluate', () => {
     ]);
   });
 
-  it('never sends sessionId: the flag routes have no such field (F32)', async () => {
+  it("sends the caller's sessionId top-level, as choose-api takes it (F32, Beso 2026-11-26)", async () => {
     const sent = capture(FLAG_EVALUATE_PATH, { key: 'k', value: 1 });
     const c = client();
     await c.variation('k', { userId: 'u-1', sessionId: 's-1' }, 0);
     await c.close();
-    expect(sent[0]).not.toHaveProperty('sessionId');
+    expect(sent[0]).toMatchObject({
+      identification: { userId: 'u-1' },
+      sessionId: 's-1',
+    });
+  });
+
+  it('sends no sessionId to /flags/all, which records nothing', async () => {
+    const unexposed = capture(FLAG_ALL_PATH, { flags: [] });
+    const all = capture(FLAG_ALL_PATH, { flags: [] });
+    const c = client();
+    await c.variation('k', { userId: 'u-1', sessionId: 's-1' }, 0, {
+      disableExposure: true,
+    });
+    await c.allFlags({ userId: 'u-1', sessionId: 's-1' });
+    await c.close();
+    expect([...unexposed, ...all]).toHaveLength(2);
+    for (const body of [...unexposed, ...all])
+      expect(body).not.toHaveProperty('sessionId');
   });
 
   it('returns the default when nothing was served (value null)', async () => {

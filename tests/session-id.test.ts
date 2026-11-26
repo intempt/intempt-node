@@ -20,8 +20,8 @@ setupNock();
 /**
  * INT-7446, CONTRACT-R2 §S5: a server SDK has no session, so it sends NO sessionId on any
  * ingestion write and never invents one. A guard, not a fix: no write path emitted one when this was
- * checked. Flag calls send none either: the flag routes have no session field (F32), so a
- * caller-supplied `FlagContext.sessionId` is accepted for compatibility and dropped.
+ * checked. A flag read sends a caller-supplied `FlagContext.sessionId` so its exposure carries the
+ * session (F32, Beso 2026-11-26), and never invents one.
  */
 describe('sessionId on the wire (INT-7446)', () => {
   function captureTrack(times: number): unknown[] {
@@ -66,7 +66,7 @@ describe('sessionId on the wire (INT-7446)', () => {
     expect(payload).not.toHaveProperty('sessionId');
   });
 
-  it('is dropped from a flag call even when the caller supplies one (F32)', async () => {
+  it('is sent on a flag call when the caller supplies one (F32)', async () => {
     let sent: Record<string, unknown> | undefined;
     nock(ORIGIN)
       .post(FLAG_EVALUATE_PATH, (body: Record<string, unknown>) => {
@@ -80,7 +80,7 @@ describe('sessionId on the wire (INT-7446)', () => {
     await c.close();
 
     expect(sent).toBeDefined();
-    expect(sent).not.toHaveProperty('sessionId');
+    expect(sent).toHaveProperty('sessionId', 'visit-7');
   });
 
   it('is not invented on a flag call when the caller supplies none', async () => {
